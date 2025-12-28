@@ -1,29 +1,59 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { 
-  StoryProject, ViewMode, MetaAction, BibleAction, ChapterAction, SyncAction 
+  StoryProject, ProjectAction, UIAction, ViewMode 
 } from '../types';
 import { loadProject, saveProject, getPortrait } from '../services/storageService';
 import { normalizeProject } from '../services/bibleManager';
 
-interface Dispatchers {
-  metaDispatch: React.Dispatch<MetaAction>;
-  bibleDispatch: React.Dispatch<BibleAction>;
-  chaptersDispatch: React.Dispatch<ChapterAction>;
-  syncDispatch: React.Dispatch<SyncAction>;
-}
-
 export const usePersistence = (
   project: StoryProject, 
-  dispatchers: Dispatchers,
-  setView: (v: ViewMode) => void
+  projectDispatch: React.Dispatch<ProjectAction>,
+  uiDispatch: React.Dispatch<UIAction>
 ) => {
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const saveTimerRef = useRef<number | null>(null);
   const isInitialLoad = useRef(true);
+  const isSaving = useRef(false);
+  const pendingSaveRef = useRef<StoryProject | null>(null);
 
-  const { metaDispatch, bibleDispatch, chaptersDispatch, syncDispatch } = dispatchers;
+  const performSave = useCallback(async (proj: StoryProject) => {
+    if (isSaving.current) {
+      pendingSaveRef.current = proj;
+      return;
+    }
+    
+    isSaving.current = true;
+    uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
+    
+    try {
+      const strippedProject = { 
+        id: proj.meta.id,
+        meta: proj.meta,
+        bible: { 
+          ...proj.bible, 
+          characters: proj.bible.characters.map(({ imageUrl, ...rest }: any) => rest) 
+        },
+        chapters: proj.chapters.map(({ content, ...rest }) => rest),
+        sync: proj.sync
+      };
+      
+      await saveProject(strippedProject);
+      localStorage.setItem('duoscript_active_id', proj.meta.id);
+      uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
+      setTimeout(() => uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
+    } catch (err) {
+      console.error("Save failed", err);
+      uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
+    } finally {
+      isSaving.current = false;
+      if (pendingSaveRef.current) {
+        const next = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        performSave(next);
+      }
+    }
+  }, [uiDispatch]);
 
+  // Initial Data Restoration
   useEffect(() => {
     const initLoad = async () => {
       const lastProjectId = localStorage.getItem('duoscript_active_id');
@@ -32,28 +62,22 @@ export const usePersistence = (
           const storedProjectData = await loadProject(lastProjectId);
           if (storedProjectData) {
             const norm = normalizeProject(storedProjectData);
-            metaDispatch({ type: 'LOAD_META', payload: norm.meta });
-            bibleDispatch({ type: 'LOAD_BIBLE', payload: norm.bible });
-            chaptersDispatch({ type: 'LOAD_CHAPTERS', payload: norm.chapters.map(({ content, ...rest }) => rest as any) });
-            syncDispatch({ type: 'LOAD_SYNC', payload: norm.sync });
             
+            // ポートレート画像の復元
             const results = await Promise.all(norm.bible.characters.map(async (char) => {
               const img = await getPortrait(char.id);
               return img ? { id: char.id, img } : null;
             }));
             const found = results.filter((r): r is {id: string, img: string} => r !== null);
             if (found.length > 0) {
-              bibleDispatch({ 
-                type: 'UPDATE_BIBLE', 
-                payload: { 
-                  characters: norm.bible.characters.map(c => {
-                    const match = found.find(f => f.id === c.id);
-                    return match ? { ...c, imageUrl: match.img } : c;
-                  }) 
-                } 
+              norm.bible.characters = norm.bible.characters.map(c => {
+                const match = found.find(f => f.id === c.id);
+                return match ? { ...c, imageUrl: match.img } : c;
               });
             }
-            setView(ViewMode.DASHBOARD);
+            
+            projectDispatch({ type: 'LOAD_PROJECT', payload: norm });
+            uiDispatch({ type: 'SET_VIEW', payload: ViewMode.DASHBOARD });
           }
         } catch (e) {
           console.error("Initial load from storage failed", e);
@@ -65,37 +89,16 @@ export const usePersistence = (
       }
     };
     initLoad();
-  }, [metaDispatch, bibleDispatch, chaptersDispatch, syncDispatch, setView]);
+  }, [projectDispatch, uiDispatch]);
 
+  // Auto-save Watcher
   useEffect(() => {
     if (isInitialLoad.current || !project.meta.id) return;
-    setSaveStatus('saving');
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(async () => {
-      try {
-        const strippedProject = { 
-          id: project.meta.id,
-          meta: project.meta,
-          bible: { 
-            ...project.bible, 
-            characters: project.bible.characters.map(({ imageUrl, ...rest }: any) => rest) 
-          },
-          chapters: project.chapters.map(({ content, ...rest }) => rest),
-          sync: project.sync
-        };
-        await saveProject(strippedProject);
-        localStorage.setItem('duoscript_active_id', project.meta.id);
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch (err) {
-        console.error("Auto-save failed", err);
-        setSaveStatus('idle');
-      }
-    }, 3000); 
-    return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    };
-  }, [project.meta, project.bible, project.chapters, project.sync]);
+    
+    const timer = setTimeout(() => {
+      performSave(project);
+    }, 3000);
 
-  return { saveStatus };
+    return () => clearTimeout(timer);
+  }, [project, performSave]);
 };

@@ -1,8 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { BibleIssue } from '../types';
+import { BibleIssue, SystemLog, ViewMode } from '../types';
 import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
-import { useMetadata, useBible, useBibleDispatch, useManuscript, useNotificationDispatch, useNotifications, useUIDispatch } from '../App';
+import { 
+  useMetadata, useBible, useBibleDispatch, useManuscript, 
+  useNotificationDispatch, useNotifications, useUIDispatch 
+} from '../contexts/StoryContext';
 import { 
   Activity, Terminal, Trash2, ShieldCheck, Loader2, Zap, 
   ShieldAlert, RefreshCcw, MessageSquareShare, Database,
@@ -18,12 +21,13 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const bible = useBible();
   const bibleDispatch = useBibleDispatch();
   const chapters = useManuscript();
-  const { setView, setPlotterTab, setPendingMsg } = useUIDispatch();
+  const uiDispatch = useUIDispatch();
   const { logs } = useNotifications();
   const { addLog, dispatch: notifDispatch } = useNotificationDispatch();
 
   const [isScanning, setIsScanning] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [logLimit, setLogLimit] = useState(50);
   
   const totalTokens = useMemo(() => {
     return (tokenUsage || []).reduce((acc, entry) => acc + entry.input + entry.output, 0);
@@ -62,10 +66,12 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
   const handleConsultIssue = (issue: BibleIssue) => {
     const message = `不整合が見つかりました：${issue.description}\n解決策：${issue.suggestion}`;
-    setPendingMsg(message);
-    setPlotterTab('characters');
-    setView(2 as any); // ViewMode.PLOTTER
+    uiDispatch({ type: 'SET_PENDING_MSG', payload: message });
+    uiDispatch({ type: 'SET_PLOTTER_TAB', payload: 'characters' });
+    uiDispatch({ type: 'SET_VIEW', payload: ViewMode.PLOTTER });
   };
+
+  const visibleLogs = useMemo(() => logs.slice(0, logLimit), [logs, logLimit]);
 
   return (
     <div className="p-6 md:p-12 h-full overflow-y-auto custom-scrollbar bg-stone-900/20 pb-20 md:pb-12">
@@ -116,21 +122,19 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
             <div className="lg:col-span-8 glass rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-12 flex flex-col h-[400px] md:h-[600px] shadow-2xl">
-                <div className="flex justify-between items-center mb-6 px-2">
+                <div className="flex justify-between items-center mb-6 px-2 shrink-0">
                   <h3 className="text-xl md:text-2xl font-display font-black text-white italic tracking-tight flex items-center gap-3">
                     <Terminal size={18} className="text-orange-400" />アトリエ日誌
                   </h3>
                   <button onClick={() => notifDispatch({ type: 'CLEAR_LOGS' })} className="p-2 hover:bg-stone-800 rounded-lg text-stone-700 hover:text-rose-400 transition-colors"><Trash2 size={16} /></button>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
-                    {logs.map(log => (
-                        <div key={log.id} className={`flex flex-col p-4 md:p-6 glass-bright rounded-2xl border-l-4 ${log.type === 'error' ? 'border-l-rose-500' : log.type === 'success' ? 'border-l-emerald-500' : 'border-l-orange-400/50'}`}>
-                            <div className="flex gap-3 md:gap-4 items-start">
-                               <div className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-stone-800 text-stone-500 shrink-0">{log.source}</div>
-                               <p className="text-[12px] md:text-sm font-serif text-stone-200">{log.message}</p>
-                            </div>
-                        </div>
-                    ))}
+                <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2 pb-4">
+                    {visibleLogs.map(log => <LogItem key={log.id} log={log} />)}
+                    {logs.length > logLimit && (
+                      <button onClick={() => setLogLimit(l => l + 50)} className="w-full py-4 text-[10px] font-black uppercase tracking-widest text-stone-600 hover:text-orange-400 transition-colors">
+                        過去のログを読み込む
+                      </button>
+                    )}
                     {logs.length === 0 && <div className="h-full flex items-center justify-center text-stone-700 italic font-serif text-sm">日誌はまだ空です。</div>}
                 </div>
             </div>
@@ -144,7 +148,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                         {bible.summaryBuffer || "未生成です。「記憶を整理」ボタンから最新の設定要約を作成し、AIの推論効率を高めることができます。"}
                       </p>
                     </div>
-                    <div className="mt-auto pt-6 border-t border-white/5">
+                    <div className="mt-auto pt-6 border-t border-white/5 shrink-0">
                        <span className="text-[8px] font-black text-stone-700 uppercase">最終同期</span>
                        <p className="text-[10px] text-stone-500">{bible.lastSummaryUpdate ? new Date(bible.lastSummaryUpdate).toLocaleString() : '---'}</p>
                     </div>
@@ -156,9 +160,30 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   );
 };
 
-const StatCard = React.memo(({ icon, label, value, unit, color }: any) => (
-  <div className="glass rounded-2xl md:rounded-[2rem] p-5 md:p-8 flex flex-col justify-between h-32 md:h-40 relative overflow-hidden">
-    <div className="absolute top-4 right-4 md:top-8 md:right-8 text-white/5">{icon}</div>
+interface LogItemProps {
+  log: SystemLog;
+}
+
+const LogItem = React.memo(({ log }: LogItemProps) => (
+  <div className={`flex flex-col p-4 md:p-6 glass-bright rounded-2xl border-l-4 animate-fade-in ${log.type === 'error' ? 'border-l-rose-500' : log.type === 'success' ? 'border-l-emerald-500' : 'border-l-orange-400/50'}`}>
+      <div className="flex gap-3 md:gap-4 items-start">
+         <div className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-stone-800 text-stone-500 shrink-0">{log.source}</div>
+         <p className="text-[12px] md:text-sm font-serif text-stone-200">{log.message}</p>
+      </div>
+  </div>
+));
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  unit: string;
+  color: string;
+}
+
+const StatCard = React.memo(({ icon, label, value, unit, color }: StatCardProps) => (
+  <div className="glass rounded-2xl md:rounded-[2rem] p-5 md:p-8 flex flex-col justify-between h-32 md:h-40 relative overflow-hidden group">
+    <div className="absolute top-4 right-4 md:top-8 md:right-8 text-white/5 group-hover:text-white/10 transition-colors">{icon}</div>
     <span className="text-[8px] md:text-[10px] font-black text-stone-600 uppercase tracking-widest truncate">{label}</span>
     <div className="flex items-baseline gap-1 md:gap-2">
         <span className={`text-2xl md:text-4xl font-display font-black italic ${color}`}>{value}</span>

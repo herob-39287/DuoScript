@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { useMetadata, useManuscript } from '../App';
+// Changed import source from '../App' to '../contexts/StoryContext' as these hooks are defined and exported there.
+import { useMetadata, useManuscript } from '../contexts/StoryContext';
 import { Copy, X, Check, BookOpen, FileJson, Eye, Settings2 } from 'lucide-react';
 
 interface Props {
@@ -9,7 +10,8 @@ interface Props {
 
 const PublicationModal: React.FC<Props> = ({ onClose }) => {
     const { title, author } = useMetadata();
-    const { chapters } = useManuscript();
+    // Corrected: useManuscript returns ChapterLog[] directly, not an object containing chapters.
+    const chapters = useManuscript();
     const [header, setHeader] = useState('');
     const [footer, setFooter] = useState('');
     const [copied, setCopied] = useState(false);

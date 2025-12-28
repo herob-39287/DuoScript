@@ -260,6 +260,17 @@ export interface DialogState {
   onCancel?: () => void;
 }
 
+export interface UIState {
+  view: ViewMode;
+  plotterTab: string;
+  pendingMsg: string | null;
+  dialog: DialogState;
+  showPubModal: boolean;
+  showHelpModal: boolean;
+  saveStatus: 'idle' | 'saving' | 'saved';
+}
+
+// Actions integration
 export type MetaAction = 
   | { type: 'LOAD_META'; payload: StoryProjectMetadata }
   | { type: 'UPDATE_META'; payload: Partial<StoryProjectMetadata> }
@@ -286,7 +297,21 @@ export type SyncAction =
   | { type: 'ADD_HISTORY_ENTRY'; payload: HistoryEntry }
   | { type: 'REMOVE_HISTORY_ENTRY'; id: string };
 
+export type UIAction = 
+  | { type: 'SET_VIEW'; payload: ViewMode }
+  | { type: 'SET_PLOTTER_TAB'; payload: string }
+  | { type: 'SET_PENDING_MSG'; payload: string | null }
+  | { type: 'OPEN_DIALOG'; payload: DialogState }
+  | { type: 'CLOSE_DIALOG' }
+  | { type: 'SET_PUB_MODAL'; payload: boolean }
+  | { type: 'SET_HELP_MODAL'; payload: boolean }
+  | { type: 'SET_SAVE_STATUS'; payload: 'idle' | 'saving' | 'saved' };
+
 export type ProjectAction = 
+  | MetaAction
+  | BibleAction
+  | ChapterAction
+  | SyncAction
   | { type: 'LOAD_PROJECT'; payload: StoryProject }
   | { type: 'CLEAR_DATA' };
 

@@ -1,8 +1,8 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { AiModel, StoryProject, ChapterLog, SyncOperation, PlotBeat, BibleIssue, NexusBranch, ChapterStrategy } from "../../types";
 import { handleGeminiError, getCompressedContext, trackUsage, safeJsonParse, determineThinkingBudget } from "./utils";
 import { syncOperationSchema } from "./schemas";
+import * as Prompts from "./prompts";
 
 /**
  * 常に最新のAPIキーを使用してインスタンスを生成します
@@ -30,16 +30,7 @@ export const chatWithArchitect = async (
       model,
       contents: history,
       config: {
-        systemInstruction: `あなたは物語の「設計士(Architect)」です。物語の論理的一貫性と構造的な美しさを司ります。
-以下の物語設定を深く理解した上で、執筆者の構想を具体化し、世界の理を維持してください。
-
-【現在の物語コンテキスト】
-${ctx}
-
-【回答の指針】
-1. キャラクターの動機と矛盾しないか常にチェックする。
-2. 読者の予想を裏切るが、伏線によって納得できる展開を提案する。
-3. 設定の変更が必要な場合は、その影響範囲（Canonへの影響）を指摘する。`,
+        systemInstruction: Prompts.ARCHITECT_SYSTEM_INSTRUCTION(ctx),
         thinkingConfig: { thinkingBudget: budget },
         tools: useSearch ? [{ googleSearch: {} }] : undefined
       },
@@ -56,6 +47,149 @@ ${ctx}
     
     return { text: response.text || "", sources };
   }, 'Architect Chat', logCallback);
+};
+
+/**
+ * 本文のストリーミング生成。
+ */
+export const generateDraftStream = async (
+  chapter: ChapterLog,
+  tone: string,
+  useThinking: boolean,
+  project: StoryProject,
+  logCallback: any
+) => {
+  const ai = getClient();
+  const model = useThinking ? AiModel.REASONING : AiModel.FAST;
+  const ctx = getCompressedContext(project);
+  const budget = useThinking ? determineThinkingBudget(model, 'high') : undefined;
+
+  return ai.models.generateContentStream({
+    model,
+    contents: [{ 
+      role: 'user', 
+      parts: [{ 
+        text: `章「${chapter.title}」の執筆を開始してください。
+
+【あらすじ】
+${chapter.summary}
+
+【プロットビート】
+${chapter.beats.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}
+
+これまでの執筆内容の続き、または最初から書き始めてください。`
+      }] 
+    }],
+    config: {
+      systemInstruction: Prompts.WRITER_SYSTEM_INSTRUCTION(ctx, tone),
+      thinkingConfig: budget ? { thinkingBudget: budget } : undefined
+    },
+  });
+};
+
+/**
+ * キャラクターのポートレート画像を生成します (gemini-2.5-flash-image)
+ */
+export const generateCharacterPortrait = async (
+  characterDescription: string,
+  onUsage: any,
+  logCallback: any
+): Promise<string> => {
+  return handleGeminiError(async () => {
+    const ai = getClient();
+    const model = AiModel.IMAGE;
+    
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{
+        parts: [{ text: `A cinematic character portrait based on this description: ${characterDescription}. Art style: Semi-realistic, painterly, moody lighting, professional concept art.` }]
+      }],
+      config: {
+        imageConfig: { aspectRatio: "3:4" }
+      }
+    });
+
+    trackUsage(response, model, 'Portrait Generator', onUsage);
+    
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData) {
+        return `data:image/png;base64,${part.inlineData.data}`;
+      }
+    }
+    throw new Error("画像データが生成されませんでした。");
+  }, 'Portrait Generator', logCallback);
+};
+
+/**
+ * テキストを音声に変換します (gemini-2.5-flash-preview-tts)
+ */
+export const generateSpeech = async (
+  text: string,
+  voiceName: string = 'Zephyr',
+  onUsage: any,
+  logCallback: any
+): Promise<ArrayBuffer> => {
+  return handleGeminiError(async () => {
+    const ai = getClient();
+    const model = AiModel.TTS;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ parts: [{ text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName }
+          }
+        }
+      }
+    });
+
+    trackUsage(response, model, 'Speech Generator', onUsage);
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    
+    if (!base64Audio) throw new Error("音声データが生成されませんでした。");
+
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }, 'Speech Generator', logCallback);
+};
+
+/**
+ * 執筆中の「ささやき」助言。
+ */
+export const getArchitectWhisper = async (
+  lastChunk: string,
+  project: StoryProject,
+  onUsage: (usage: any) => void,
+  logCallback: any
+): Promise<{ text: string; type: 'info' | 'alert' } | null> => {
+  return handleGeminiError(async () => {
+    const ai = getClient();
+    const model = AiModel.FAST;
+    const ctx = getCompressedContext(project);
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{
+        role: 'user',
+        parts: [{ text: Prompts.WHISPER_PROMPT(lastChunk, ctx) }]
+      }],
+      config: {
+        systemInstruction: "あなたは厳しいが信頼できる物語の設計士です。整合性への執着を持ってください。"
+      }
+    });
+
+    trackUsage(response, model, 'Architect Whisper', onUsage);
+    const text = response.text?.trim() || "なし";
+    if (text === "なし" || text.length < 5) return null;
+    return { text, type: text.includes("矛盾") || text.includes("間違い") ? 'alert' : 'info' };
+  }, 'Architect Whisper', logCallback);
 };
 
 /**
@@ -183,31 +317,38 @@ export const analyzeBibleIntegrity = async (
       model,
       contents: [{
         role: 'user',
-        parts: [{ text: `以下の物語設定の中に、矛盾、未回収の伏線、または物語の理に反する箇所がないか徹底的に分析してください。\n\n${JSON.stringify(compactBible)}` }]
+        parts: [{ text: Prompts.INTEGRITY_SCAN_PROMPT(JSON.stringify(compactBible)) }]
       }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              type: { type: Type.STRING },
-              targetIds: { type: Type.ARRAY, items: { type: Type.STRING } },
-              description: { type: Type.STRING },
-              suggestion: { type: Type.STRING },
-              severity: { type: Type.STRING }
-            },
-            required: ["type", "description", "suggestion"]
-          }
+          type: Type.OBJECT,
+          properties: {
+            issues: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  type: { type: Type.STRING },
+                  targetIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  description: { type: Type.STRING },
+                  suggestion: { type: Type.STRING },
+                  severity: { type: Type.STRING }
+                },
+                required: ["type", "description", "suggestion"]
+              }
+            }
+          },
+          required: ["issues"]
         },
         thinkingConfig: { thinkingBudget: determineThinkingBudget(model, 'critical') }
       }
     });
 
     trackUsage(response, model, 'Integrity Scan', onUsage);
-    return safeJsonParse<BibleIssue[]>(response.text, [], logCallback);
+    const parsed = safeJsonParse<{ issues: BibleIssue[] }>(response.text, { issues: [] }, logCallback);
+    return parsed.issues;
   }, 'Integrity Scan', logCallback);
 };
 
@@ -291,47 +432,6 @@ export const suggestNextSentence = async (content: string, project: StoryProject
   }, 'Writer Copilot', logCallback);
 };
 
-export const generateDraft = async (
-  chapter: ChapterLog,
-  tone: string,
-  useThinking: boolean,
-  project: StoryProject,
-  onUsage: any,
-  logCallback: any
-): Promise<string> => {
-  return handleGeminiError(async () => {
-    const ai = getClient();
-    const model = useThinking ? AiModel.REASONING : AiModel.FAST;
-    const ctx = getCompressedContext(project);
-    
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ 
-        role: 'user', 
-        parts: [{ 
-          text: `卓越した小説家として、執筆を開始してください。
-トーン: ${tone}
-
-【コンテキスト】
-${ctx}
-
-【この章のあらすじ】
-${chapter.summary}
-
-【プロットビート】
-${chapter.beats.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}` 
-        }] 
-      }],
-      config: {
-        thinkingConfig: useThinking ? { thinkingBudget: determineThinkingBudget(model, 'high') } : undefined
-      },
-    });
-
-    trackUsage(response, model, 'Writer', onUsage);
-    return response.text || "";
-  }, 'Writer', logCallback);
-};
-
 export const generateFullChapterPackage = async (project: StoryProject, chapter: ChapterLog, onUsage: any, logCallback: any) => {
    return handleGeminiError(async () => {
     const ai = getClient();
@@ -385,4 +485,48 @@ export const generateRandomProject = async (theme: string, logCallback: any) => 
     
     return safeJsonParse<any>(response.text, { title: theme }, logCallback);
   }, 'Project Generator', logCallback);
+};
+
+/**
+ * 従来の非ストリーミング執筆メソッド（後方互換用）
+ */
+export const generateDraft = async (
+  chapter: ChapterLog,
+  tone: string,
+  useThinking: boolean,
+  project: StoryProject,
+  onUsage: any,
+  logCallback: any
+): Promise<string> => {
+  return handleGeminiError(async () => {
+    const ai = getClient();
+    const model = useThinking ? AiModel.REASONING : AiModel.FAST;
+    const ctx = getCompressedContext(project);
+    
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ 
+        role: 'user', 
+        parts: [{ 
+          text: `卓越した小説家として、執筆を開始してください。
+トーン: ${tone}
+
+【コンテキスト】
+${ctx}
+
+【この章のあらすじ】
+${chapter.summary}
+
+【プロットビート】
+${chapter.beats.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}` 
+        }] 
+      }],
+      config: {
+        thinkingConfig: useThinking ? { thinkingBudget: determineThinkingBudget(model, 'high') } : undefined
+      },
+    });
+
+    trackUsage(response, model, 'Writer', onUsage);
+    return response.text || "";
+  }, 'Writer', logCallback);
 };

@@ -1,8 +1,9 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
   viewName: string;
 }
 
@@ -11,24 +12,33 @@ interface State {
   error: Error | null;
 }
 
-// Fixed: Explicitly extending Component ensures correct type inheritance for props and setState
-class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null
-  };
+/**
+ * ErrorBoundary provides a fallback UI when a component tree crashes.
+ * It catches JavaScript errors anywhere in their child component tree.
+ */
+// Use React.Component explicitly to ensure TypeScript correctly identifies the class as a React component
+class ErrorBoundary extends React.Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    // Initialize state within the constructor
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  // Fixed: componentDidCatch now has proper access to this.props
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Access props via this.props inherited from React.Component
     console.error(`Error in ${this.props.viewName}:`, error, errorInfo);
   }
 
-  // Fixed: handleReset now has proper access to this.setState
+  // Use arrow function for autobinding this to access setState
   private handleReset = () => {
+    // Correctly use this.setState inherited from React.Component
     this.setState({ hasError: false, error: null });
   };
 
@@ -37,6 +47,7 @@ class ErrorBoundary extends Component<Props, State> {
   };
 
   public render() {
+    // Access state via this.state inherited from React.Component
     if (this.state.hasError) {
       return (
         <div className="h-full w-full flex items-center justify-center p-12 bg-stone-950 animate-fade-in">
@@ -49,13 +60,14 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-2xl font-display font-black text-white italic">回路の不具合</h2>
               <p className="text-sm text-stone-500 font-serif leading-relaxed">
-                {/* Fixed: render correctly accesses this.props */}
+                {/* Access viewName from this.props */}
                 {this.props.viewName}の読み込み中に予期せぬエラーが発生しました。設計士の推論またはデータの整合性に一時的な問題がある可能性があります。
               </p>
             </div>
             
             <div className="p-4 bg-stone-900/50 rounded-2xl border border-white/5 text-left">
               <p className="text-[10px] font-mono text-rose-400/70 break-words overflow-hidden">
+                {/* Access error details safely from this.state */}
                 {this.state.error?.message}
               </p>
             </div>
@@ -79,8 +91,8 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fixed: children correctly accessed via this.props
-    return this.props.children;
+    // Return this.props.children if no error is caught
+    return this.props.children || null;
   }
 }
 

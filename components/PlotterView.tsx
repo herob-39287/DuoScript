@@ -1,14 +1,20 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChatMessage, SyncOperation, NexusBranch, HistoryEntry } from '../types';
-import { chatWithArchitect, extractSettingsFromChat, detectSettingChange, simulateBranch } from '../services/geminiService';
-import { useBible, useNeuralSync, useUI, useNotifications, useMetadata, useMetadataDispatch, useBibleDispatch, useNeuralSyncDispatch, useUIDispatch, useNotificationDispatch } from '../App';
-import { calculateSyncResult, calculateRevertResult, getCurrentValueForDiff } from '../services/bibleManager';
 import { 
   Users, Globe, ArrowUpRight, Activity, MapPin, Target, 
   Plus, Loader2, Menu, Anchor, Zap, ShieldAlert, History,
-  X, ChevronDown, ChevronUp, Beaker, Check, Undo2, ArrowRight
+  X, ChevronDown, ChevronUp, Beaker, Check, Undo2, ArrowRight,
+  Image as ImageIcon, Sparkles
 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ChatMessage, SyncOperation, NexusBranch, HistoryEntry, Character, WorldEntry, WorldBible } from '../types';
+import { chatWithArchitect, extractSettingsFromChat, detectSettingChange, simulateBranch, generateCharacterPortrait } from '../services/geminiService';
+import { 
+  useBible, useNeuralSync, useUI, useMetadata, 
+  useMetadataDispatch, useBibleDispatch, useNeuralSyncDispatch, 
+  useUIDispatch, useNotificationDispatch 
+} from '../contexts/StoryContext';
+import { calculateSyncResult, calculateRevertResult, getCurrentValueForDiff } from '../services/bibleManager';
+import { savePortrait } from '../services/storageService';
 
 const PlotterView: React.FC = () => {
   const meta = useMetadata();
@@ -18,8 +24,9 @@ const PlotterView: React.FC = () => {
   const sync = useNeuralSync();
   const syncDispatch = useNeuralSyncDispatch();
   
-  const { plotterTab: activeTab, pendingMsg } = useUI();
-  const { setPlotterTab: setActiveTab, setPendingMsg } = useUIDispatch();
+  const ui = useUI();
+  const uiDispatch = useUIDispatch();
+  const { plotterTab: activeTab, pendingMsg } = ui;
   const { addLog } = useNotificationDispatch();
 
   const { chatHistory, pendingChanges, history: bibleHistory } = sync;
@@ -36,6 +43,7 @@ const PlotterView: React.FC = () => {
   const [nexusHypothesis, setNexusHypothesis] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
   const [isSyncDetecting, setIsSyncDetecting] = useState(false);
+  const [generatingPortraits, setGeneratingPortraits] = useState<Set<string>>(new Set());
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -89,9 +97,9 @@ const PlotterView: React.FC = () => {
   useEffect(() => {
     if (pendingMsg && !isChatting) {
       handleSendMessage(pendingMsg);
-      setPendingMsg(null);
+      uiDispatch({ type: 'SET_PENDING_MSG', payload: null });
     }
-  }, [pendingMsg, isChatting, handleSendMessage, setPendingMsg]);
+  }, [pendingMsg, isChatting, handleSendMessage, uiDispatch]);
 
   const handleAcceptOp = (op: SyncOperation) => {
     try {
@@ -130,6 +138,37 @@ const PlotterView: React.FC = () => {
       setIsSimulating(false);
     }
   };
+
+  const handleGeneratePortrait = async (char: Character) => {
+    if (generatingPortraits.has(char.id)) return;
+    setGeneratingPortraits(prev => new Set(prev).add(char.id));
+    addLog('info', 'Artist', `${char.name} の肖像画を描いています...`);
+    try {
+      const base64 = await generateCharacterPortrait(
+        `${char.name}, ${char.description}, ${char.personality}`,
+        (u: any) => metaDispatch({ type: 'TRACK_USAGE', payload: u }),
+        addLog
+      );
+      await savePortrait(char.id, base64);
+      bibleDispatch({
+        type: 'UPDATE_BIBLE',
+        payload: {
+          characters: bible.characters.map(c => c.id === char.id ? { ...c, imageUrl: base64 } : c)
+        }
+      });
+      addLog('success', 'Artist', `${char.name} の肖像画が完成しました。`);
+    } catch (e) {
+      addLog('error', 'Artist', '画像の生成に失敗しました。');
+    } finally {
+      setGeneratingPortraits(prev => {
+        const next = new Set(prev);
+        next.delete(char.id);
+        return next;
+      });
+    }
+  };
+
+  const setActiveTab = (tab: string) => uiDispatch({ type: 'SET_PLOTTER_TAB', payload: tab });
 
   return (
     <div className="h-full flex flex-col bg-stone-950 overflow-hidden relative">
@@ -212,7 +251,14 @@ const PlotterView: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
             {activeTab === 'characters' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 max-w-7xl mx-auto pb-12">
-                {bible.characters.map(c => <CharacterCard key={c.id} character={c} />)}
+                {bible.characters.map(c => (
+                  <CharacterCard 
+                    key={c.id} 
+                    character={c} 
+                    onGeneratePortrait={() => handleGeneratePortrait(c)} 
+                    isGenerating={generatingPortraits.has(c.id)}
+                  />
+                ))}
                 <button onClick={() => handleSendMessage('新しい主要キャラクターを登場させたいです')} className="min-h-[200px] md:min-h-[300px] border-2 border-dashed border-stone-800 rounded-[2rem] flex flex-col items-center justify-center gap-4 text-stone-700 hover:text-stone-500 hover:border-orange-500/30 transition-all group">
                   <div className="w-12 h-12 md:w-16 md:h-16 bg-stone-900 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Plus size={24}/>
@@ -234,7 +280,7 @@ const PlotterView: React.FC = () => {
                 <textarea 
                   value={bible.grandArc} 
                   onChange={e => bibleDispatch({ type: 'UPDATE_BIBLE', payload: { grandArc: e.target.value } })} 
-                  className="w-full bg-stone-900/30 border border-white/5 rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-10 text-[15px] md:text-lg font-serif leading-relaxed text-stone-300 min-h-[400px] md:min-h-[600px] outline-none shadow-inner focus:border-orange-500/30 transition-all" 
+                  className="w-full bg-stone-900/30 border border-white/5 rounded-[1.5rem] md:rounded-[2rem] p-6 md:p-10 text-[15px] md:text-lg font-serif-bold leading-relaxed text-stone-300 min-h-[400px] md:min-h-[600px] outline-none shadow-inner focus:border-orange-500/30 transition-all" 
                 />
               </div>
             )}
@@ -284,7 +330,16 @@ const PlotterView: React.FC = () => {
   );
 };
 
-const ProposalItem = React.memo(({ op, bible, isExpanded, onToggle, onAccept, onReject }: any) => {
+interface ProposalItemProps {
+  op: SyncOperation;
+  bible: WorldBible;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onAccept: () => void;
+  onReject: () => void;
+}
+
+const ProposalItem = React.memo(({ op, bible, isExpanded, onToggle, onAccept, onReject }: ProposalItemProps) => {
   const currentValue = getCurrentValueForDiff(bible, op.path, op.targetName, op.field);
   return (
     <div className={`glass-bright rounded-2xl border transition-all ${isExpanded ? 'border-orange-500/40 shadow-2xl' : 'border-white/5'}`}>
@@ -347,32 +402,79 @@ const VisualDiff = React.memo(({ oldVal, newVal }: { oldVal: any, newVal: any })
   );
 });
 
-const CharacterCard = React.memo(({ character: c }: any) => (
-  <div className="glass-bright rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-white/5 flex flex-col h-full hover:border-orange-500/20 transition-all shadow-xl">
+interface CharacterCardProps {
+  character: Character;
+  onGeneratePortrait: () => void;
+  isGenerating: boolean;
+}
+
+const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isGenerating }: CharacterCardProps) => (
+  <div className="glass-bright rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-white/5 flex flex-col h-full hover:border-orange-500/20 transition-all shadow-xl group">
     <div className="aspect-[16/10] bg-stone-900 relative">
-      {c.imageUrl && <img src={c.imageUrl} className="w-full h-full object-cover" />}
-      <div className="absolute bottom-4 left-6 md:bottom-6 md:left-8"><h4 className="text-xl md:text-2xl font-display font-black text-white italic">{c.name}</h4></div>
+      {c.imageUrl ? (
+        <img src={c.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-stone-700">
+           {isGenerating ? <Loader2 size={24} className="animate-spin text-orange-400" /> : <ImageIcon size={24} />}
+           <span className="text-[8px] font-black uppercase tracking-[0.2em]">{isGenerating ? '肖像画を生成中...' : '肖像画なし'}</span>
+        </div>
+      )}
+      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+         <button 
+           onClick={onGeneratePortrait}
+           disabled={isGenerating}
+           className="p-3 bg-orange-600 text-white rounded-xl shadow-xl hover:bg-orange-500 transition-all active:scale-95 disabled:opacity-50"
+         >
+           <Sparkles size={16} />
+         </button>
+      </div>
+      <div className="absolute bottom-4 left-6 md:bottom-6 md:left-8 bg-stone-950/60 backdrop-blur-md px-4 py-2 rounded-xl"><h4 className="text-base md:text-lg font-display font-black text-white italic">{c.name}</h4></div>
     </div>
-    <div className="p-6 md:p-8 space-y-4 md:space-y-6">
-      <p className="text-[10px] md:text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-3">{c.description}</p>
+    <div className="p-6 md:p-8 space-y-4 md:space-y-6 flex-1 flex flex-col">
+      <div className="flex-1">
+        <p className="text-[10px] md:text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-3">{c.description}</p>
+      </div>
+      <div className="flex items-center justify-between pt-4 border-t border-white/5">
+        <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest">{c.role}</span>
+        <div className="flex gap-1">
+           {c.traits?.slice(0, 2).map((t: string, i: number) => (
+             <span key={i} className="px-2 py-0.5 bg-stone-800 rounded text-[7px] text-stone-400 font-bold">{t}</span>
+           ))}
+        </div>
+      </div>
     </div>
   </div>
 ));
 
-const EntryCard = React.memo(({ entry: e }: any) => (
+const EntryCard = React.memo(({ entry: e }: { entry: WorldEntry }) => (
   <div className="glass-bright p-6 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-white/5 hover:border-white/10 transition-all space-y-4">
     <h4 className="text-base md:text-lg font-serif-bold text-stone-100">{e.title}</h4>
     <p className="text-[11px] md:text-[12px] text-stone-400 font-serif leading-relaxed line-clamp-3">{e.content}</p>
   </div>
 ));
 
-const CatBtn = React.memo(({ active, label, icon, onClick }: any) => (
+interface CatBtnProps {
+  active: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}
+
+const CatBtn = React.memo(({ active, label, icon, onClick }: CatBtnProps) => (
   <button onClick={onClick} className={`flex items-center gap-2 px-6 py-4 md:px-8 md:py-5 transition-all border-b-2 shrink-0 ${active ? 'text-orange-400 border-orange-400 bg-orange-400/5' : 'text-stone-600 border-transparent hover:text-stone-400'}`}>
      {icon} <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">{label}</span>
   </button>
 ));
 
-const SubTab = React.memo(({ id, active, label, icon: Icon, onClick }: any) => (
+interface SubTabProps {
+  id: string;
+  active: boolean;
+  label: string;
+  icon: React.ElementType;
+  onClick: (id: string) => void;
+}
+
+const SubTab = React.memo(({ id, active, label, icon: Icon, onClick }: SubTabProps) => (
   <button onClick={() => onClick(id)} className={`px-4 py-2 md:px-5 md:py-2.5 rounded-xl flex items-center gap-2 text-[9px] md:text-[10px] font-black uppercase transition-all shrink-0 ${active ? 'bg-orange-600 text-white' : 'text-stone-500 bg-stone-900/60'}`}>
     <Icon size={14} /> {label}
   </button>

@@ -1,4 +1,3 @@
-
 import { StoryProject, AiModel } from "../../types";
 
 export class DuoScriptError extends Error {
@@ -189,16 +188,17 @@ ${recentChapters}
 
 /**
  * Determines the appropriate thinking budget based on task complexity.
+ * タスクの種類と入力コンテキストの大きさに応じて予算を動的に計算します。
  */
 export const determineThinkingBudget = (model: string, taskComplexity: 'low' | 'medium' | 'high' | 'critical'): number => {
   if (model !== AiModel.REASONING) return 0;
   
   const MAX_PRO = 32768;
   const budgets = {
-    low: 4000,
-    medium: 12000,
-    high: 24000,
-    critical: MAX_PRO
+    low: 4000,      // 軽い推敲、単純なQ&A
+    medium: 10000,  // キャラクター設定の深掘り、短文生成
+    high: 20000,    // 複雑なプロット分岐、長文生成
+    critical: MAX_PRO // 章全体の再構築、不整合スキャン
   };
   
   return budgets[taskComplexity];
