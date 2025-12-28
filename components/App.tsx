@@ -28,38 +28,42 @@ export const normalizeProject = (data: any): StoryProject => {
     timeline: [],
     foreshadowing: [],
     entries: [],
-    nexusBranches: []
+    nexusBranches: [],
+    integrityIssues: []
   };
 
   const now = Date.now();
-  const incomingBible = data.bible || {};
-  const normalizedBible = {
+  const incomingBible = data?.bible || {};
+  const normalizedBible: WorldBible = {
     ...defaultBible,
     ...incomingBible,
-    setting: incomingBible.setting || data.setting || '',
-    laws: incomingBible.laws || data.laws || '',
-    grandArc: incomingBible.grandArc || data.grandArc || '',
-    tone: incomingBible.tone || data.tone || 'ニュートラル',
-    themes: Array.isArray(incomingBible.themes || data.themes) ? (incomingBible.themes || data.themes) : [],
-    characters: Array.isArray(incomingBible.characters || data.characters) ? (incomingBible.characters || data.characters) : [],
-    timeline: Array.isArray(incomingBible.timeline || data.timeline) ? (incomingBible.timeline || data.timeline) : [],
-    entries: Array.isArray(incomingBible.entries || data.entries) ? (incomingBible.entries || data.entries) : [],
+    setting: incomingBible.setting || data?.setting || '',
+    laws: incomingBible.laws || data?.laws || '',
+    grandArc: incomingBible.grandArc || data?.grandArc || '',
+    tone: incomingBible.tone || data?.tone || 'ニュートラル',
+    themes: Array.isArray(incomingBible.themes || data?.themes) ? (incomingBible.themes || data?.themes) : [],
+    characters: Array.isArray(incomingBible.characters || data?.characters) ? (incomingBible.characters || data?.characters) : [],
+    timeline: Array.isArray(incomingBible.timeline || data?.timeline) ? (incomingBible.timeline || data?.timeline) : [],
+    entries: Array.isArray(incomingBible.entries || data?.entries) ? (incomingBible.entries || data?.entries) : [],
+    foreshadowing: Array.isArray(incomingBible.foreshadowing || data?.foreshadowing) ? (incomingBible.foreshadowing || data?.foreshadowing) : [],
+    nexusBranches: Array.isArray(incomingBible.nexusBranches || data?.nexusBranches) ? (incomingBible.nexusBranches || data?.nexusBranches) : [],
+    integrityIssues: Array.isArray(incomingBible.integrityIssues || data?.integrityIssues) ? (incomingBible.integrityIssues || data?.integrityIssues) : [],
   };
 
   const project: StoryProject = {
-    id: data.id || crypto.randomUUID(),
-    title: data.title || '無題の物語',
-    author: data.author || '不明な著者',
-    genre: data.genre || '一般',
-    createdAt: data.createdAt || now,
-    updatedAt: data.updatedAt || now,
-    language: data.language || 'ja',
+    id: data?.id || crypto.randomUUID(),
+    title: data?.title || '無題の物語',
+    author: data?.author || '不明な著者',
+    genre: data?.genre || '一般',
+    createdAt: data?.createdAt || now,
+    updatedAt: data?.updatedAt || now,
+    language: data?.language || 'ja',
     bible: normalizedBible,
-    chapters: Array.isArray(data.chapters) ? data.chapters : [],
-    tokenUsage: Array.isArray(data.tokenUsage) ? data.tokenUsage : [],
-    chatHistory: Array.isArray(data.chatHistory) ? data.chatHistory : [],
-    pendingChanges: Array.isArray(data.pendingChanges) ? data.pendingChanges : [],
-    history: Array.isArray(data.history) ? data.history : []
+    chapters: Array.isArray(data?.chapters) ? data?.chapters : [],
+    tokenUsage: Array.isArray(data?.tokenUsage) ? data?.tokenUsage : [],
+    chatHistory: Array.isArray(data?.chatHistory) ? data?.chatHistory : [],
+    pendingChanges: Array.isArray(data?.pendingChanges) ? data?.pendingChanges : [],
+    history: Array.isArray(data?.history) ? data?.history : []
   };
 
   project.bible.characters = project.bible.characters.map((c: any) => ({
@@ -90,7 +94,7 @@ export const normalizeProject = (data: any): StoryProject => {
     }
   }));
   
-  project.chapters = (project.chapters || []).map((ch: any) => ({
+  project.chapters = project.chapters.map((ch: any) => ({
     id: ch.id || crypto.randomUUID(),
     title: ch.title || '無題の章',
     summary: ch.summary || '',
@@ -118,6 +122,7 @@ const App: React.FC = () => {
   const [project, setProject] = useState<StoryProject | null>(null);
   const [view, setView] = useState<ViewMode>(ViewMode.WELCOME);
   const [plotterTab, setPlotterTab] = useState<string>('grandArc'); 
+  const [pendingArchitectMessage, setPendingArchitectMessage] = useState<string | null>(null);
   const [showPubModal, setShowPubModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showCompliance, setShowCompliance] = useState(false);
@@ -229,8 +234,11 @@ const App: React.FC = () => {
     setDialog({ isOpen: true, type: 'confirm', title: "ホームに戻る", message: "現在の物語を保存してホームへ戻りますか？", onConfirm: () => { setView(ViewMode.WELCOME); setProject(null); setDialog(d => ({ ...d, isOpen: false })); } });
   };
 
-  const navigateToPlotter = (tab: string = 'grandArc') => {
+  const navigateToPlotter = (tab: string = 'grandArc', initialMessage?: string) => {
     setPlotterTab(tab);
+    if (initialMessage) {
+      setPendingArchitectMessage(initialMessage);
+    }
     setView(ViewMode.PLOTTER);
   };
 
@@ -293,8 +301,19 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-hidden relative bg-stone-900/40 pb-20 md:pb-0">
         <Suspense fallback={<div className="h-full w-full flex items-center justify-center"><Loader2 size={40} className="animate-spin text-orange-400"/></div>}>
-          {view === ViewMode.DASHBOARD && <DashboardView project={project} logs={logs} onClearLogs={() => setLogs([])} onNavigateToPlotter={navigateToPlotter} onTokenUsage={handleTokenUsage} onGoHome={handleGoHome} onOpenPublication={() => setShowPubModal(true)} />}
-          {view === ViewMode.PLOTTER && <PlotterView project={project} setProject={setProject} addLog={addLog} onTokenUsage={handleTokenUsage} initialTab={plotterTab} showConfirm={(t, m, c) => setDialog({ isOpen: true, type: 'confirm', title: t, message: m, onConfirm: () => { setDialog(d => ({ ...d, isOpen: false })); c(); } })} />}
+          {view === ViewMode.DASHBOARD && <DashboardView project={project} setProject={setProject} logs={logs} onClearLogs={() => setLogs([])} onNavigateToPlotter={navigateToPlotter} onTokenUsage={handleTokenUsage} onGoHome={handleGoHome} onOpenPublication={() => setShowPubModal(true)} addLog={addLog} />}
+          {view === ViewMode.PLOTTER && (
+            <PlotterView 
+              project={project} 
+              setProject={setProject} 
+              addLog={addLog} 
+              onTokenUsage={handleTokenUsage} 
+              initialTab={plotterTab} 
+              initialMessage={pendingArchitectMessage}
+              clearInitialMessage={() => setPendingArchitectMessage(null)}
+              showConfirm={(t, m, c) => setDialog({ isOpen: true, type: 'confirm', title: t, message: m, onConfirm: () => { setDialog(d => ({ ...d, isOpen: false })); c(); } })} 
+            />
+          )}
           {view === ViewMode.WRITER && <WriterView project={project} setProject={setProject} addLog={addLog} onTokenUsage={handleTokenUsage} showConfirm={(t, m, c) => setDialog({ isOpen: true, type: 'confirm', title: t, message: m, onConfirm: () => { setDialog(d => ({ ...d, isOpen: false })); c(); } })} />}
         </Suspense>
       </main>

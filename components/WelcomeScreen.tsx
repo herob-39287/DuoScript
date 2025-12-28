@@ -44,7 +44,10 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
     if (!autoTheme.trim()) return;
     setIsProcessing(true);
     try {
-      const generated = await generateRandomProject(autoTheme);
+      // FIX: Added logCallback as the second argument as required by generateRandomProject signature
+      const generated = await generateRandomProject(autoTheme, (type: string, source: string, msg: string, detail?: string) => {
+        console.log(`[${source}] ${type}: ${msg}`, detail);
+      });
       onStart(normalizeProject(generated));
     } catch (e) {
       showAlert("生成エラー", "インスピレーションの取得に失敗しました。");

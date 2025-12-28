@@ -1,29 +1,100 @@
+import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { AiModel, StoryProject, ChapterLog, WorldBible, Character, SyncOperation, WorldEntry, BibleIssue, PlotBeat, TimelineEvent, Foreshadowing, NexusBranch, ChapterStrategy, SystemLog } from "../types";
 
-import { GoogleGenAI, Type, GenerateContentResponse, Modality } from "@google/genai";
-import { AiModel, StoryProject, ChapterLog, WorldBible, Character, SyncOperation, WorldEntry, BibleIssue, PlotBeat, TimelineEvent, Foreshadowing, NexusBranch, ChapterStrategy } from "../types";
+class DuoScriptError extends Error {
+  constructor(message: string, public details?: string, public source?: string) {
+    super(message);
+    this.name = 'DuoScriptError';
+  }
+}
 
-// 指数バックオフによるリトライ
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
+function repairTruncatedJson(text: string): string {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+  if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
+    const lastObjectEnd = cleaned.lastIndexOf('}');
+    if (lastObjectEnd !== -1) return cleaned.substring(0, lastObjectEnd + 1) + ']';
+    return cleaned + ']';
+  }
+  if (cleaned.startsWith('{') && !cleaned.endsWith('}')) {
+    const lastObjectEnd = cleaned.lastIndexOf('}');
+    if (lastObjectEnd !== -1) return cleaned.substring(0, lastObjectEnd + 1) + '}';
+    return cleaned + '}';
+  }
+  return cleaned;
+}
+
+function safeJsonParse<T>(text: string | undefined, defaultValue: T, logCallback?: (msg: string, details: string) => void): T {
+  if (!text || text === "undefined" || text.trim() === "") return defaultValue;
+  try {
+    const cleanText = text.replace(/```json\n?|```/g, "").trim();
+    return JSON.parse(cleanText) as T;
+  } catch (e) {
+    try {
+      const repaired = repairTruncatedJson(text);
+      return JSON.parse(repaired) as T;
+    } catch (e2) {
+      const errorMsg = `JSONパース失敗: ${e instanceof Error ? e.message : '未知のエラー'}`;
+      const details = `解析対象テキスト: ${text.substring(0, 300)}...`;
+      if (logCallback) logCallback(errorMsg, details);
+      return defaultValue;
+    }
+  }
+}
+
+// 強化されたスキーマ: キャラクター、世界観、年表などの詳細属性を含む
+const syncOperationSchema = {
+  type: Type.OBJECT,
+  properties: {
+    op: { type: Type.STRING, description: "操作種別: add, update, delete, set" },
+    path: { type: Type.STRING, description: "同期先パス: characters, timeline, foreshadowing, entries, setting, tone, laws, grandArc" },
+    targetId: { type: Type.STRING, description: "対象の既存ID（判明している場合のみ）" },
+    targetName: { type: Type.STRING, description: "対象の名称（キャラクター名、項目名など）" },
+    field: { type: Type.STRING, description: "特定のフィールドを更新する場合のフィールド名 (例: description, health, location)" },
+    value: { 
+      type: Type.OBJECT, 
+      description: "同期するデータ本体。オブジェクト全体または特定のフィールド値を含む。",
+      properties: {
+        name: { type: Type.STRING },
+        description: { type: Type.STRING },
+        role: { type: Type.STRING },
+        traits: { type: Type.ARRAY, items: { type: Type.STRING } },
+        motivation: { type: Type.STRING },
+        content: { type: Type.STRING },
+        definition: { type: Type.STRING },
+        text: { type: Type.STRING },
+        location: { type: Type.STRING },
+        currentGoal: { type: Type.STRING },
+        health: { type: Type.STRING },
+        internalState: { type: Type.STRING }
+      }
+    },
+    rationale: { type: Type.STRING, description: "なぜこの変更が必要かという具体的根拠" },
+    evidence: { type: Type.STRING, description: "会話の中のどの発言に基づいているか" },
+    confidence: { type: Type.NUMBER, description: "信頼度 (0.0 - 1.0)" }
+  },
+  required: ["op", "path", "targetName", "value", "rationale", "confidence"]
+};
+
+async function withRetry<T>(fn: () => Promise<T>, source: string, logCallback?: any, retries = 2, delay = 2000): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
-    if (retries > 0 && (error.message?.includes("429") || error.message?.includes("500"))) {
+    const isRetryable = error.message?.includes("429") || error.message?.includes("500") || error.message?.includes("503");
+    if (retries > 0 && isRetryable) {
+      if (logCallback) logCallback('info', 'System', `${source} 失敗。リプライ中...`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, delay * 2);
+      return withRetry(fn, source, logCallback, retries - 1, delay * 2);
     }
     throw error;
   }
 }
 
-async function handleGeminiError<T>(fn: () => Promise<T>): Promise<T> {
+async function handleGeminiError<T>(fn: () => Promise<T>, source: string, logCallback?: any): Promise<T> {
   try {
-    return await withRetry(fn);
+    return await withRetry(fn, source, logCallback);
   } catch (error: any) {
-    const msg = error.message || "";
-    if (msg.includes("SAFETY") || msg.includes("blocked")) {
-      throw new Error("POLICY_VIOLATION: 内容が安全基準に触れました。表現を調整してください。");
-    }
-    throw error;
+    throw new DuoScriptError(error.message || "APIエラー", error.stack, source);
   }
 }
 
@@ -39,14 +110,19 @@ const trackUsage = (response: any, model: string, source: string, callback?: (us
 };
 
 const getCompressedContext = (project: StoryProject) => {
-  const chars = project.bible.characters.map(c => `- ${c.name} (${c.role}): ${c.description.slice(0, 80)}`).join('\n');
-  const laws = project.bible.laws.slice(0, 400);
-  const setting = project.bible.setting.slice(0, 400);
-  const arc = project.bible.grandArc.slice(0, 800);
-  const tone = project.bible.tone;
-  const foreshadowing = project.bible.foreshadowing.map(f => `- ${f.title} (${f.status})`).join('\n');
-  const library = project.bible.entries.map(e => `- ${e.title} [${e.aliases.join(',')}]: ${e.content.slice(0, 50)}`).join('\n');
-  return { chars, laws, setting, arc, tone, foreshadowing, library };
+  const bible = project.bible;
+  const chars = (bible.characters || []).map(c => `- ${c.name} (Role: ${c.role}, Desc: ${(c.description || '').slice(0, 50)}, Goal: ${c.status?.currentGoal || 'なし'})`).join('\n');
+  const entries = (bible.entries || []).map(e => `- ${e.title} (${e.category})`).join('\n');
+  
+  return { 
+    chars, 
+    entries,
+    laws: (bible.laws || '').slice(0, 500), 
+    setting: (bible.setting || '').slice(0, 500), 
+    arc: (bible.grandArc || '').slice(0, 500),
+    tone: bible.tone || 'ニュートラル',
+    foreshadowing: (bible.foreshadowing || []).map(f => `- ${f.title} (${f.status})`).join('\n')
+  };
 };
 
 export const chatWithArchitect = async (
@@ -54,37 +130,26 @@ export const chatWithArchitect = async (
   userInput: string, 
   project: StoryProject, 
   useSearch: boolean,
-  onUsage: (usage: any) => void
+  onUsage: (usage: any) => void,
+  logCallback: any
 ): Promise<{ text: string; sources?: any[] }> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const ctx = getCompressedContext(project);
-    
     const model = AiModel.REASONING;
     const config: any = {
-      systemInstruction: `あなたは物語の設計士(Architect)です。
-【現在の設定状況】
-設定: ${ctx.setting}
-世界の理: ${ctx.laws}
-トーン: ${ctx.tone}
-大筋: ${ctx.arc}
-主要人物:
-${ctx.chars}
-現在の伏線:
-${ctx.foreshadowing}
-用語集（Library）:
-${ctx.library}
+      systemInstruction: `あなたは物語の「設計士(Architect)」です。作者と対話し、設定の深掘りと整合性維持を担います。
+【世界観】: ${ctx.setting}
+【理】: ${ctx.laws}
+【主要人物】: ${ctx.chars}
+【グランドアーク】: ${ctx.arc}
 
-【ミッション】
-作者と対話し、設定の深掘りや矛盾の解消を行ってください。
-特に「用語（Entries）」に関しては、以下の区別を厳格に行ってください：
-1. Definition（定義）: その言葉の客観的な意味、歴史。
-2. Narrative Significance（物語上の意味）: その言葉が物語の中で果たす役割、象徴。
-3. Aliases（別名）: 表記揺れ、隠語、略称。
-
-新しい用語が出た際、それが既存用語の別名であれば「addAlias」を提案し、新しい概念であれば「add (entries)」を提案してください。`,
+【振る舞い】
+- 常に既存の設定との整合性を確認してください。
+- 矛盾があれば論理的に指摘し、解消案を提示してください。
+- 重要な設定変更や追加が確定した際は「NeuralSyncが反映します」と伝え、具体的な項目を挙げて対話を締めくくってください。`,
+      thinkingConfig: { thinkingBudget: 8000 }
     };
-
     if (useSearch) config.tools = [{ googleSearch: {} }];
 
     const response = await ai.models.generateContent({
@@ -92,7 +157,6 @@ ${ctx.library}
       contents: history,
       config,
     });
-
     trackUsage(response, model, 'Architect Chat', onUsage);
     
     let sources: any[] = [];
@@ -101,218 +165,120 @@ ${ctx.library}
         .filter((c: any) => c.web)
         .map((c: any) => ({ title: c.web.title, uri: c.web.uri }));
     }
-
     return { text: response.text || "", sources };
-  });
+  }, 'Architect Chat', logCallback);
 };
 
-export const generateFullWorldPackage = async (
-  premise: string,
-  onUsage: any
+export const extractSettingsFromChat = async (
+  history: any[], 
+  project: StoryProject,
+  onUsage: any,
+  logCallback: any
 ): Promise<SyncOperation[]> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const model = AiModel.REASONING;
-    
-    const prompt = `あなたは物語の設計士です。以下の物語の核（Premise）に基づき、世界設定、世界の理、物語の大筋、主要キャラクター3名を一括で考案してください。
-    
-【核となるアイデア】
-${premise}
+    const ctx = getCompressedContext(project);
 
-以下の要件を満たすJSONの配列（SyncOperation形式）で出力してください：
-- path: 'setting', 'laws', 'grandArc', 'characters' のいずれか。
-- op: 'set' (設定・理・大筋の場合) または 'add' (キャラクターの場合)。
-- rationale: その設定が必要な理由。
-- evidence: アイデアの根拠。
-- value: 設定内容。キャラクターの場合は、name, role, description, motivation, flaw, arc を含むオブジェクト。`;
+    const prompt = `直近の対話から、物語設定（World Bible）への具体的な変更を抽出し、JSON配列で出力してください。
+【現在のデータ構造のヒント】
+- characters: name, description, role, traits, motivation, flaw, status(location, health, currentGoal, internalState)
+- entries: title, category, content, definition, narrativeSignificance
+- timeline: timeLabel, event, description
+- setting/laws/grandArc/tone: 単一の文字列フィールド
+
+対話内容:
+${JSON.stringify(history.slice(-8))}`;
 
     const response = await ai.models.generateContent({
       model,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
+      config: { 
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              op: { type: Type.STRING },
-              path: { type: Type.STRING },
-              value: { type: Type.STRING }, // Characterの場合はJSON文字列またはオブジェクト
-              rationale: { type: Type.STRING },
-              evidence: { type: Type.STRING }
-            }
-          }
-        }
-      }
+          items: syncOperationSchema
+        },
+        thinkingConfig: { thinkingBudget: 2000 }
+      },
     });
 
-    trackUsage(response, model, 'World Genesis', onUsage);
-    try {
-      const ops = JSON.parse(response.text || "[]");
-      return ops.map((op: any) => ({
-        ...op,
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        status: 'proposal',
-        baseVersion: 1
-      } as SyncOperation));
-    } catch { return []; }
-  });
+    trackUsage(response, model, 'NeuralSync Sync', onUsage);
+    const data = safeJsonParse<any[]>(response.text, [], (msg, detail) => logCallback('error', 'NeuralSync', msg, detail));
+    
+    return data.map((op: any) => ({
+      ...op,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      status: 'proposal',
+      baseVersion: project.bible.version
+    } as SyncOperation));
+  }, 'NeuralSync Sync', logCallback);
 };
 
 export const generateFullChapterPackage = async (
   project: StoryProject,
   chapter: ChapterLog,
-  onUsage: any
+  onUsage: any,
+  logCallback: any
 ): Promise<{ strategy: ChapterStrategy, beats: PlotBeat[], draft: string }> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const ctx = getCompressedContext(project);
     const model = AiModel.REASONING;
+    const prompt = `章「${chapter.title}」の戦略、詳細なビート、および本文（2000文字程度）を生成してください。
+【前提】
+あらすじ: ${chapter.summary}
+トーン: ${project.bible.tone}
+世界観: ${ctx.setting}
+理: ${ctx.laws}
+人物: ${ctx.chars}
 
-    const prompt = `あなたは物語の設計士兼筆者です。章「${chapter.title}」を完成させるために必要な全ての要素（戦略・ビート・本文）を一括で生成してください。
-    
-【物語の背景】
-大筋: ${ctx.arc}
-設定: ${ctx.setting}
-現在のトーン: ${ctx.tone}
-
-【章のあらすじ】
-${chapter.summary || 'あらすじはまだありません。タイトルから推測してください。'}
-
-以下のJSON形式で出力してください：
+【出力形式】
 {
-  "strategy": {
-    "milestones": ["この章で達成するべきこと1", "2"...],
-    "forbiddenResolutions": ["まだ解決してはいけないこと"],
-    "characterArcProgress": "心情の変化",
-    "pacing": "テンポ感"
-  },
-  "beats": [{"text": "展開1"}, {"text": "展開2"}...],
-  "draft": "物語の本文（文芸的で情緒豊かな描写）"
+  "strategy": { "milestones": ["点1", "点2"], "forbiddenResolutions": ["避けるべき事"], "characterArcProgress": "変化の度合い", "pacing": "緩急" },
+  "beats": [{ "text": "ビート1" }, { "text": "ビート2" }],
+  "draft": "物語の本文..."
 }`;
 
     const response = await ai.models.generateContent({
       model,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 16000 }
+      config: { 
+        responseMimeType: "application/json", 
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            strategy: {
+              type: Type.OBJECT,
+              properties: {
+                milestones: { type: Type.ARRAY, items: { type: Type.STRING } },
+                forbiddenResolutions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                characterArcProgress: { type: Type.STRING },
+                pacing: { type: Type.STRING }
+              }
+            },
+            beats: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { text: { type: Type.STRING } }
+              }
+            },
+            draft: { type: Type.STRING }
+          }
+        },
+        thinkingConfig: { thinkingBudget: 8000 } 
       }
     });
-
     trackUsage(response, model, 'Chapter Genesis', onUsage);
-    const data = JSON.parse(response.text || "{}");
+    const data = safeJsonParse<any>(response.text, {}, (msg, detail) => logCallback('error', 'Writer', msg, detail));
     return {
       strategy: data.strategy || { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' },
       beats: (data.beats || []).map((b: any) => ({ id: crypto.randomUUID(), text: b.text })),
       draft: data.draft || ""
     };
-  });
-};
-
-export const decomposeArcIntoStrategy = async (
-  project: StoryProject,
-  chapter: ChapterLog,
-  onUsage: any
-): Promise<Partial<ChapterStrategy>> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const ctx = getCompressedContext(project);
-    const prevChapters = project.chapters.slice(0, project.chapters.findIndex(c => c.id === chapter.id)).map(c => c.title).join(', ');
-
-    const model = AiModel.REASONING;
-    const prompt = `物語の設計士として、全体の大筋（Grand Arc）に基づき、この特定の章における「戦略的任務」を定義してください。
-【大筋】
-${ctx.arc}
-
-【既刊の章】
-${prevChapters || "なし（これが第1章です）"}
-
-【現在の章】
-題名: ${chapter.title}
-あらすじ: ${chapter.summary}
-
-以下の項目をJSONで出力してください：
-1. milestones: この章で必ず達成・進行させるべき要素（3つ程度）。
-2. forbiddenResolutions: この段階で「まだ解決してはいけない」謎や人間関係。
-3. characterArcProgress: キャラクターの心情変化の目標。
-4. pacing: 章のテンポ（例：静かな導入、緊迫した逃走など）。`;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            milestones: { type: Type.ARRAY, items: { type: Type.STRING } },
-            forbiddenResolutions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            characterArcProgress: { type: Type.STRING },
-            pacing: { type: Type.STRING }
-          }
-        }
-      }
-    });
-
-    trackUsage(response, model, 'Decompose Strategy', onUsage);
-    return JSON.parse(response.text || "{}");
-  });
-};
-
-export const generateBeats = async (
-  summary: string, 
-  project: StoryProject, 
-  currentBeats: PlotBeat[], 
-  onUsage: any
-): Promise<PlotBeat[]> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const ctx = getCompressedContext(project);
-    
-    const model = AiModel.REASONING;
-    const prompt = `あなたは物語の設計士です。以下のあらすじに基づき、具体的なシーン展開（プロットビート）を5〜10個程度に分解してください。
-【あらすじ】
-${summary}
-
-【世界設定・トーン】
-${ctx.setting}
-${ctx.tone}
-
-既存のビートがある場合は、それを踏まえて改善・詳細化してください：
-${currentBeats.map((b, i) => `${i+1}. ${b.text}`).join('\n')}
-
-JSON形式で、各ビートの「text」を含むオブジェクトの配列を返してください。`;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              text: { type: Type.STRING }
-            },
-            required: ["text"]
-          }
-        }
-      }
-    });
-
-    trackUsage(response, model, 'Generate Beats', onUsage);
-    try {
-      const data = JSON.parse(response.text || "[]");
-      return data.map((b: any) => ({
-        id: crypto.randomUUID(),
-        text: b.text
-      }));
-    } catch { return currentBeats; }
-  });
+  }, 'Chapter Genesis', logCallback);
 };
 
 export const generateDraft = async (
@@ -320,193 +286,149 @@ export const generateDraft = async (
   tone: string, 
   isHQ: boolean, 
   project: StoryProject, 
-  onUsage: any
+  onUsage: any,
+  logCallback: any
 ) => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const povChar = project.bible.characters.find(c => c.id === chapter.strategy.povCharacterId);
     const model = isHQ ? AiModel.REASONING : AiModel.FAST;
-
-    const prompt = `あなたはプロの小説家です。
-【章の戦略】
+    const ctx = getCompressedContext(project);
+    const prompt = `以下のビートに従い、小説を執筆してください。
 章題: ${chapter.title}
-POV: ${povChar ? povChar.name : '俯瞰'}
-Milestones: ${chapter.strategy.milestones.join(', ')}
-Forbidden: ${chapter.strategy.forbiddenResolutions.join(', ')}
-Beats: ${chapter.beats.map((b, i) => `${i+1}. ${b.text}`).join('\n')}
+トーン: ${tone}
+あらすじ: ${chapter.summary}
+ビート: ${chapter.beats.map(b => b.text).join(' → ')}
 
-【世界の理/トーン】
-Tone: ${tone}
-Laws: ${project.bible.laws}
-
-要件:
-- 指定された「Forbidden」は絶対に解決させない。
-- 指定された「Milestones」を確実に消化する。
-- 情緒的で、文芸的な描写を心がける。
-- POVが設定されている場合、その人物が認知できない情報は書かない。`;
+【設定遵守】
+人物: ${ctx.chars}
+理: ${ctx.laws}`;
 
     const response = await ai.models.generateContent({
       model,
       contents: [{ parts: [{ text: prompt }] }],
-      config: isHQ ? { thinkingConfig: { thinkingBudget: 8000 } } : undefined
+      config: isHQ ? { thinkingConfig: { thinkingBudget: 6000 } } : undefined
     });
-    
     trackUsage(response, model, 'Generate Draft', onUsage);
     return response.text || "";
-  });
+  }, 'Generate Draft', logCallback);
 };
 
-export const extractSettingsFromChat = async (
-  history: any[], 
-  bible: WorldBible, 
-  onUsage: any
-): Promise<SyncOperation[]> => {
+export const analyzeBibleIntegrity = async (bible: WorldBible, onUsage: any, logCallback: any): Promise<BibleIssue[]> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const model = AiModel.REASONING;
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [{ text: `以下の会話から物語設定の変更を抽出し、JSONで出力してください。
-特にentries（用語集）に関しては、新規追加(add)か既存用語への別名追加(addAlias)かを注意深く判断してください。
+    const prompt = `現在の物語設定資料（人物、世界観、理、年表）を分析し、矛盾点や不足点を抽出してください。
+設定: ${JSON.stringify(bible)}
 
-会話ログ:
-${JSON.stringify(history.slice(-8))}` }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              op: { type: Type.STRING, description: 'add, update, delete, set, merge, addAlias のいずれか' },
-              path: { type: Type.STRING },
-              targetId: { type: Type.STRING },
-              targetName: { type: Type.STRING },
-              field: { type: Type.STRING },
-              value: { type: Type.STRING },
-              rationale: { type: Type.STRING },
-              evidence: { type: Type.STRING },
-              confidence: { type: Type.NUMBER }
-            },
-            required: ["op", "path", "value", "rationale", "evidence"]
-          }
-        }
-      },
-    });
-
-    trackUsage(response, model, 'Extract Settings (Chat)', onUsage);
-    try {
-      return JSON.parse(response.text || "[]").map((op: any) => ({
-        ...op,
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        status: 'proposal',
-        baseVersion: bible.version
-      } as SyncOperation));
-    } catch { return []; }
-  });
-};
-
-export const extractSettingsFromText = async (
-  textContent: string, 
-  bible: WorldBible, 
-  chapter: ChapterLog,
-  onUsage: any
-): Promise<SyncOperation[]> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const charsContext = bible.characters.map(c => `${c.id}: ${c.name}`).join('\n');
-    const beatsContext = chapter.beats.map((b, i) => `${b.id}: Beat ${i+1}. ${b.text}`).join('\n');
-    const model = AiModel.REASONING;
-
-    const prompt = `あなたは物語の監査官です。以下の小説本文から、キャラクターの状態に関する「具体的な変化（Delta）」のみを抽出してください。
-【解析対象の本文】
-${textContent.slice(-3000)}
-
-必ずJSON形式のリストで出力してください。`;
+【出力形式】
+JSON配列。各要素は { "id": "uuid", "type": "Contradiction|Incomplete", "targetIds": ["id1"], "targetType": "Character|Law", "description": "内容", "suggestion": "修正案", "severity": "Low|Medium|High" }`;
 
     const response = await ai.models.generateContent({
       model,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              op: { type: Type.STRING, description: 'set (変更), add (配列への追加), remove (配列からの削除)' },
-              path: { type: Type.STRING, description: 'characters' },
-              targetId: { type: Type.STRING, description: '対象キャラのID' },
-              targetName: { type: Type.STRING, description: '対象キャラの名前' },
-              field: { type: Type.STRING, description: 'location, health, inventory, knowledge, currentGoal, internalState のいずれか' },
-              value: { type: Type.STRING, description: '変更後の具体的な値' },
-              beatId: { type: Type.STRING, description: '該当するビートID' },
-              rationale: { type: Type.STRING, description: 'なぜそう判断したか' },
-              evidence: { type: Type.STRING, description: '根拠となる本文の一節' },
-              confidence: { type: Type.NUMBER }
-            },
-            required: ["op", "path", "targetId", "field", "value", "rationale", "evidence"]
-          }
-        }
-      },
-    });
-
-    trackUsage(response, model, 'Extract Settings (Text)', onUsage);
-    try {
-      const data = JSON.parse(response.text || "[]");
-      return data.map((op: any) => ({
-        ...op,
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        status: 'proposal',
-        baseVersion: bible.version
-      } as SyncOperation));
-    } catch { return []; }
-  });
-};
-
-export const analyzeBibleIntegrity = async (bible: WorldBible, onUsage: any): Promise<BibleIssue[]> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = AiModel.REASONING;
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: `設定資料を横断分析し、矛盾(Contradiction)や設定漏れ(Incomplete)をJSONで指摘してください。\n${JSON.stringify(bible)}` }] }],
+      contents: [{ parts: [{ text: prompt }] }],
       config: { 
-        responseMimeType: "application/json", 
-        responseSchema: { 
-          type: Type.ARRAY, 
-          items: { 
-            type: Type.OBJECT, 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
             properties: {
               id: { type: Type.STRING },
               type: { type: Type.STRING },
-              targetType: { type: Type.STRING },
               targetIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+              targetType: { type: Type.STRING },
               description: { type: Type.STRING },
               suggestion: { type: Type.STRING },
               severity: { type: Type.STRING }
             },
-            required: ["id", "type", "description", "suggestion", "severity", "targetType", "targetIds"]
+            required: ["id", "type", "description", "suggestion", "severity"]
           }
-        }
+        },
+        thinkingConfig: { thinkingBudget: 8000 }
       }
     });
     trackUsage(response, model, 'Integrity Scan', onUsage);
-    return JSON.parse(response.text || "[]");
-  });
+    return safeJsonParse<BibleIssue[]>(response.text, [], (msg, detail) => logCallback('error', 'Architect', msg, detail));
+  }, 'Integrity Scan', logCallback);
 };
 
-export const simulateBranch = async (hypothesis: string, project: StoryProject, onUsage: any): Promise<NexusBranch> => {
+export const generateCharacterPortrait = async (char: Character, project: StoryProject, logCallback: any): Promise<string> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const ctx = getCompressedContext(project);
-    const model = AiModel.REASONING;
+    const model = AiModel.IMAGE;
+    const prompt = `Detailed anime-style portrait of a character named ${char.name}.
+Description: ${char.description}.
+Traits: ${char.traits.join(', ')}.
+Tone of the story: ${project.bible.tone}.
+High quality, masterpiece, character sheet focus.`;
+
     const response = await ai.models.generateContent({
       model,
-      contents: [{ parts: [{ text: `現在の設定:\n${JSON.stringify(ctx)}\n\n仮説：「もしも：${hypothesis}」が起きた場合の影響をシミュレートしてください。` }] }],
+      contents: { parts: [{ text: prompt }] },
+      config: { imageConfig: { aspectRatio: "1:1" } }
+    });
+
+    let b64 = "";
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) b64 = `data:image/png;base64,${part.inlineData.data}`;
+      }
+    }
+    return b64;
+  }, 'Portrait Generation', logCallback);
+};
+
+export const playCharacterVoice = async (char: Character, text: string, logCallback: any): Promise<void> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const model = AiModel.TTS;
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ parts: [{ text: `感情を込めて: ${text}` }] }],
       config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: { 
+          voiceConfig: { 
+            prebuiltVoiceConfig: { voiceName: char.voiceId || 'Puck' } 
+          } 
+        },
+      },
+    });
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (base64Audio) {
+      const ctx = new AudioContext({ sampleRate: 24000 });
+      const binary = atob(base64Audio);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const dataInt16 = new Int16Array(bytes.buffer);
+      const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
+      const channelData = buffer.getChannelData(0);
+      for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start();
+    }
+  } catch (e: any) {
+    if (logCallback) logCallback('error', 'Voice', '失敗', e.message);
+  }
+};
+
+export const simulateBranch = async (hypothesis: string, project: StoryProject, onUsage: any, logCallback: any): Promise<NexusBranch> => {
+  return handleGeminiError(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const model = AiModel.REASONING;
+    const prompt = `「もしも～（If-then）」の仮説に基づき、物語の因果律の分岐をシミュレートしてください。
+仮説: ${hypothesis}
+物語の現状: ${JSON.stringify(getCompressedContext(project))}
+
+【出力形式】
+JSON: { "impactOnCanon": "世界への影響", "impactOnState": "キャラクターへの影響", "alternateTimeline": ["出来事1", "出来事2"] }`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ parts: [{ text: prompt }] }],
+      config: { 
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -516,95 +438,31 @@ export const simulateBranch = async (hypothesis: string, project: StoryProject, 
             alternateTimeline: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
           required: ["impactOnCanon", "impactOnState", "alternateTimeline"]
-        }
+        },
+        thinkingConfig: { thinkingBudget: 4000 }
       }
     });
     trackUsage(response, model, 'Nexus Simulation', onUsage);
-    const data = JSON.parse(response.text || "{}");
+    const data = safeJsonParse<any>(response.text, {}, (msg, detail) => logCallback('error', 'Architect', msg, detail));
     return { id: crypto.randomUUID(), hypothesis, ...data, timestamp: Date.now() };
-  });
+  }, 'Nexus Simulation', logCallback);
 };
 
-export const generateCharacterPortrait = async (char: Character, project: StoryProject): Promise<string> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = AiModel.IMAGE;
-    const response = await ai.models.generateContent({
-      model,
-      contents: { parts: [{ text: `Cinematic literary portrait of ${char.name}. ${char.description}. Style: Detailed, atmospheric, story-driven.` }] },
-    });
-    let b64 = "";
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) b64 = `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-    return b64;
-  });
-};
-
-export const playCharacterVoice = async (char: Character, text: string): Promise<void> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = AiModel.TTS;
-  const response = await ai.models.generateContent({
-    model,
-    contents: [{ parts: [{ text }] }],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: char.voiceId || 'Puck' } } },
-    },
-  });
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (base64Audio) {
-    const ctx = new AudioContext({ sampleRate: 24000 });
-    const binary = atob(base64Audio);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const dataInt16 = new Int16Array(bytes.buffer);
-    const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
-    const channelData = buffer.getChannelData(0);
-    for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start();
-  }
-};
-
-export const generateCharacterIdea = async (project: StoryProject, onUsage: any): Promise<any> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = AiModel.REASONING;
-    const response = await ai.models.generateContent({ 
-      model, 
-      contents: [{ parts: [{ text: `新キャラクター案をJSONで。` }] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            role: { type: Type.STRING },
-            description: { type: Type.STRING },
-            motivation: { type: Type.STRING },
-            flaw: { type: Type.STRING },
-            arc: { type: Type.STRING }
-          }
-        }
-      }
-    });
-    trackUsage(response, model, 'Character Idea', onUsage);
-    return JSON.parse(response.text || "{}");
-  });
-};
-
-export const suggestNextSentence = async (content: string, project: StoryProject, onUsage: any): Promise<string[]> => {
+export const suggestNextSentence = async (content: string, project: StoryProject, onUsage: any, logCallback: any): Promise<string[]> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const model = AiModel.FAST;
+    const safeContent = content || "";
+    const prompt = `小説の続きとして魅力的な3つの候補を提案してください。
+【直前の本文】
+${safeContent.slice(-800)}
+
+【出力形式】
+JSON配列。["候補1", "候補2", "候補3"]`;
+
     const response = await ai.models.generateContent({
       model,
-      contents: [{ parts: [{ text: `続きの3案をJSONで。本文：\n${content.slice(-600)}` }] }],
+      contents: [{ parts: [{ text: prompt }] }],
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -613,57 +471,159 @@ export const suggestNextSentence = async (content: string, project: StoryProject
         }
       }
     });
-    trackUsage(response, model, 'Next Sentence Suggestion', onUsage);
-    return JSON.parse(response.text || "[]");
-  });
+    trackUsage(response, model, 'Next Suggestion', onUsage);
+    return safeJsonParse<string[]>(response.text, [], (msg, detail) => logCallback('error', 'Writer', msg, detail));
+  }, 'Next Suggestion', logCallback);
+};
+
+export const decomposeArcIntoStrategy = async (
+  project: StoryProject,
+  chapter: ChapterLog,
+  onUsage: any,
+  logCallback: any
+): Promise<Partial<ChapterStrategy>> => {
+  return handleGeminiError(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ctx = getCompressedContext(project);
+    const model = AiModel.REASONING;
+    const prompt = `グランドアークと前後の展開を考慮し、章「${chapter.title}」の執筆戦略を策定してください。
+あらすじ: ${chapter.summary}
+アーク: ${ctx.arc}
+
+【出力形式】
+JSON: { "milestones": ["到達点1", ...], "forbiddenResolutions": ["避けるべき描写"], "pacing": "説明", "characterArcProgress": "説明" }`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            milestones: { type: Type.ARRAY, items: { type: Type.STRING } },
+            forbiddenResolutions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            pacing: { type: Type.STRING },
+            characterArcProgress: { type: Type.STRING }
+          }
+        }
+      }
+    });
+    trackUsage(response, model, 'Decompose Strategy', onUsage);
+    return safeJsonParse<Partial<ChapterStrategy>>(response.text, {}, (msg, detail) => logCallback('error', 'Architect', msg, detail));
+  }, 'Decompose Strategy', logCallback);
+};
+
+export const generateRandomProject = async (theme: string, logCallback: any): Promise<Partial<StoryProject>> => {
+  return handleGeminiError(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const model = AiModel.REASONING;
+    const prompt = `テーマ「${theme}」に基づき、重厚な物語の初期設定資料一式を生成してください。
+【項目】
+- タイトル、ジャンル
+- 設定（世界観、歴史）
+- 理（物理法則、禁忌）
+- グランドアーク（全三幕構成）
+- 魅力的な主要人物（3名程度、名前・詳細・動機）
+
+【出力形式】
+JSON形式で、StoryProjectの型に準拠してください。`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ parts: [{ text: prompt }] }],
+      config: { 
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 8000 }
+      }
+    });
+    return safeJsonParse<Partial<StoryProject>>(response.text, {}, (msg, detail) => logCallback('error', 'System', msg, detail));
+  }, 'Project Genesis', logCallback);
+};
+
+export const extractSettingsFromText = async (
+  textContent: string, 
+  bible: WorldBible, 
+  chapter: ChapterLog,
+  onUsage: any,
+  logCallback: any
+): Promise<SyncOperation[]> => {
+  return handleGeminiError(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const model = AiModel.REASONING;
+    const safeText = textContent || "";
+    const prompt = `執筆された本文を分析し、キャラクターの「状態の変化（負傷、感情、所持品、現在地）」を抽出してSyncOperation(JSON配列)で出力してください。
+本文: ${safeText.slice(-3000)}`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+            type: Type.ARRAY,
+            items: syncOperationSchema
+        }
+      },
+    });
+    trackUsage(response, model, 'Extract Settings (Text)', onUsage);
+    const data = safeJsonParse<any[]>(response.text, [], (msg, detail) => logCallback('error', 'NeuralSync', msg, detail));
+    return data.map((op: any) => ({ ...op, id: crypto.randomUUID(), timestamp: Date.now(), status: 'proposal', baseVersion: bible.version } as SyncOperation));
+  }, 'Extract Settings (Text)', logCallback);
+};
+
+export const generateBeats = async (
+  summary: string, 
+  project: StoryProject, 
+  onUsage: any,
+  logCallback: any
+): Promise<PlotBeat[]> => {
+  return handleGeminiError(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const model = AiModel.REASONING;
+    const prompt = `この章のあらすじを、具体的でドラマチックな8～12個の「プロット・ビート」に分解してください。
+あらすじ: ${summary}`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: { text: { type: Type.STRING } },
+            required: ["text"]
+          }
+        }
+      }
+    });
+    trackUsage(response, model, 'Generate Beats', onUsage);
+    const data = safeJsonParse<any[]>(response.text, [], (msg, detail) => logCallback('error', 'Writer', msg, detail));
+    return data.map((b: any) => ({ id: crypto.randomUUID(), text: b.text }));
+  }, 'Generate Beats', logCallback);
 };
 
 export const generateChapterSummary = async (
   project: StoryProject, 
   activeChapter: ChapterLog, 
   prevChapter: ChapterLog | null, 
-  onUsage: any
+  onUsage: any,
+  logCallback: any
 ): Promise<string> => {
   return handleGeminiError(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const ctx = getCompressedContext(project);
     const model = AiModel.REASONING;
-    const prompt = `新章「${activeChapter.title}」の具体的なあらすじ案を作成してください。\n前章：${prevChapter?.title || 'なし'}\n全体の大筋：${ctx.arc}`;
+    const prompt = `前章のあらすじと物語全体の構成を考慮し、この新章「${activeChapter.title}」のあらすじ（シーンの導入と山場）を提案してください。
+前章: ${prevChapter?.summary || 'なし'}
+グランドアーク: ${project.bible.grandArc}`;
+
     const response = await ai.models.generateContent({
       model,
       contents: [{ parts: [{ text: prompt }] }],
     });
     trackUsage(response, model, 'Chapter Summary', onUsage);
     return response.text || "";
-  });
-};
-
-export const generateRandomProject = async (theme: string): Promise<Partial<StoryProject>> => {
-  return handleGeminiError(async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = AiModel.REASONING;
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: `テーマ: "${theme}" の初期設定案をJSONで。` }] }],
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            bible: {
-              type: Type.OBJECT,
-              properties: {
-                setting: { type: Type.STRING },
-                laws: { type: Type.STRING },
-                grandArc: { type: Type.STRING },
-                tone: { type: Type.STRING }
-              }
-            }
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || "{}");
-  });
+  }, 'Chapter Summary', logCallback);
 };

@@ -125,13 +125,13 @@ export interface WorldEntry {
   category: 'History' | 'Culture' | 'Technology' | 'Magic' | 'Geography' | 'Lore' | 'Terminology';
   title: string;
   aliases: string[];
-  content: string; // 簡潔な要約
-  definition: string; // 客観的な定義・辞書的側面
-  narrativeSignificance: string; // 物語上の役割・主観的側面
-  etymology?: string; // 語源・背景
-  isSecret: boolean; // 物語の核心（読者/キャラに隠すべき）
+  content: string; 
+  definition: string; 
+  narrativeSignificance: string; 
+  etymology?: string; 
+  isSecret: boolean; 
   tags: string[];
-  linkedIds: string[]; // 関連エントリーやキャラクター
+  linkedIds: string[]; 
 }
 
 export interface ForeshadowingLink {
@@ -196,6 +196,7 @@ export interface WorldBible {
   foreshadowing: Foreshadowing[]; 
   entries: WorldEntry[]; 
   nexusBranches: NexusBranch[]; 
+  integrityIssues: BibleIssue[];
 }
 
 export interface StoryProject {
