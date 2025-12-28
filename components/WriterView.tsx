@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { StoryProject, ChapterLog, SystemLog, ChapterStrategy, PlotBeat } from '../types';
-import { generateBeats, generateDraft, suggestNextSentence, generateChapterSummary, extractSettingsFromText, decomposeArcIntoStrategy, generateFullChapterPackage } from '../services/geminiService';
+// Fixed: Removed non-existent generateChapterSummary and extractSettingsFromText, and unused decomposeArcIntoStrategy
+import { generateBeats, generateDraft, suggestNextSentence, generateFullChapterPackage } from '../services/geminiService';
 import { 
   Sparkles, Plus, Maximize2, Minimize2, Loader2, X, Feather, LayoutDashboard, Zap, TrendingUp, 
   Pen, Activity, Check, Quote, Wand, Eye, ChevronLeft, Menu
