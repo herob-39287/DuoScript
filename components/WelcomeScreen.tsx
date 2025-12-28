@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, Upload, Loader2, ChevronRight, Rocket, Coffee, Feather, Book, BookOpen, FileJson, X } from 'lucide-react';
 import { generateRandomProject } from '../services/geminiService';
 import { StoryProject } from '../types';
-import { normalizeProject } from '../App';
+import { normalizeProject } from '../services/bibleManager';
 
 interface Props {
   onStart: (projectData: StoryProject) => void;
@@ -44,7 +44,6 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
     if (!autoTheme.trim()) return;
     setIsProcessing(true);
     try {
-      // FIX: Added logCallback as the second argument as required by generateRandomProject signature
       const generated = await generateRandomProject(autoTheme, (type: string, source: string, msg: string, detail?: string) => {
         console.log(`[${source}] ${type}: ${msg}`, detail);
       });
@@ -94,7 +93,7 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
           <div className="text-[9px] md:text-[10px] font-black uppercase text-stone-700 tracking-[0.4em] mb-2 text-center">続行または読み込み</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             {existingProject ? (
-              <button onClick={() => onStart(existingProject)} className="p-5 md:p-6 bg-stone-800/40 border border-stone-700/50 rounded-2xl md:rounded-[2rem] flex items-center justify-between hover:bg-stone-800 transition-all shadow-xl group text-left">
+              <button onClick={() => onStart(existingProject)} className="p-5 md:p-6 bg-stone-800/40 border border-stone-700/50 rounded-2xl md:rounded-[1.5rem] flex items-center justify-between hover:bg-stone-800 transition-all shadow-xl group text-left">
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-700 flex items-center justify-center text-orange-400 shrink-0">
                     <BookOpen size={18}/>
@@ -107,12 +106,12 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
                 <ChevronRight size={18} className="text-stone-600 group-hover:text-orange-400 transition-colors shrink-0"/>
               </button>
             ) : (
-              <div className="p-5 border border-dashed border-stone-800 rounded-2xl md:rounded-[2rem] flex items-center justify-center text-stone-700 italic text-[10px] font-serif">
+              <div className="p-5 border border-dashed border-stone-800 rounded-2xl md:rounded-[1.5rem] flex items-center justify-center text-stone-700 italic text-[10px] font-serif">
                 アーカイブされた物語はありません
               </div>
             )}
 
-            <label className="p-5 md:p-6 bg-stone-800/20 border border-stone-800 hover:border-orange-500/30 rounded-2xl md:rounded-[2rem] flex items-center gap-4 cursor-pointer hover:bg-stone-800/40 transition-all group">
+            <label className="p-5 md:p-6 bg-stone-800/20 border border-stone-800 hover:border-orange-500/30 rounded-2xl md:rounded-[1.5rem] flex items-center gap-4 cursor-pointer hover:bg-stone-800/40 transition-all group">
               <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-900 flex items-center justify-center text-stone-500 group-hover:text-orange-400">
                 <FileJson size={18}/>
               </div>
@@ -128,7 +127,7 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
         <div className="space-y-6 md:space-y-8">
           <div className="text-[9px] md:text-[10px] font-black uppercase text-stone-700 tracking-[0.4em] text-center">新しく物語を始める</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-             <div className="p-8 md:p-10 glass-bright rounded-[2rem] md:rounded-[3rem] space-y-6 md:space-y-8 flex flex-col shadow-2xl">
+             <div className="p-8 md:p-10 glass-bright rounded-[2rem] md:rounded-[2.5rem] space-y-6 md:space-y-8 flex flex-col shadow-2xl">
                 <div className="flex items-center gap-3 md:gap-4">
                   <div className="p-2 md:p-3 bg-orange-400/20 rounded-2xl text-orange-400"><Coffee size={20} className="md:w-6 md:h-6"/></div>
                   <h3 className="text-xl md:text-2xl font-display font-black text-white italic">自由な構想</h3>
@@ -140,7 +139,7 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
                 <button onClick={handleLaunchManual} className="w-full py-4 md:py-5 bg-orange-500 hover:bg-orange-400 text-stone-950 font-black rounded-xl md:rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-[10px] md:text-xs">アトリエに入る</button>
              </div>
              
-             <div className="p-8 md:p-10 glass-bright rounded-[2rem] md:rounded-[3rem] space-y-6 md:space-y-8 flex flex-col shadow-2xl border-orange-400/10">
+             <div className="p-8 md:p-10 glass-bright rounded-[2rem] md:rounded-[2.5rem] space-y-6 md:space-y-8 flex flex-col shadow-2xl border-orange-400/10">
                 <div className="flex items-center gap-3 md:gap-4">
                   <div className="p-2 md:p-3 bg-stone-700/50 rounded-2xl text-orange-300"><Rocket size={20} className="md:w-6 md:h-6"/></div>
                   <h3 className="text-xl md:text-2xl font-display font-black text-white italic">AI ミューズ</h3>

@@ -248,3 +248,22 @@ export interface DialogState {
   onConfirm?: () => void;
   onCancel?: () => void;
 }
+
+// Actions for Reducer
+export type ProjectAction = 
+  | { type: 'LOAD_PROJECT'; payload: StoryProject }
+  | { type: 'UPDATE_PROJECT_META'; payload: Partial<StoryProject> }
+  | { type: 'UPDATE_BIBLE'; payload: Partial<WorldBible> }
+  | { type: 'COMMIT_SYNC_OP'; payload: SyncOperation }
+  | { type: 'REJECT_SYNC_OP'; payload: string }
+  | { type: 'ADD_PENDING_OPS'; payload: SyncOperation[] }
+  | { type: 'UPDATE_CHAPTER'; id: string; updates: Partial<ChapterLog> }
+  | { type: 'ADD_CHAPTER'; payload: ChapterLog }
+  | { type: 'SET_CHAT_HISTORY'; payload: ChatMessage[] }
+  | { type: 'TRACK_USAGE'; payload: { model: string, source: string, input: number, output: number } }
+  | { type: 'CLEAR_DATA' };
+
+export type NotificationAction = 
+  | { type: 'ADD_LOG'; payload: SystemLog }
+  | { type: 'CLEAR_LOGS' }
+  | { type: 'DISMISS_NOTIFICATION'; id: string };

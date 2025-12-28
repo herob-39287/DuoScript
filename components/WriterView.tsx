@@ -1,276 +1,249 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { StoryProject, ChapterLog, SystemLog, PlotBeat } from '../types';
-import { generateBeats, generateDraft, suggestNextSentence, generateFullChapterPackage } from '../services/geminiService';
+import { generateDraft, suggestNextSentence, generateFullChapterPackage } from '../services/geminiService';
+import { useProject, useNotifications } from '../App';
 import { 
-  Sparkles, Plus, Maximize2, Minimize2, Loader2, X, Feather, LayoutDashboard, 
-  Pen, Check, Quote, Wand, ChevronLeft
+  Sparkles, Plus, Maximize2, Minimize2, Loader2, Feather, LayoutDashboard, Pen, Quote, Wand, ChevronLeft,
+  Settings2, Type, Eraser, Download, Save, Send, X, Info
 } from 'lucide-react';
 
-interface Props {
-  project: StoryProject;
-  setProject: React.Dispatch<React.SetStateAction<StoryProject | null>>;
-  addLog: (type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => void;
-  onTokenUsage: (usage: { input: number; output: number }) => void;
-  showConfirm: (title: string, message: string, onConfirm: () => void) => void;
-}
+const WriterView: React.FC = () => {
+  const { project, dispatch: projectDispatch } = useProject();
+  const { addLog } = useNotifications();
 
-const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage, showConfirm }) => {
-  const [activeChapterId, setActiveChapterId] = useState<string>(project.chapters[0]?.id || '');
+  const [activeChapterId, setActiveChapterId] = useState(project?.chapters[0]?.id || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
-  const [isHQ, setIsHQ] = useState(true);
   const [copilotSuggestions, setCopilotSuggestions] = useState<string[]>([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
   const [showPlanner, setShowPlanner] = useState(true);
-  const [plannerTab, setPlannerTab] = useState<'STRATEGY' | 'BEATS'>('STRATEGY');
-  const [isFullGenesis, setIsFullGenesis] = useState(false);
-  const [genesisStatus, setGenesisStatus] = useState('');
+  const [fontSize, setFontSize] = useState(24);
 
-  // エディタパフォーマンス向上のためのローカルステート
-  const activeChapter = project.chapters.find(c => c.id === activeChapterId);
+  const activeChapter = project?.chapters.find(c => c.id === activeChapterId);
   const [localContent, setLocalContent] = useState(activeChapter?.content || '');
   const typingRef = useRef(false);
   const syncTimeoutRef = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // チャプター切り替えまたは外部更新（AI執筆など）時の同期
   useEffect(() => {
     if (!typingRef.current) {
       setLocalContent(activeChapter?.content || '');
     }
-  }, [activeChapter?.content, activeChapterId]);
+  }, [activeChapter?.id, activeChapter?.content]);
 
-  const updateChapter = (id: string, updates: Partial<ChapterLog>) => {
-    setProject(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        chapters: prev.chapters.map(c => 
-          c.id === id 
-            ? { ...c, ...updates, wordCount: updates.content !== undefined ? updates.content.trim().length : c.wordCount } 
-            : c
-        )
-      };
-    });
-  };
-
-  // テキスト入力ハンドラ（ローカルのみ更新）
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setLocalContent(val);
     typingRef.current = true;
 
-    // デバウンス同期: 800ms入力がない場合に親ステートへ反映
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = window.setTimeout(() => {
-      updateChapter(activeChapterId, { content: val });
+      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapterId, updates: { content: val } });
       typingRef.current = false;
-    }, 800);
+    }, 1000);
   };
 
-  const handleFullGenesis = async () => {
-    if (!activeChapter || isFullGenesis) return;
-    setIsFullGenesis(true);
-    setGenesisStatus('設計士が戦略を策定中...');
-    addLog('info', 'Writer', `章「${activeChapter.title}」を全自動構築中...`);
+  const handleSuggest = async () => {
+    if (isCopilotLoading || !localContent.trim()) return;
+    setIsCopilotLoading(true);
     try {
-      const result = await generateFullChapterPackage(project, activeChapter, onTokenUsage, addLog);
-      setGenesisStatus('本文を情緒的に展開中...');
-      updateChapter(activeChapter.id, {
-        strategy: result.strategy,
-        beats: result.beats,
-        content: result.draft,
-        status: 'Polished'
-      });
-      addLog('success', 'Writer', `章の構築が完了しました。`);
-    } catch (err: any) { 
-      addLog('error', 'Writer', err.message, err.details); 
-    } finally { 
-      setIsFullGenesis(false); 
-      setGenesisStatus('');
-    }
-  };
-
-  const handleGenBeats = async () => {
-    if (!activeChapter || isProcessing || !activeChapter.summary) return;
-    setIsProcessing(true);
-    try {
-      const beats = await generateBeats(activeChapter.summary, project, onTokenUsage, addLog);
-      updateChapter(activeChapter.id, { beats, status: 'Beats' });
-      setPlannerTab('BEATS');
-    } catch (e: any) { 
-      addLog('error', 'Writer', e.message, e.details); 
-    } finally { 
-      setIsProcessing(false); 
+      const suggestions = await suggestNextSentence(localContent, project!, (usage: any) => projectDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
+      setCopilotSuggestions(suggestions);
+    } catch (e) {
+      addLog('error', 'Writer', '続きの提案に失敗しました。');
+    } finally {
+      setIsCopilotLoading(false);
     }
   };
 
   const handleGenDraft = async () => {
-    if (!activeChapter || isProcessing) return;
+    if (!activeChapter || isProcessing || !project) return;
     setIsProcessing(true);
+    addLog('info', 'Writer', '執筆中...');
     try {
-      addLog('info', 'Writer', `執筆を開始...`);
-      const draft = await generateDraft(activeChapter, project.bible.tone, isHQ, project, onTokenUsage, addLog);
-      const newContent = (activeChapter.content ? activeChapter.content + "\n\n" : "") + draft;
-      updateChapter(activeChapter.id, { content: newContent, status: 'Drafting' });
+      const draft = await generateDraft(activeChapter, project.bible.tone, true, project, (usage: any) => projectDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
+      const newContent = (localContent ? localContent + "\n\n" : "") + draft;
+      setLocalContent(newContent);
+      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { content: newContent, status: 'Drafting' } });
+      addLog('success', 'Writer', '執筆完了');
     } catch (e: any) { 
-      addLog('error', 'Writer', e.message, e.details); 
+      addLog('error', 'Writer', '執筆に失敗しました。');
     } finally { 
       setIsProcessing(false); 
     }
   };
 
-  const handleGetSuggestions = async () => {
-    if (!activeChapter || !localContent || isCopilotLoading) return;
-    setIsCopilotLoading(true);
-    try {
-      const suggestions = await suggestNextSentence(localContent, project, onTokenUsage, addLog);
-      setCopilotSuggestions(suggestions);
-    } catch (e: any) { 
-      addLog('error', 'Writer', e.message, e.details); 
-    } finally { 
-      setIsCopilotLoading(false); 
-    }
-  };
-
-  const useSuggestion = (text: string) => {
-    if (!activeChapter) return;
-    const current = localContent || "";
-    const space = (current.endsWith('。') || current.endsWith('」') || current.endsWith('！')) ? "" : " ";
-    const combined = current + space + text;
-    setLocalContent(combined);
-    updateChapter(activeChapter.id, { content: combined });
-    setCopilotSuggestions([]);
-  };
+  if (!project || !activeChapter) return null;
 
   return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden bg-stone-950 transition-all duration-700 ${isZenMode ? 'bg-[#1a1816]' : ''}`}>
+    <div className={`h-full flex flex-col md:flex-row overflow-hidden bg-stone-950 transition-all duration-700 ${isZenMode ? 'bg-[#141210]' : ''}`}>
       {!isZenMode && (
-        <aside className="fixed inset-0 z-[110] md:relative md:inset-auto md:z-auto w-full md:w-80 glass border-r border-white/5 flex flex-col shrink-0 transform transition-transform duration-300 -translate-x-full md:translate-x-0">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-stone-900/40">
-              <h3 className="text-[11px] font-black text-stone-500 uppercase tracking-[0.4em]">Drafts</h3>
-              <button onClick={() => {
-                  const newId = crypto.randomUUID();
-                  setProject(p => p ? ({ ...p, chapters: [...p.chapters, { id: newId, title: '新章', summary: '', content: '', beats: [], stateDeltas: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0 }] }) : null);
-                  setActiveChapterId(newId);
-                }} className="p-2 bg-stone-800 rounded-lg text-orange-400 hover:text-white"><Plus size={18}/></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-              {project.chapters.map((ch, idx) => (
-                <button key={ch.id} onClick={() => setActiveChapterId(ch.id)} className={`w-full text-left p-6 rounded-[2rem] border transition-all ${activeChapterId === ch.id ? 'bg-orange-600/10 border-orange-500/30 text-white shadow-lg' : 'text-stone-500 border-transparent hover:bg-white/5'}`}>
-                  <div className="flex items-center gap-3"><span className="text-[10px] font-mono text-orange-400">{String(idx+1).padStart(2, '0')}</span><div className="text-[13px] font-serif-bold truncate">{ch.title}</div></div>
-                </button>
-              ))}
-            </div>
+        <aside className="hidden md:flex w-72 glass border-r border-white/5 flex-col shrink-0 animate-fade-in">
+          <div className="p-6 border-b border-white/5 flex justify-between items-center bg-stone-900/40">
+            <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">Chapters</span>
+            <button onClick={() => {
+              const id = crypto.randomUUID();
+              projectDispatch({ type: 'ADD_CHAPTER', payload: { id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [] } });
+              setActiveChapterId(id);
+            }} className="p-1.5 bg-stone-800 hover:bg-orange-600 text-orange-400 hover:text-white rounded-lg transition-all"><Plus size={16}/></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+            {project.chapters.map((ch, idx) => (
+              <button 
+                key={ch.id} 
+                onClick={() => setActiveChapterId(ch.id)} 
+                className={`w-full text-left p-5 rounded-2xl border transition-all ${activeChapterId === ch.id ? 'bg-orange-600/10 border-orange-500/30 text-white' : 'text-stone-500 border-transparent hover:bg-white/5'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-mono text-orange-500/50">{(idx+1).toString().padStart(2, '0')}</span>
+                  <div className="text-[12px] font-serif truncate">{ch.title}</div>
+                </div>
+              </button>
+            ))}
+          </div>
         </aside>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 bg-stone-950/30 relative">
-        <header className={`h-16 md:h-24 glass-bright border-b border-white/5 flex items-center justify-between px-4 md:px-10 shrink-0 transition-opacity duration-700 ${isZenMode ? 'opacity-20 hover:opacity-100' : 'opacity-100'}`}>
-           <div className="flex items-center gap-4">
-              {isZenMode && <button onClick={() => setIsZenMode(false)} className="p-3 bg-stone-800 rounded-xl text-stone-400 hover:text-white"><Minimize2 size={18}/></button>}
-              <input value={activeChapter?.title || ''} onChange={e => updateChapter(activeChapterId, { title: e.target.value })} className="bg-transparent text-white font-display font-black italic text-lg md:text-2xl outline-none truncate" placeholder="章題..."/>
+      <div className="flex-1 flex flex-col relative">
+        <header className={`h-24 glass-bright border-b border-white/5 flex items-center justify-between px-10 shrink-0 z-20 ${isZenMode ? 'opacity-0 hover:opacity-100 transition-opacity duration-500 bg-[#141210]/95' : ''}`}>
+           <div className="flex items-center gap-6">
+              {isZenMode && (
+                <button onClick={() => setIsZenMode(false)} className="p-3 bg-stone-800 rounded-2xl text-stone-400 hover:text-white transition-all">
+                  <Minimize2 size={18}/>
+                </button>
+              )}
+              <input 
+                value={activeChapter.title} 
+                onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { title: e.target.value } })} 
+                className="bg-transparent text-white font-display font-black italic text-2xl outline-none focus:text-orange-400 transition-colors" 
+              />
            </div>
-           <div className="flex items-center gap-2 md:gap-4">
-             <div className="hidden md:flex flex-col items-end mr-4">
-                <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest">Word Count</span>
-                <span className="text-xs font-mono text-orange-400">{localContent.length.toLocaleString()}</span>
-             </div>
-             {!isZenMode && (
-               <>
-                 <button onClick={() => setIsZenMode(true)} className="p-2 bg-stone-800 text-stone-400 rounded-xl hover:bg-stone-700 transition-all"><Maximize2 size={16}/></button>
-                 <button onClick={() => setShowPlanner(!showPlanner)} className={`p-2 rounded-xl transition-all ${showPlanner ? 'text-orange-400 bg-stone-800' : 'text-stone-600'}`}><LayoutDashboard size={18}/></button>
-               </>
-             )}
+           <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center bg-stone-900/50 rounded-xl px-4 py-1.5 border border-white/5 gap-4">
+                <button onClick={() => setFontSize(Math.max(16, fontSize - 2))} className="text-stone-500 hover:text-stone-200"><Eraser size={14}/></button>
+                <span className="text-[10px] font-mono text-stone-600">{fontSize}px</span>
+                <button onClick={() => setFontSize(Math.min(32, fontSize + 2))} className="text-stone-500 hover:text-stone-200"><Type size={14}/></button>
+              </div>
+              {!isZenMode && (
+                <button onClick={() => setIsZenMode(true)} className="p-3 bg-stone-800 rounded-2xl text-stone-500 hover:text-orange-400 transition-all">
+                  <Maximize2 size={18}/>
+                </button>
+              )}
+              <button onClick={() => setShowPlanner(!showPlanner)} className={`p-3 rounded-2xl transition-all ${showPlanner ? 'bg-orange-600/20 text-orange-400' : 'bg-stone-800 text-stone-500'}`}>
+                <LayoutDashboard size={18}/>
+              </button>
            </div>
         </header>
 
-        <div className="flex-1 flex overflow-hidden relative">
-          <main className={`flex-1 overflow-y-auto custom-scrollbar p-6 md:p-12 relative ${isZenMode ? 'max-w-4xl mx-auto' : ''}`}>
-            {isZenMode && <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/p6.png')]"></div>}
-            
-            <textarea 
-              className="w-full bg-transparent text-stone-200 prose-literary outline-none resize-none min-h-[75vh] text-xl md:text-2xl caret-orange-500"
-              value={localContent}
-              onChange={handleTextChange}
-              placeholder="綴りましょう..."
-            />
+        <div className="flex-1 flex overflow-hidden">
+          <main className="flex-1 overflow-y-auto custom-scrollbar relative bg-stone-900/10" ref={scrollRef}>
+            <div className="max-w-4xl mx-auto px-8 md:px-12 py-20 min-h-full">
+              <textarea 
+                className="w-full bg-transparent text-stone-200 prose-literary outline-none resize-none min-h-[70vh] caret-orange-500 overflow-hidden"
+                value={localContent}
+                onChange={handleTextChange}
+                style={{ fontSize: `${fontSize}px` }}
+                placeholder="物語をここから始めましょう..."
+              />
+              
+              <div className="h-64" /> {/* Spacer */}
+            </div>
 
+            {/* Suggestions Overlay */}
             {copilotSuggestions.length > 0 && (
-              <div className="fixed bottom-32 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 animate-fade-in z-[150]">
-                 <div className="glass-bright rounded-[2rem] p-6 border border-orange-500/30 shadow-2xl space-y-4">
-                    <div className="flex justify-between items-center mb-2">
-                       <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-2"><Quote size={12}/> AI Copilot Suggestions</span>
-                       <button onClick={() => setCopilotSuggestions([])} className="text-stone-600 hover:text-rose-500"><X size={14}/></button>
+              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-full max-w-2xl px-6 animate-fade-in z-30">
+                 <div className="glass-bright rounded-[2.5rem] p-8 border border-orange-500/30 shadow-2xl space-y-5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-2">
+                        <Sparkles size={14} /> AI Copilot 提案
+                      </span>
+                      <button onClick={() => setCopilotSuggestions([])} className="text-stone-600 hover:text-white transition-colors"><X size={16}/></button>
                     </div>
-                    <div className="grid grid-cols-1 gap-3">
-                       {copilotSuggestions.map((text, idx) => (
-                         <button key={idx} onClick={() => useSuggestion(text)} className="w-full text-left p-4 bg-stone-900/60 hover:bg-orange-600/20 border border-white/5 rounded-xl text-[12px] font-serif text-stone-300 leading-relaxed transition-all hover:border-orange-500/30">
-                            {text}
-                         </button>
-                       ))}
+                    <div className="space-y-3">
+                      {copilotSuggestions.map((text, idx) => (
+                        <button 
+                          key={idx} 
+                          onClick={() => { 
+                            const newText = localContent + (localContent.endsWith(' ') ? '' : ' ') + text;
+                            setLocalContent(newText);
+                            projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { content: newText } });
+                            setCopilotSuggestions([]); 
+                          }} 
+                          className="w-full text-left p-5 bg-stone-900/60 hover:bg-orange-600/10 border border-white/5 rounded-2xl text-sm font-serif text-stone-300 hover:text-white transition-all animate-fade-in"
+                        >
+                          {text}
+                        </button>
+                      ))}
                     </div>
                  </div>
               </div>
             )}
 
-            <div className={`fixed bottom-12 right-12 transition-all duration-700 ${isZenMode ? 'opacity-20 hover:opacity-100' : ''}`}>
-                 <button onClick={handleGetSuggestions} className="w-16 h-16 bg-stone-900 border border-white/10 text-orange-400 rounded-full flex items-center justify-center hover:bg-orange-600 hover:text-white shadow-2xl transition-all">
-                   {isCopilotLoading ? <Loader2 size={24} className="animate-spin" /> : <Wand size={24}/>}
-                 </button>
+            {/* Floating Action Menu */}
+            <div className={`fixed bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-3 p-2 glass-bright rounded-3xl border border-white/10 z-20 shadow-2xl transition-all duration-500 ${isZenMode ? 'opacity-20 hover:opacity-100' : ''}`}>
+               <button onClick={handleSuggest} disabled={isCopilotLoading} className="p-4 bg-stone-800 text-orange-400 hover:bg-orange-600 hover:text-white rounded-2xl transition-all disabled:opacity-50">
+                  {isCopilotLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
+               </button>
+               <div className="w-px h-8 bg-white/10 mx-1" />
+               <button onClick={handleGenDraft} disabled={isProcessing} className="flex items-center gap-3 px-6 py-4 bg-orange-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-500 transition-all shadow-xl shadow-orange-900/20 active:scale-95 disabled:opacity-50">
+                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Pen size={16} />}
+                  AI執筆
+               </button>
             </div>
           </main>
 
           {showPlanner && !isZenMode && (
-            <aside className="w-96 glass border-l border-white/5 flex flex-col overflow-hidden animate-fade-in shrink-0">
-               <div className="flex border-b border-white/5">
-                 <button onClick={() => setPlannerTab('STRATEGY')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest ${plannerTab === 'STRATEGY' ? 'text-orange-400 bg-orange-400/5' : 'text-stone-600'}`}>戦略</button>
-                 <button onClick={() => setPlannerTab('BEATS')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest ${plannerTab === 'BEATS' ? 'text-orange-400 bg-orange-400/5' : 'text-stone-600'}`}>ビート</button>
-               </div>
-               
-               <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-                 {plannerTab === 'STRATEGY' && (
-                   <div className="space-y-6">
-                     <textarea value={activeChapter?.summary || ''} onChange={e => updateChapter(activeChapterId, { summary: e.target.value })} className="w-full bg-stone-950/50 border border-white/10 rounded-xl p-4 text-[11px] h-32 outline-none font-serif resize-none" placeholder="章のあらすじ..." />
-                     <div className="space-y-2">
-                        <div className="text-[9px] font-black text-stone-700 uppercase tracking-widest">Milestones</div>
-                        {activeChapter?.strategy.milestones.map((m, i) => (
-                           <div key={i} className="flex items-center gap-2 p-3 bg-stone-900/40 rounded-lg text-[10px] font-serif text-stone-400">
-                              <Check size={10} className="text-orange-500"/> {m}
-                           </div>
-                        ))}
-                        {(!activeChapter?.strategy.milestones || activeChapter.strategy.milestones.length === 0) && (
-                          <div className="text-[9px] text-stone-600 font-serif italic text-center py-4">マイルストーン未設定</div>
-                        )}
-                     </div>
-                   </div>
-                 )}
-                 {plannerTab === 'BEATS' && (
-                   <div className="space-y-6">
-                     <button onClick={handleGenBeats} className="w-full py-4 bg-stone-800 text-orange-400 rounded-xl flex items-center justify-center gap-2 hover:bg-stone-700 transition-all"><Sparkles size={14}/> ビート生成</button>
-                     {activeChapter?.beats.map((beat, idx) => (
-                       <div key={beat.id} className="p-3 bg-stone-900/40 border border-white/5 rounded-xl text-[10px] font-serif text-stone-300">
-                         {beat.text}
-                       </div>
-                     ))}
-                     {(!activeChapter?.beats || activeChapter.beats.length === 0) && (
-                       <div className="text-[9px] text-stone-600 font-serif italic text-center py-4">ビート未生成</div>
-                     )}
-                   </div>
-                 )}
+            <aside className="w-96 glass border-l border-white/5 flex flex-col p-8 space-y-10 animate-fade-in overflow-y-auto custom-scrollbar">
+               <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                   <span className="text-[10px] font-black text-stone-600 uppercase tracking-widest">Chapter Synopsis</span>
+                   <Settings2 size={14} className="text-stone-700"/>
+                 </div>
+                 <textarea 
+                   value={activeChapter.summary} 
+                   onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { summary: e.target.value } })} 
+                   className="w-full bg-stone-950/50 border border-white/10 rounded-2xl p-5 text-[12px] h-40 outline-none font-serif resize-none text-stone-300 focus:border-orange-500/30 transition-all leading-relaxed" 
+                   placeholder="この章で何が起きるのか..." 
+                 />
                </div>
 
-               <div className="p-8 border-t border-white/5 bg-stone-900/20 space-y-3">
-                 {isFullGenesis && (
-                    <div className="mb-4 text-center animate-pulse">
-                       <span className="text-[9px] font-black text-orange-400 uppercase tracking-[0.2em]">{genesisStatus}</span>
-                    </div>
-                 )}
-                 <button onClick={handleFullGenesis} disabled={isFullGenesis} className="w-full py-5 bg-gradient-to-r from-orange-600 to-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 hover:scale-[1.02] transition-all disabled:opacity-50">
-                   {isFullGenesis ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} フルオート構築
-                 </button>
-                 <button onClick={handleGenDraft} disabled={isProcessing} className="w-full py-5 bg-stone-800 text-orange-400 border border-orange-400/20 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-stone-700 transition-all">
-                   {isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Pen size={16}/>} AI執筆
+               <div className="space-y-5">
+                 <span className="text-[10px] font-black text-stone-600 uppercase tracking-widest">Plot Beats</span>
+                 <div className="space-y-3">
+                    {activeChapter.beats.map((beat, i) => (
+                      <div key={beat.id} className="group relative flex items-start gap-3 p-4 bg-stone-900/40 border border-white/5 rounded-2xl hover:border-orange-500/20 transition-all">
+                        <span className="text-[10px] font-mono text-orange-400/30 mt-0.5">{i+1}</span>
+                        <p className="text-[11px] text-stone-400 font-serif leading-relaxed">{beat.text}</p>
+                      </div>
+                    ))}
+                    <button className="w-full py-4 border-2 border-dashed border-stone-800 rounded-2xl text-[9px] font-black text-stone-700 uppercase tracking-widest hover:text-stone-400 hover:border-stone-700 transition-all">
+                      ビートを手動で追加
+                    </button>
+                 </div>
+               </div>
+               
+               <div className="mt-auto space-y-4 pt-6">
+                 <div className="p-5 bg-orange-400/5 rounded-2xl border border-orange-400/10 space-y-2">
+                    <div className="flex items-center gap-2 text-orange-400"><Info size={14}/><span className="text-[9px] font-black uppercase tracking-widest">Tip</span></div>
+                    <p className="text-[10px] text-stone-500 font-serif leading-relaxed italic">「フルオート構築」は、あらすじから展開案を自動生成し、本文の初稿まで一気通貫で行います。</p>
+                 </div>
+                 <button 
+                  onClick={async () => {
+                    if (isProcessing) return;
+                    setIsProcessing(true);
+                    addLog('info', 'Writer', '章全体を構築中...');
+                    try {
+                      const res = await generateFullChapterPackage(project, activeChapter, (u:any) => projectDispatch({type:'TRACK_USAGE',payload:u}), addLog);
+                      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { strategy: res.strategy, beats: res.beats, content: res.draft, status: 'Polished' } });
+                      addLog('success', 'Writer', '構築完了');
+                    } catch(e) { addLog('error','Writer','構築失敗'); }
+                    finally { setIsProcessing(false); }
+                  }}
+                  disabled={isProcessing} 
+                  className="w-full py-6 bg-gradient-to-r from-orange-600 to-rose-600 text-white rounded-3xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-2xl shadow-orange-900/30 active:scale-95 transition-all"
+                 >
+                   {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Wand size={18} />}
+                   フルオート構築
                  </button>
                </div>
             </aside>
