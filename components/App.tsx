@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import WelcomeScreen from './WelcomeScreen';
 import PublicationModal from './PublicationModal';
 import ComplianceModal from './ComplianceModal';
@@ -202,7 +202,8 @@ const App: React.FC = () => {
     return () => { if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); };
   }, [project]);
 
-  const addLog = (type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
+  // メモ化されたログ・トークン関数により不要な再レンダリングを回避
+  const addLog = useCallback((type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
     const newLog: SystemLog = { id: crypto.randomUUID(), timestamp: Date.now(), type, source, message, details };
     setLogs(prev => [newLog, ...prev].slice(0, 100));
     if (type === 'error' || type === 'success') {
@@ -210,9 +211,9 @@ const App: React.FC = () => {
       setNotifications(prev => [...prev, notification]);
       setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== notification.id)), 5000);
     }
-  };
+  }, []);
 
-  const handleTokenUsage = (usage: any) => {
+  const handleTokenUsage = useCallback((usage: any) => {
     setProject(prev => {
       if (!prev) return null;
       const newEntry: TokenUsageEntry = {
@@ -228,19 +229,22 @@ const App: React.FC = () => {
         tokenUsage: [newEntry, ...(prev.tokenUsage || [])].slice(0, 500) 
       };
     });
-  };
+  }, []);
 
-  const handleGoHome = () => {
-    setDialog({ isOpen: true, type: 'confirm', title: "ホームに戻る", message: "現在の物語を保存してホームへ戻りますか？", onConfirm: () => { setView(ViewMode.WELCOME); setProject(null); setDialog(d => ({ ...d, isOpen: false })); } });
-  };
+  const handleGoHome = useCallback(() => {
+    setDialog({ 
+      isOpen: true, type: 'confirm', title: "ホームに戻る", message: "現在の物語を保存してホームへ戻りますか？", 
+      onConfirm: () => { setView(ViewMode.WELCOME); setProject(null); setDialog(d => ({ ...d, isOpen: false })); } 
+    });
+  }, []);
 
-  const navigateToPlotter = (tab: string = 'grandArc', initialMessage?: string) => {
+  const navigateToPlotter = useCallback((tab: string = 'grandArc', initialMessage?: string) => {
     setPlotterTab(tab);
     if (initialMessage) {
       setPendingArchitectMessage(initialMessage);
     }
     setView(ViewMode.PLOTTER);
-  };
+  }, []);
 
   if (!project || view === ViewMode.WELCOME) {
     return (

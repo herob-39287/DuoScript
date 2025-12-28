@@ -1,13 +1,15 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { StoryProject, ChatMessage, SystemLog, Character, SyncOperation, HistoryEntry, NexusBranch, Foreshadowing } from '../types';
+import { StoryProject, ChatMessage, SystemLog, Character, SyncOperation, HistoryEntry, NexusBranch, Foreshadowing, Relationship } from '../types';
 import { chatWithArchitect, extractSettingsFromChat, identifyChangedCategories, generateCharacterPortrait, playCharacterVoice, simulateBranch } from '../services/geminiService';
+import { applySyncOperation } from '../services/bibleManager';
 import { savePortrait } from '../services/storageService';
 import { 
   Users, Globe, Search, Zap, History, X, Volume2, Sparkles, Loader2, 
   Calendar, ArrowUpRight, Activity, MapPin, Target, Bookmark, GitBranch, 
   Plus, Package, Brain, Scale, Cpu, ShieldCheck, ChevronRight, Menu, Wand2, Info,
-  Filter, Database, RefreshCw, Layers, AlertCircle, BarChart3, Eye, Anchor
+  Filter, Database, RefreshCw, Layers, AlertCircle, BarChart3, Eye, Anchor, HeartPulse, Flag,
+  Briefcase, Key, Star, Heart, TrendingUp, UserPlus, MessageSquare, Quote, ArrowRight
 } from 'lucide-react';
 
 interface Props {
@@ -36,6 +38,8 @@ const PlotterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsag
   const [recommendedCategories, setRecommendedCategories] = useState<string[]>([]);
   const [showArchitectMobile, setShowArchitectMobile] = useState(false);
   const [charsSinceLastSync, setCharsSinceLastSync] = useState(0);
+
+  const [charCardModes, setCharCardModes] = useState<Record<string, 'status' | 'profile' | 'relations'>>({});
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   
@@ -119,109 +123,99 @@ const PlotterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsag
   };
 
   const commitOp = (op: SyncOperation) => {
-    setProject(prev => {
-      const nextBible = { ...prev.bible, version: prev.bible.version + 1 };
-      const rawValue = op.value;
-      let targetName = op.targetName || "不明";
-      let oldVal: any = null;
-      let newVal: any = null;
-
-      const isStringField = ['setting', 'tone', 'laws', 'grandArc'].includes(op.path);
-
-      if (isStringField) {
-        oldVal = (nextBible as any)[op.path];
-        newVal = (typeof rawValue === 'object' && rawValue !== null) ? (rawValue.content || rawValue.text || rawValue.value || JSON.stringify(rawValue)) : rawValue;
-        (nextBible as any)[op.path] = newVal;
-      } else {
-        const collection = [...((nextBible as any)[op.path] || [])];
-        let idx = op.targetId ? collection.findIndex((i:any) => i.id === op.targetId) : -1;
-        if (idx === -1 && op.targetName) {
-          idx = collection.findIndex((i:any) => {
-            const itemName = (i.name || i.title || i.event || "").toLowerCase().trim();
-            return itemName === op.targetName?.toLowerCase().trim();
-          });
-        }
-
-        if (idx === -1 && op.op !== 'delete') {
-          const newItem = { id: crypto.randomUUID(), ...rawValue };
-          if (!newItem.name && !newItem.title && !newItem.event && op.targetName) {
-             if (op.path === 'characters') newItem.name = op.targetName;
-             else if (op.path === 'timeline') newItem.event = op.targetName;
-             else newItem.title = op.targetName;
-          }
-          collection.push(newItem);
-          targetName = newItem.name || newItem.title || newItem.event || targetName;
-          newVal = newItem;
-        } else if (idx !== -1) {
-          const currentItem = { ...collection[idx] };
-          targetName = currentItem.name || currentItem.title || currentItem.event || targetName;
-          
-          if (op.op === 'delete') {
-            oldVal = currentItem;
-            collection.splice(idx, 1);
-            newVal = "DELETED";
-          } else {
-            if (op.field) {
-              oldVal = currentItem[op.field];
-              newVal = (typeof rawValue === 'object' && rawValue !== null && rawValue[op.field] !== undefined) ? rawValue[op.field] : rawValue;
-              if (op.path === 'characters' && ['location', 'health', 'currentGoal', 'internalState'].includes(op.field)) {
-                 currentItem.status = { ...currentItem.status, [op.field]: newVal };
-              } else {
-                 currentItem[op.field] = newVal;
-              }
-            } else {
-              oldVal = currentItem;
-              newVal = { ...currentItem, ...rawValue };
-            }
-            collection[idx] = newVal;
-          }
-        }
-        (nextBible as any)[op.path] = collection;
-      }
-
-      return {
-        ...prev,
-        bible: nextBible,
-        history: [{ id: crypto.randomUUID(), timestamp: Date.now(), operationId: op.id, opType: op.op, path: op.path, targetName, oldValue: oldVal, newValue: newVal, rationale: op.rationale, evidence: op.evidence || "NeuralSync", versionAtCommit: nextBible.version }, ...prev.history].slice(0, 100),
-        pendingChanges: prev.pendingChanges.filter(p => p.id !== op.id)
-      };
-    });
+    setProject(prev => applySyncOperation(prev, op));
   };
 
-  const getPathColor = (path: string) => {
+  const getPathColor = (path: string, field?: string) => {
+    const isState = ['location', 'health', 'currentGoal', 'internalState', 'inventory', 'knowledge'].includes(field || '');
+    if (isState) return 'border-emerald-500/40 text-emerald-400';
+
     switch(path) {
-      case 'characters': return 'border-emerald-500/40 text-emerald-400';
+      case 'characters': return 'border-orange-500/40 text-orange-400';
       case 'entries': return 'border-blue-500/40 text-blue-400';
       case 'timeline': return 'border-purple-500/40 text-purple-400';
       case 'foreshadowing': return 'border-amber-500/40 text-amber-400';
-      default: return 'border-orange-500/40 text-orange-400';
+      default: return 'border-stone-500/40 text-stone-400';
     }
   };
 
   const renderSyncProposal = (op: SyncOperation) => {
-    const displayValue = () => {
+    const isState = ['location', 'health', 'currentGoal', 'internalState', 'inventory', 'knowledge'].includes(op.field || '');
+    const colorClass = getPathColor(op.path, op.field);
+    
+    // 現在の値をプレビュー用に検索
+    let currentValue: any = "未定義";
+    const bible = project.bible;
+    if (['setting', 'tone', 'laws', 'grandArc'].includes(op.path)) {
+      currentValue = (bible as any)[op.path];
+    } else {
+      const collection = (bible as any)[op.path] || [];
+      const item = op.targetId ? collection.find((i:any) => i.id === op.targetId) : 
+                   collection.find((i:any) => (i.name || i.title || i.event || "").toLowerCase() === op.targetName?.toLowerCase());
+      
+      if (item) {
+        if (op.field) {
+           if (op.path === 'characters' && isState) {
+             currentValue = item.status?.[op.field];
+           } else {
+             currentValue = item[op.field];
+           }
+        } else {
+           currentValue = "(オブジェクト全体)";
+        }
+      }
+    }
+
+    const displayProposed = () => {
       if (typeof op.value === 'string') return op.value;
       if (op.field && typeof op.value === 'object' && op.value !== null && op.value[op.field] !== undefined) return String(op.value[op.field]);
       return op.value.content || op.value.text || op.value.description || JSON.stringify(op.value);
     };
-    const colorClass = getPathColor(op.path);
+
     return (
-      <div key={op.id} className={`p-4 glass-bright rounded-2xl border-2 ${colorClass.split(' ')[0]} space-y-3 relative animate-fade-in shadow-xl`}>
+      <div key={op.id} className={`p-4 glass-bright rounded-2xl border-2 ${colorClass.split(' ')[0]} space-y-3 relative animate-fade-in shadow-xl group/card`}>
          <div className="flex justify-between items-center">
-            <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full bg-stone-800 ${colorClass.split(' ')[1]}`}>
-              {Math.floor((op.confidence || 0) * 100)}% Conf.
-            </span>
-            <button onClick={() => setProject(p => ({...p, pendingChanges: p.pendingChanges.filter(x => x.id !== op.id)}))} className="p-1 hover:text-rose-500 text-stone-600"><X size={14}/></button>
+            <div className="flex gap-2">
+              <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full bg-stone-800 ${colorClass.split(' ')[1]}`}>
+                {isState ? 'State Update' : op.path}
+              </span>
+              <span className="text-[7px] font-black uppercase px-2 py-0.5 rounded-full bg-stone-900 text-stone-500">
+                {Math.floor((op.confidence || 0) * 100)}% Conf.
+              </span>
+            </div>
+            <button onClick={() => setProject(p => ({...p, pendingChanges: p.pendingChanges.filter(x => x.id !== op.id)}))} className="p-1 hover:text-rose-500 text-stone-600 transition-colors"><X size={14}/></button>
          </div>
+         
          <div className="space-y-1">
             <div className="text-[10px] font-black text-white flex items-center gap-2 truncate">
                <Package size={10} className={colorClass.split(' ')[1]}/> {op.targetName || op.path}
+               {op.field && <span className="text-stone-500 text-[8px] font-mono">.{op.field}</span>}
             </div>
          </div>
-         <div className="p-2.5 bg-stone-950/60 rounded-xl border border-white/5 text-[10px] font-serif text-stone-200 leading-relaxed italic line-clamp-4">
-           {displayValue()}
+
+         <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+               <div className="space-y-1">
+                 <div className="text-[6px] font-black text-stone-600 uppercase tracking-widest">Current</div>
+                 <div className="p-2 bg-stone-950/40 rounded-lg border border-white/5 text-[9px] font-serif text-stone-500 italic line-clamp-2 min-h-[32px]">
+                   {String(currentValue || 'なし')}
+                 </div>
+               </div>
+               <ArrowRight size={10} className="text-stone-700 mt-2"/>
+               <div className="space-y-1">
+                 <div className="text-[6px] font-black text-orange-500 uppercase tracking-widest">Proposed</div>
+                 <div className="p-2 bg-orange-400/5 rounded-lg border border-orange-400/10 text-[9px] font-serif text-stone-200 leading-relaxed italic line-clamp-2 min-h-[32px]">
+                   {displayProposed()}
+                 </div>
+               </div>
+            </div>
          </div>
-         <button onClick={() => commitOp(op)} className="w-full py-2 bg-stone-800 hover:bg-stone-700 text-white rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
+
+         <div className="text-[8px] text-stone-500 italic px-1 line-clamp-2 leading-relaxed">
+           "{op.rationale}"
+         </div>
+         
+         <button onClick={() => commitOp(op)} className="w-full py-2 bg-stone-800 hover:bg-orange-600 text-white rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 group-hover/card:bg-stone-700 transition-colors">
             <ShieldCheck size={12}/> 設定に反映
          </button>
       </div>
@@ -245,7 +239,7 @@ const PlotterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsag
           <div className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-700 ease-out" style={{ width: `${progress}%` }} />
         </div>
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <SyncButton scope="characters" label="人物抽出" icon={<Users size={12}/>} activeColor="text-emerald-400" />
+          <SyncButton scope="characters" label="人物/状態抽出" icon={<Users size={12}/>} activeColor="text-emerald-400" />
           <SyncButton scope="timeline" label="年表抽出" icon={<Calendar size={12}/>} activeColor="text-purple-400" />
           <SyncButton scope="foreshadowing" label="伏線抽出" icon={<Anchor size={12}/>} activeColor="text-amber-400" />
           <SyncButton scope="all" label="全体抽出" icon={<RefreshCw size={12}/>} activeColor="text-orange-400" />
@@ -276,6 +270,150 @@ const PlotterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsag
     <button onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-xl flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all shrink-0 ${activeTab === id ? 'bg-orange-600 text-white' : 'text-stone-500 bg-stone-900/40'}`}>
       <Icon size={14} /> {label}
     </button>
+  );
+
+  const CharacterCard = ({ character: c }: { character: Character; key?: React.Key }) => {
+    const mode = charCardModes[c.id] || 'status';
+    const setMode = (m: 'status' | 'profile' | 'relations') => setCharCardModes(prev => ({ ...prev, [c.id]: m }));
+
+    const getStatusIcon = (field: string) => {
+        switch(field) {
+            case 'location': return <MapPin size={12} className="text-orange-400"/>;
+            case 'health': return <HeartPulse size={12} className="text-rose-400"/>;
+            case 'currentGoal': return <Target size={12} className="text-blue-400"/>;
+            case 'inventory': return <Briefcase size={12} className="text-amber-400"/>;
+            case 'knowledge': return <Key size={12} className="text-emerald-400"/>;
+            case 'socialStanding': return <Star size={12} className="text-purple-400"/>;
+            default: return <Activity size={12}/>;
+        }
+    };
+
+    return (
+      <div key={c.id} className="glass-bright rounded-3xl overflow-hidden border border-white/5 flex flex-col group shadow-2xl h-fit min-h-[500px]">
+        <div className="aspect-[16/9] w-full relative overflow-hidden bg-stone-900 shrink-0">
+          {c.imageUrl ? (
+            <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-stone-800 bg-stone-950/50">
+               <Users size={48} className="opacity-20"/>
+               <span className="text-[8px] font-black uppercase tracking-[0.4em] mt-2 opacity-20">No Portrait</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-transparent to-transparent" />
+          <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
+             <div className="space-y-1">
+                <h4 className="text-2xl font-display font-black text-white italic tracking-tighter drop-shadow-lg">{c.name}</h4>
+                <div className="flex gap-2">
+                   <span className="text-[7px] font-black uppercase text-stone-100 bg-orange-600 px-1.5 py-0.5 rounded tracking-widest shadow-lg">{c.role}</span>
+                   {c.voiceId && <span className="text-[7px] font-black uppercase text-stone-400 bg-stone-900/80 px-1.5 py-0.5 rounded tracking-widest backdrop-blur-sm">Voice: {c.voiceId}</span>}
+                </div>
+             </div>
+             <button onClick={() => playCharacterVoice(c, `私は${c.name}。${c.status?.internalState || '平常'}です。`, addLog)} className="p-2.5 bg-stone-900/80 backdrop-blur-md rounded-xl text-white hover:bg-orange-600 transition-all shadow-xl"><Volume2 size={16}/></button>
+          </div>
+        </div>
+
+        <div className="flex bg-stone-900/40 border-b border-white/5">
+           <button onClick={() => setMode('status')} className={`flex-1 py-3 text-[8px] font-black uppercase tracking-widest transition-all ${mode === 'status' ? 'text-orange-400 bg-orange-400/5 border-b border-orange-400' : 'text-stone-600'}`}>Status</button>
+           <button onClick={() => setMode('profile')} className={`flex-1 py-3 text-[8px] font-black uppercase tracking-widest transition-all ${mode === 'profile' ? 'text-orange-400 bg-orange-400/5 border-b border-orange-400' : 'text-stone-600'}`}>Profile</button>
+           <button onClick={() => setMode('relations')} className={`flex-1 py-3 text-[8px] font-black uppercase tracking-widest transition-all ${mode === 'relations' ? 'text-orange-400 bg-orange-400/5 border-b border-orange-400' : 'text-stone-600'}`}>Relations</button>
+        </div>
+
+        <div className="p-6 flex-1 overflow-y-auto no-scrollbar max-h-[350px]">
+           {mode === 'status' && (
+             <div className="space-y-4 animate-fade-in">
+                <div className="p-3 bg-stone-950/60 rounded-xl border border-white/5 italic">
+                   <div className="text-[7px] font-black text-stone-600 uppercase tracking-widest mb-1 flex items-center gap-1"><MessageSquare size={8}/> Internal State</div>
+                   <p className="text-[11px] text-stone-200 font-serif leading-relaxed">「{c.status?.internalState || '平常'}」</p>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-2.5">
+                   <StatusItem icon={getStatusIcon('location')} label="Location" value={c.status?.location} />
+                   <StatusItem icon={getStatusIcon('health')} label="Health" value={c.status?.health} />
+                   <StatusItem icon={getStatusIcon('currentGoal')} label="Current Goal" value={c.status?.currentGoal} />
+                   <StatusItem icon={getStatusIcon('socialStanding')} label="Social Standing" value={c.status?.socialStanding} />
+                   <StatusItem icon={getStatusIcon('inventory')} label="Inventory" value={c.status?.inventory?.length ? c.status.inventory.join(', ') : 'なし'} />
+                   <StatusItem icon={getStatusIcon('knowledge')} label="Knowledge" value={c.status?.knowledge?.length ? c.status.knowledge.join(', ') : 'なし'} />
+                </div>
+             </div>
+           )}
+
+           {mode === 'profile' && (
+             <div className="space-y-5 animate-fade-in">
+                <ProfileDetail label="Description" value={c.description} />
+                <div className="flex flex-wrap gap-1.5">
+                   {(c.traits || []).map((t, i) => (
+                      <span key={i} className="text-[8px] font-black text-stone-400 bg-stone-800 border border-white/5 px-2 py-1 rounded-lg uppercase tracking-widest">{t}</span>
+                   ))}
+                </div>
+                <ProfileDetail label="Motivation" value={c.motivation} />
+                <ProfileDetail label="Flaw" value={c.flaw} color="text-rose-400" />
+                <div className="p-4 bg-orange-400/5 rounded-2xl border border-orange-400/10">
+                   <div className="text-[7px] font-black text-orange-400 uppercase tracking-widest mb-1 flex items-center gap-1"><TrendingUp size={8}/> Character Arc</div>
+                   <p className="text-[10px] text-stone-300 font-serif leading-relaxed">{c.arc || '未定義'}</p>
+                </div>
+             </div>
+           )}
+
+           {mode === 'relations' && (
+             <div className="space-y-3 animate-fade-in">
+                {(c.relationships || []).length > 0 ? (
+                    c.relationships.map(rel => {
+                        const target = project.bible.characters.find(char => char.id === rel.targetCharacterId);
+                        return (
+                           <div key={rel.id} className="p-3 glass-bright rounded-2xl flex items-center gap-3 border border-white/5">
+                              <div className="w-8 h-8 rounded-full bg-stone-800 flex items-center justify-center shrink-0">
+                                 {target?.imageUrl ? <img src={target.imageUrl} className="w-full h-full rounded-full object-cover" /> : <Users size={12}/>}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                 <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-white truncate">{target?.name || '不明'}</span>
+                                    <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest">{rel.type}</span>
+                                 </div>
+                                 <div className="flex items-center gap-2 mt-1">
+                                    <div className="flex-1 h-1 bg-stone-900 rounded-full overflow-hidden">
+                                       <div className={`h-full ${rel.sentiment >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.abs(rel.sentiment)}%` }} />
+                                    </div>
+                                    <span className={`text-[8px] font-mono ${rel.sentiment >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{rel.sentiment}%</span>
+                                 </div>
+                              </div>
+                           </div>
+                        );
+                    })
+                ) : (
+                    <div className="py-10 text-center text-stone-700 italic text-[10px]">関係性が定義されていません</div>
+                )}
+                <button onClick={() => handleSendMessage(`${c.name}と他の登場人物との関係性を深めたいです。`)} className="w-full py-2.5 border border-dashed border-stone-800 hover:border-orange-500/30 rounded-xl text-[8px] font-black text-stone-600 hover:text-orange-400 uppercase tracking-widest transition-all mt-4 flex items-center justify-center gap-2">
+                   <UserPlus size={10}/> 関係性を追加
+                </button>
+             </div>
+           )}
+        </div>
+
+        <div className="p-6 pt-0 mt-auto border-t border-white/5 flex items-center justify-between shrink-0">
+           <button onClick={() => handleSendMessage(`${c.name} の「${mode === 'status' ? '現在の状況' : mode === 'profile' ? '生い立ちや設定' : '他者との繋がり'}」についてもっと掘り下げたいです。`)} className="text-[9px] font-black uppercase tracking-widest text-orange-400 hover:text-white transition-all flex items-center gap-2">
+              <Sparkles size={12}/> 掘り下げる
+           </button>
+           <button onClick={() => handleSendMessage(`${c.name} の新しい肖像画を生成してください。`)} className="p-2 text-stone-600 hover:text-orange-400 transition-colors"><Wand2 size={16}/></button>
+        </div>
+      </div>
+    );
+  };
+
+  const StatusItem = ({ icon, label, value }: { icon: any, label: string, value: any }) => (
+     <div className="flex items-start gap-3">
+        <div className="shrink-0 mt-0.5">{icon}</div>
+        <div className="min-w-0">
+           <div className="text-[7px] font-black text-stone-600 uppercase tracking-widest">{label}</div>
+           <p className="text-[10px] text-stone-400 font-serif leading-tight truncate">{value || '不明'}</p>
+        </div>
+     </div>
+  );
+
+  const ProfileDetail = ({ label, value, color = "text-stone-300" }: { label: string, value: string, color?: string }) => (
+     <div className="space-y-1">
+        <div className="text-[7px] font-black text-stone-600 uppercase tracking-widest">{label}</div>
+        <p className={`text-[10px] ${color} font-serif leading-relaxed line-clamp-3`}>{value || '未定義'}</p>
+     </div>
   );
 
   return (
@@ -313,30 +451,19 @@ const PlotterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsag
              <CatBtn type="PLAN" label="Plan" icon={<Target size={18}/>} />
           </div>
           <div className="px-4 py-3 bg-stone-900/40 border-b border-white/5 flex gap-3 overflow-x-auto no-scrollbar items-center shrink-0">
-               {activeCategory === 'CANON' && <><SubTab id="characters" label="人物" icon={Users} /><SubTab id="world" label="世界" icon={Globe} /><SubTab id="library" label="資料" icon={Bookmark} /></>}
+               {activeCategory === 'CANON' && <><SubTab id="characters" label="人物/状態" icon={Users} /><SubTab id="world" label="世界" icon={Globe} /><SubTab id="library" label="資料" icon={Bookmark} /></>}
                {activeCategory === 'PLAN' && <><SubTab id="grandArc" label="構成" icon={Target} /><SubTab id="chronicle" label="統合年表" icon={Calendar} /><SubTab id="foreshadowing" label="伏線" icon={Anchor} /><SubTab id="nexus" label="Nexus" icon={GitBranch} /></>}
           </div>
           <div className="flex-1 overflow-y-auto p-6 md:p-12 pb-40 custom-scrollbar">
             {activeTab === 'characters' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8 animate-fade-in">
                 {project.bible.characters.map(c => (
-                  <div key={c.id} className="glass-bright rounded-3xl overflow-hidden border border-white/5 flex flex-col group">
-                    {c.imageUrl && (
-                      <div className="aspect-square w-full relative overflow-hidden bg-stone-900">
-                        <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-stone-950 to-transparent" />
-                      </div>
-                    )}
-                    <div className="p-6 space-y-4">
-                       <h4 className="text-xl font-display font-black text-white italic">{c.name}</h4>
-                       <p className="text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-3">{c.description}</p>
-                       <div className="pt-4 flex items-center justify-between border-t border-white/5">
-                          <div className="text-[9px] font-bold text-stone-500"><MapPin size={10} className="inline mr-1"/> {c.status?.location || '不明'}</div>
-                          <button onClick={() => playCharacterVoice(c, `私は${c.name}です。`, addLog)} className="text-stone-700 hover:text-orange-400"><Volume2 size={16}/></button>
-                       </div>
-                    </div>
-                  </div>
+                  <CharacterCard key={c.id} character={c} />
                 ))}
+                <button onClick={() => handleSendMessage('新しいキャラクターを追加したいです。')} className="min-h-[500px] border-2 border-dashed border-stone-800 rounded-3xl flex flex-col items-center justify-center gap-4 text-stone-700 hover:border-orange-500/30 hover:text-stone-500 transition-all group">
+                   <div className="p-4 bg-stone-900 rounded-full group-hover:scale-110 transition-transform"><Plus size={32}/></div>
+                   <span className="text-[10px] font-black uppercase tracking-widest">人物を召喚</span>
+                </button>
               </div>
             )}
             {activeTab === 'grandArc' && (

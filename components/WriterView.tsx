@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { StoryProject, ChapterLog, SystemLog, ChapterStrategy, PlotBeat } from '../types';
-// Fixed: Removed non-existent generateChapterSummary and extractSettingsFromText, and unused decomposeArcIntoStrategy
+
+import React, { useState, useEffect, useRef } from 'react';
+import { StoryProject, ChapterLog, SystemLog, PlotBeat } from '../types';
 import { generateBeats, generateDraft, suggestNextSentence, generateFullChapterPackage } from '../services/geminiService';
 import { 
-  Sparkles, Plus, Maximize2, Minimize2, Loader2, X, Feather, LayoutDashboard, Zap, TrendingUp, 
-  Pen, Activity, Check, Quote, Wand, Eye, ChevronLeft, Menu
+  Sparkles, Plus, Maximize2, Minimize2, Loader2, X, Feather, LayoutDashboard, 
+  Pen, Check, Quote, Wand, ChevronLeft
 } from 'lucide-react';
 
 interface Props {
@@ -23,21 +23,49 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
   const [copilotSuggestions, setCopilotSuggestions] = useState<string[]>([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
   const [showPlanner, setShowPlanner] = useState(true);
-  const [plannerTab, setPlannerTab] = useState<'STRATEGY' | 'BEATS' | 'SYNC'>('STRATEGY');
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [plannerTab, setPlannerTab] = useState<'STRATEGY' | 'BEATS'>('STRATEGY');
   const [isFullGenesis, setIsFullGenesis] = useState(false);
   const [genesisStatus, setGenesisStatus] = useState('');
-  
+
+  // エディタパフォーマンス向上のためのローカルステート
   const activeChapter = project.chapters.find(c => c.id === activeChapterId);
+  const [localContent, setLocalContent] = useState(activeChapter?.content || '');
+  const typingRef = useRef(false);
+  const syncTimeoutRef = useRef<number | null>(null);
+
+  // チャプター切り替えまたは外部更新（AI執筆など）時の同期
+  useEffect(() => {
+    if (!typingRef.current) {
+      setLocalContent(activeChapter?.content || '');
+    }
+  }, [activeChapter?.content, activeChapterId]);
 
   const updateChapter = (id: string, updates: Partial<ChapterLog>) => {
     setProject(prev => {
       if (!prev) return null;
       return {
         ...prev,
-        chapters: prev.chapters.map(c => c.id === id ? { ...c, ...updates, wordCount: updates.content !== undefined ? updates.content.trim().length : c.wordCount } : c)
+        chapters: prev.chapters.map(c => 
+          c.id === id 
+            ? { ...c, ...updates, wordCount: updates.content !== undefined ? updates.content.trim().length : c.wordCount } 
+            : c
+        )
       };
     });
+  };
+
+  // テキスト入力ハンドラ（ローカルのみ更新）
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setLocalContent(val);
+    typingRef.current = true;
+
+    // デバウンス同期: 800ms入力がない場合に親ステートへ反映
+    if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = window.setTimeout(() => {
+      updateChapter(activeChapterId, { content: val });
+      typingRef.current = false;
+    }, 800);
   };
 
   const handleFullGenesis = async () => {
@@ -55,7 +83,9 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
         status: 'Polished'
       });
       addLog('success', 'Writer', `章の構築が完了しました。`);
-    } catch (err: any) { addLog('error', 'Writer', err.message, err.details); } finally { 
+    } catch (err: any) { 
+      addLog('error', 'Writer', err.message, err.details); 
+    } finally { 
       setIsFullGenesis(false); 
       setGenesisStatus('');
     }
@@ -68,7 +98,11 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
       const beats = await generateBeats(activeChapter.summary, project, onTokenUsage, addLog);
       updateChapter(activeChapter.id, { beats, status: 'Beats' });
       setPlannerTab('BEATS');
-    } catch (e: any) { addLog('error', 'Writer', e.message, e.details); } finally { setIsProcessing(false); }
+    } catch (e: any) { 
+      addLog('error', 'Writer', e.message, e.details); 
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   const handleGenDraft = async () => {
@@ -77,24 +111,35 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
     try {
       addLog('info', 'Writer', `執筆を開始...`);
       const draft = await generateDraft(activeChapter, project.bible.tone, isHQ, project, onTokenUsage, addLog);
-      updateChapter(activeChapter.id, { content: (activeChapter.content ? activeChapter.content + "\n\n" : "") + draft, status: 'Drafting' });
-    } catch (e: any) { addLog('error', 'Writer', e.message, e.details); } finally { setIsProcessing(false); }
+      const newContent = (activeChapter.content ? activeChapter.content + "\n\n" : "") + draft;
+      updateChapter(activeChapter.id, { content: newContent, status: 'Drafting' });
+    } catch (e: any) { 
+      addLog('error', 'Writer', e.message, e.details); 
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   const handleGetSuggestions = async () => {
-    if (!activeChapter || !activeChapter.content || isCopilotLoading) return;
+    if (!activeChapter || !localContent || isCopilotLoading) return;
     setIsCopilotLoading(true);
     try {
-      const suggestions = await suggestNextSentence(activeChapter.content, project, onTokenUsage, addLog);
+      const suggestions = await suggestNextSentence(localContent, project, onTokenUsage, addLog);
       setCopilotSuggestions(suggestions);
-    } catch (e: any) { addLog('error', 'Writer', e.message, e.details); } finally { setIsCopilotLoading(false); }
+    } catch (e: any) { 
+      addLog('error', 'Writer', e.message, e.details); 
+    } finally { 
+      setIsCopilotLoading(false); 
+    }
   };
 
   const useSuggestion = (text: string) => {
     if (!activeChapter) return;
-    const current = activeChapter.content || "";
+    const current = localContent || "";
     const space = (current.endsWith('。') || current.endsWith('」') || current.endsWith('！')) ? "" : " ";
-    updateChapter(activeChapter.id, { content: current + space + text });
+    const combined = current + space + text;
+    setLocalContent(combined);
+    updateChapter(activeChapter.id, { content: combined });
     setCopilotSuggestions([]);
   };
 
@@ -124,9 +169,13 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
         <header className={`h-16 md:h-24 glass-bright border-b border-white/5 flex items-center justify-between px-4 md:px-10 shrink-0 transition-opacity duration-700 ${isZenMode ? 'opacity-20 hover:opacity-100' : 'opacity-100'}`}>
            <div className="flex items-center gap-4">
               {isZenMode && <button onClick={() => setIsZenMode(false)} className="p-3 bg-stone-800 rounded-xl text-stone-400 hover:text-white"><Minimize2 size={18}/></button>}
-              <input value={activeChapter?.title} onChange={e => updateChapter(activeChapterId, { title: e.target.value })} className="bg-transparent text-white font-display font-black italic text-lg md:text-2xl outline-none truncate" placeholder="章題..."/>
+              <input value={activeChapter?.title || ''} onChange={e => updateChapter(activeChapterId, { title: e.target.value })} className="bg-transparent text-white font-display font-black italic text-lg md:text-2xl outline-none truncate" placeholder="章題..."/>
            </div>
            <div className="flex items-center gap-2 md:gap-4">
+             <div className="hidden md:flex flex-col items-end mr-4">
+                <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest">Word Count</span>
+                <span className="text-xs font-mono text-orange-400">{localContent.length.toLocaleString()}</span>
+             </div>
              {!isZenMode && (
                <>
                  <button onClick={() => setIsZenMode(true)} className="p-2 bg-stone-800 text-stone-400 rounded-xl hover:bg-stone-700 transition-all"><Maximize2 size={16}/></button>
@@ -142,8 +191,8 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
             
             <textarea 
               className="w-full bg-transparent text-stone-200 prose-literary outline-none resize-none min-h-[75vh] text-xl md:text-2xl caret-orange-500"
-              value={activeChapter?.content}
-              onChange={e => updateChapter(activeChapterId, { content: e.target.value })}
+              value={localContent}
+              onChange={handleTextChange}
               placeholder="綴りましょう..."
             />
 
@@ -182,7 +231,7 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
                <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
                  {plannerTab === 'STRATEGY' && (
                    <div className="space-y-6">
-                     <textarea value={activeChapter?.summary} onChange={e => updateChapter(activeChapterId, { summary: e.target.value })} className="w-full bg-stone-950/50 border border-white/10 rounded-xl p-4 text-[11px] h-32 outline-none font-serif resize-none" placeholder="章のあらすじ..." />
+                     <textarea value={activeChapter?.summary || ''} onChange={e => updateChapter(activeChapterId, { summary: e.target.value })} className="w-full bg-stone-950/50 border border-white/10 rounded-xl p-4 text-[11px] h-32 outline-none font-serif resize-none" placeholder="章のあらすじ..." />
                      <div className="space-y-2">
                         <div className="text-[9px] font-black text-stone-700 uppercase tracking-widest">Milestones</div>
                         {activeChapter?.strategy.milestones.map((m, i) => (
@@ -190,6 +239,9 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
                               <Check size={10} className="text-orange-500"/> {m}
                            </div>
                         ))}
+                        {(!activeChapter?.strategy.milestones || activeChapter.strategy.milestones.length === 0) && (
+                          <div className="text-[9px] text-stone-600 font-serif italic text-center py-4">マイルストーン未設定</div>
+                        )}
                      </div>
                    </div>
                  )}
@@ -201,6 +253,9 @@ const WriterView: React.FC<Props> = ({ project, setProject, addLog, onTokenUsage
                          {beat.text}
                        </div>
                      ))}
+                     {(!activeChapter?.beats || activeChapter.beats.length === 0) && (
+                       <div className="text-[9px] text-stone-600 font-serif italic text-center py-4">ビート未生成</div>
+                     )}
                    </div>
                  )}
                </div>
