@@ -1,53 +1,129 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { generateDraft, suggestNextSentence, generateFullChapterPackage } from '../services/geminiService';
-import { useProject, useNotifications } from '../App';
+import { useManuscript, useBible, useUI, useMetadata, useManuscriptDispatch, useMetadataDispatch, useNotificationDispatch, useUIDispatch } from '../App';
+import { loadChapterContent, saveChapterContent } from '../services/storageService';
 import { 
-  Sparkles, Plus, Maximize2, Minimize2, Loader2, Feather, LayoutDashboard, Pen, Quote, Wand, ChevronLeft,
-  Settings2, Type, Eraser, Download, Save, Send, X, Info
+  Sparkles, Plus, Maximize2, Minimize2, Loader2, Feather, LayoutDashboard, Pen, 
+  Type, X, Info, BookOpen, AlignLeft, AlignRight, CheckCircle2, MessageCircle, Zap, RotateCcw, Menu
 } from 'lucide-react';
 
 const WriterView: React.FC = () => {
-  const { project, dispatch: projectDispatch } = useProject();
-  const { addLog } = useNotifications();
+  const chapters = useManuscript();
+  const projectDispatch = useManuscriptDispatch();
+  const bible = useBible();
+  const meta = useMetadata();
+  const { title: projectTitle } = meta;
+  const metaDispatch = useMetadataDispatch();
+  const { addLog } = useNotificationDispatch();
+  const { setView } = useUIDispatch();
 
-  const [activeChapterId, setActiveChapterId] = useState(project?.chapters[0]?.id || '');
+  const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id || '');
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
+  const [isVertical, setIsVertical] = useState(false);
   const [copilotSuggestions, setCopilotSuggestions] = useState<string[]>([]);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
-  const [showPlanner, setShowPlanner] = useState(true);
-  const [fontSize, setFontSize] = useState(24);
+  const [showPlanner, setShowPlanner] = useState(window.innerWidth > 1024);
+  const [showManuscriptMobile, setShowManuscriptMobile] = useState(false);
+  const [fontSize, setFontSize] = useState(window.innerWidth < 768 ? 18 : 22);
+  const [completedBeats, setCompletedBeats] = useState<Set<string>>(new Set());
+  
+  const [whisper, setWhisper] = useState<{ text: string; type: 'info' | 'alert' } | null>(null);
+  const [isWhispering, setIsWhispering] = useState(false);
 
-  const activeChapter = project?.chapters.find(c => c.id === activeChapterId);
-  const [localContent, setLocalContent] = useState(activeChapter?.content || '');
-  const typingRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastSyncedContent = useRef<string>('');
   const syncTimeoutRef = useRef<number | null>(null);
+  const whisperTimeoutRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const activeChapter = useMemo(() => chapters.find(c => c.id === activeChapterId), [chapters, activeChapterId]);
+
   useEffect(() => {
-    if (!typingRef.current) {
-      setLocalContent(activeChapter?.content || '');
+    const fetchContent = async () => {
+      if (!activeChapterId) return;
+      const chapter = chapters.find(c => c.id === activeChapterId);
+      if (!chapter) return;
+      if (chapter.content !== undefined) {
+        if (textareaRef.current) textareaRef.current.value = chapter.content;
+        lastSyncedContent.current = chapter.content;
+        return;
+      }
+      setIsLoadingContent(true);
+      try {
+        const stored = await loadChapterContent(activeChapterId);
+        const content = stored || "";
+        projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content });
+        if (textareaRef.current) textareaRef.current.value = content;
+        lastSyncedContent.current = content;
+      } catch (e) {
+        addLog('error', 'System', '章の本文読み込みに失敗しました。');
+      } finally {
+        setIsLoadingContent(false);
+      }
+    };
+    fetchContent();
+  }, [activeChapterId, projectDispatch, addLog]);
+
+  useEffect(() => {
+    if (activeChapter && textareaRef.current) {
+      if (activeChapter.content !== undefined && activeChapter.content !== lastSyncedContent.current) {
+        textareaRef.current.value = activeChapter.content;
+        lastSyncedContent.current = activeChapter.content;
+      }
     }
-  }, [activeChapter?.id, activeChapter?.content]);
+  }, [activeChapter?.content]);
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setLocalContent(val);
-    typingRef.current = true;
+  const triggerWhisper = useCallback(async (text: string) => {
+    if (text.length < 50 || isWhispering) return;
+    setIsWhispering(true);
+    try {
+      const paragraphs = text.split('\n').filter(p => p.trim());
+      const lastParagraph = paragraphs[paragraphs.length - 1] || "";
+      if (lastParagraph.length > 30) {
+        const mentionedChar = bible.characters.find(c => lastParagraph.includes(c.name));
+        if (mentionedChar) {
+          setWhisper({ 
+            text: `設計士: ${mentionedChar.name}の現在の心理状態（${mentionedChar.status?.internalState || '平常'}）を意識した描写になっていますか？`, 
+            type: 'info' 
+          });
+        }
+      }
+    } finally {
+      setIsWhispering(false);
+    }
+  }, [bible.characters, isWhispering]);
 
+  const handleTextChange = useCallback(() => {
+    if (!textareaRef.current || !activeChapterId) return;
+    const currentVal = textareaRef.current.value;
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = window.setTimeout(() => {
-      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapterId, updates: { content: val } });
-      typingRef.current = false;
+      lastSyncedContent.current = currentVal;
+      projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content: currentVal });
+      saveChapterContent(activeChapterId, currentVal);
     }, 1000);
-  };
+    if (whisperTimeoutRef.current) window.clearTimeout(whisperTimeoutRef.current);
+    whisperTimeoutRef.current = window.setTimeout(() => triggerWhisper(currentVal), 5000);
+  }, [activeChapterId, projectDispatch, triggerWhisper]);
+
+  const toggleBeat = useCallback((id: string) => {
+    setCompletedBeats(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleSuggest = async () => {
-    if (isCopilotLoading || !localContent.trim()) return;
+    const currentVal = textareaRef.current?.value || "";
+    if (isCopilotLoading || !currentVal.trim()) return;
     setIsCopilotLoading(true);
     try {
-      const suggestions = await suggestNextSentence(localContent, project!, (usage: any) => projectDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
+      const suggestions = await suggestNextSentence(currentVal, { bible, chapters, title: projectTitle, meta } as any, (usage: any) => metaDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
       setCopilotSuggestions(suggestions);
     } catch (e) {
       addLog('error', 'Writer', '続きの提案に失敗しました。');
@@ -57,15 +133,19 @@ const WriterView: React.FC = () => {
   };
 
   const handleGenDraft = async () => {
-    if (!activeChapter || isProcessing || !project) return;
+    if (!activeChapter || isProcessing) return;
     setIsProcessing(true);
-    addLog('info', 'Writer', '執筆中...');
+    addLog('info', 'Writer', '物語を紡いでいます...');
     try {
-      const draft = await generateDraft(activeChapter, project.bible.tone, true, project, (usage: any) => projectDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
-      const newContent = (localContent ? localContent + "\n\n" : "") + draft;
-      setLocalContent(newContent);
-      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { content: newContent, status: 'Drafting' } });
-      addLog('success', 'Writer', '執筆完了');
+      const currentVal = textareaRef.current?.value || "";
+      const draft = await generateDraft({ ...activeChapter, content: currentVal }, bible.tone, true, { bible, chapters, meta } as any, (usage: any) => metaDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
+      const newContent = (currentVal ? currentVal + "\n\n" : "") + draft;
+      if (textareaRef.current) textareaRef.current.value = newContent;
+      lastSyncedContent.current = newContent;
+      projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapter.id, content: newContent });
+      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { status: 'Drafting' } });
+      saveChapterContent(activeChapter.id, newContent);
+      addLog('success', 'Writer', '初稿の生成が完了しました。');
     } catch (e: any) { 
       addLog('error', 'Writer', '執筆に失敗しました。');
     } finally { 
@@ -73,105 +153,121 @@ const WriterView: React.FC = () => {
     }
   };
 
-  if (!project || !activeChapter) return null;
+  if (isLoadingContent) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center bg-stone-950 text-stone-500 gap-4">
+        <Loader2 size={40} className="animate-spin text-orange-400 opacity-20" />
+        <p className="font-serif italic animate-pulse">羊皮紙を広げています...</p>
+      </div>
+    );
+  }
+
+  if (!activeChapter) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center bg-stone-950 text-stone-500 gap-4">
+        <Loader2 size={40} className="animate-spin text-orange-400 opacity-20" />
+        <p className="font-serif italic animate-pulse">章が見つかりません</p>
+        <button onClick={() => chapters.length > 0 && setActiveChapterId(chapters[0].id)} className="mt-4 px-6 py-2 border border-stone-800 rounded-xl hover:bg-stone-900 transition-all text-xs uppercase tracking-widest">再試行</button>
+      </div>
+    );
+  }
+
+  const progressPercentage = Math.round((completedBeats.size / (activeChapter.beats?.length || 1)) * 100);
 
   return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden bg-stone-950 transition-all duration-700 ${isZenMode ? 'bg-[#141210]' : ''}`}>
-      {!isZenMode && (
-        <aside className="hidden md:flex w-72 glass border-r border-white/5 flex-col shrink-0 animate-fade-in">
-          <div className="p-6 border-b border-white/5 flex justify-between items-center bg-stone-900/40">
-            <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">Chapters</span>
+    <div className={`h-full flex flex-col md:flex-row overflow-hidden bg-stone-950 transition-all duration-1000 ${isZenMode ? 'bg-[#100e0c]' : ''}`}>
+      {/* Chapter List Sidebar (Desktop and Mobile Slideover) */}
+      <aside className={`${showManuscriptMobile ? 'fixed inset-0 z-[120] translate-x-0' : 'fixed inset-0 z-[120] -translate-x-full md:relative md:translate-x-0 md:z-auto'} md:flex w-full md:w-72 glass border-r border-white/5 flex flex-col shrink-0 transition-transform duration-300`}>
+        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-stone-900/40">
+          <span className="text-[10px] font-black text-orange-400 uppercase tracking-[0.3em]">Manuscript</span>
+          <div className="flex gap-2">
             <button onClick={() => {
               const id = crypto.randomUUID();
-              projectDispatch({ type: 'ADD_CHAPTER', payload: { id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [] } });
+              projectDispatch({ type: 'ADD_CHAPTER', payload: { id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [], updatedAt: Date.now() } });
               setActiveChapterId(id);
-            }} className="p-1.5 bg-stone-800 hover:bg-orange-600 text-orange-400 hover:text-white rounded-lg transition-all"><Plus size={16}/></button>
+              setShowManuscriptMobile(false);
+            }} className="p-2 bg-stone-800 hover:bg-orange-600 text-orange-400 hover:text-white rounded-xl transition-all shadow-lg active:scale-90"><Plus size={16}/></button>
+            <button className="md:hidden p-2 text-stone-500" onClick={() => setShowManuscriptMobile(false)}><X size={16}/></button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-            {project.chapters.map((ch, idx) => (
-              <button 
-                key={ch.id} 
-                onClick={() => setActiveChapterId(ch.id)} 
-                className={`w-full text-left p-5 rounded-2xl border transition-all ${activeChapterId === ch.id ? 'bg-orange-600/10 border-orange-500/30 text-white' : 'text-stone-500 border-transparent hover:bg-white/5'}`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-mono text-orange-500/50">{(idx+1).toString().padStart(2, '0')}</span>
-                  <div className="text-[12px] font-serif truncate">{ch.title}</div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {chapters.map((ch, idx) => (
+            <button key={ch.id} onClick={() => { setActiveChapterId(ch.id); setShowManuscriptMobile(false); }} className={`w-full text-left p-5 rounded-2xl border transition-all relative group overflow-hidden ${activeChapterId === ch.id ? 'bg-orange-600/10 border-orange-500/30 text-white' : 'text-stone-500 border-transparent hover:bg-white/5'}`}>
+              <div className="flex items-center gap-4 relative z-10">
+                <span className="text-[10px] font-mono text-orange-500/40">{(idx+1).toString().padStart(2, '0')}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-serif-bold truncate">{ch.title}</div>
+                  <div className="text-[8px] font-black uppercase tracking-widest mt-1 opacity-40">{ch.status}</div>
                 </div>
-              </button>
-            ))}
-          </div>
-        </aside>
-      )}
-
-      <div className="flex-1 flex flex-col relative">
-        <header className={`h-24 glass-bright border-b border-white/5 flex items-center justify-between px-10 shrink-0 z-20 ${isZenMode ? 'opacity-0 hover:opacity-100 transition-opacity duration-500 bg-[#141210]/95' : ''}`}>
-           <div className="flex items-center gap-6">
-              {isZenMode && (
-                <button onClick={() => setIsZenMode(false)} className="p-3 bg-stone-800 rounded-2xl text-stone-400 hover:text-white transition-all">
-                  <Minimize2 size={18}/>
-                </button>
-              )}
-              <input 
-                value={activeChapter.title} 
-                onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { title: e.target.value } })} 
-                className="bg-transparent text-white font-display font-black italic text-2xl outline-none focus:text-orange-400 transition-colors" 
-              />
-           </div>
-           <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center bg-stone-900/50 rounded-xl px-4 py-1.5 border border-white/5 gap-4">
-                <button onClick={() => setFontSize(Math.max(16, fontSize - 2))} className="text-stone-500 hover:text-stone-200"><Eraser size={14}/></button>
-                <span className="text-[10px] font-mono text-stone-600">{fontSize}px</span>
-                <button onClick={() => setFontSize(Math.min(32, fontSize + 2))} className="text-stone-500 hover:text-stone-200"><Type size={14}/></button>
               </div>
+              {activeChapterId === ch.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500" />}
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Toolbar Header */}
+        <header className={`h-20 md:h-24 glass border-b border-white/5 flex items-center justify-between px-6 md:px-10 shrink-0 z-40 transition-all duration-700 ${isZenMode ? 'opacity-0 translate-y-[-100%] hover:opacity-100 hover:translate-y-0 bg-[#100e0c]/95' : ''}`}>
+           <div className="flex items-center gap-4 md:gap-8 min-w-0">
+              <button onClick={() => setShowManuscriptMobile(true)} className="md:hidden p-2 text-orange-400"><Menu size={20}/></button>
+              <input defaultValue={activeChapter.title} key={`title-${activeChapter.id}`} onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { title: e.target.value } })} className="bg-transparent text-white font-display font-black italic text-xl md:text-3xl outline-none focus:text-orange-400 transition-all min-w-[150px] md:min-w-[300px] truncate" />
+           </div>
+           <div className="flex items-center gap-2 md:gap-6">
+              <button onClick={() => setIsVertical(!isVertical)} className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-xl border transition-all ${isVertical ? 'bg-orange-600 border-orange-500 text-white' : 'bg-stone-800 border-white/5 text-stone-500 hover:text-stone-200'}`}>
+                {isVertical ? <AlignRight size={14}/> : <AlignLeft size={14}/>}
+                <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest">{isVertical ? '縦' : '横'}</span>
+              </button>
+              <div className="hidden md:flex items-center bg-stone-900/50 rounded-2xl px-5 py-2 border border-white/5 gap-6">
+                <button onClick={() => setFontSize(Math.max(12, fontSize - 2))} className="text-stone-500 hover:text-stone-200 transition-colors"><Type size={14} className="scale-75"/></button>
+                <span className="text-[11px] font-mono text-stone-600 font-bold">{fontSize}px</span>
+                <button onClick={() => setFontSize(Math.min(60, fontSize + 2))} className="text-stone-500 hover:text-stone-200 transition-colors"><Type size={14} className="scale-110"/></button>
+              </div>
+              <button onClick={() => setIsZenMode(!isZenMode)} className={`p-3 md:p-4 rounded-2xl transition-all shadow-xl ${isZenMode ? 'bg-orange-600 text-white' : 'bg-stone-800 text-stone-500 hover:text-orange-400'}`}>
+                {isZenMode ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}
+              </button>
               {!isZenMode && (
-                <button onClick={() => setIsZenMode(true)} className="p-3 bg-stone-800 rounded-2xl text-stone-500 hover:text-orange-400 transition-all">
-                  <Maximize2 size={18}/>
+                <button onClick={() => setShowPlanner(!showPlanner)} className={`p-3 md:p-4 rounded-2xl transition-all shadow-xl ${showPlanner ? 'bg-orange-600/20 text-orange-400 border border-orange-500/20' : 'bg-stone-800 text-stone-500'}`}>
+                  <LayoutDashboard size={18}/>
                 </button>
               )}
-              <button onClick={() => setShowPlanner(!showPlanner)} className={`p-3 rounded-2xl transition-all ${showPlanner ? 'bg-orange-600/20 text-orange-400' : 'bg-stone-800 text-stone-500'}`}>
-                <LayoutDashboard size={18}/>
-              </button>
            </div>
         </header>
 
-        <div className="flex-1 flex overflow-hidden">
-          <main className="flex-1 overflow-y-auto custom-scrollbar relative bg-stone-900/10" ref={scrollRef}>
-            <div className="max-w-4xl mx-auto px-8 md:px-12 py-20 min-h-full">
-              <textarea 
-                className="w-full bg-transparent text-stone-200 prose-literary outline-none resize-none min-h-[70vh] caret-orange-500 overflow-hidden"
-                value={localContent}
-                onChange={handleTextChange}
-                style={{ fontSize: `${fontSize}px` }}
-                placeholder="物語をここから始めましょう..."
-              />
-              
-              <div className="h-64" /> {/* Spacer */}
+        <div className="flex-1 flex overflow-hidden relative">
+          <main className={`flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative paper-texture transition-colors duration-1000 ${isZenMode ? 'bg-[#100e0c]' : 'bg-stone-950/20'}`} ref={scrollRef}>
+            <div className={`max-w-5xl mx-auto px-6 md:px-24 py-12 md:py-32 min-h-full flex flex-col items-center ${isVertical ? 'writing-vertical' : ''}`}>
+              <textarea ref={textareaRef} className="w-full bg-transparent text-stone-200 prose-literary outline-none resize-none min-h-[70vh] caret-orange-500 focus-ring rounded-xl p-4 transition-all" onInput={handleTextChange} style={{ fontSize: `${fontSize}px` }} placeholder="物語の続きをここに..." />
+              <div className="h-48 md:h-96 shrink-0" />
             </div>
 
-            {/* Suggestions Overlay */}
+            {whisper && (
+              <div className="fixed top-24 md:top-28 right-6 md:right-12 w-72 md:w-80 animate-fade-in z-50">
+                <div className={`p-4 md:p-5 rounded-2xl glass-bright border shadow-2xl relative overflow-hidden group ${whisper.type === 'alert' ? 'border-rose-500/30' : 'border-orange-500/30'}`}>
+                   <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <Zap size={14} className={whisper.type === 'alert' ? 'text-rose-400' : 'text-orange-400'} />
+                        <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest text-stone-500">Architect's Whisper</span>
+                      </div>
+                      <button onClick={() => setWhisper(null)} className="text-stone-700 hover:text-white transition-colors"><X size={14}/></button>
+                   </div>
+                   <p className="text-[10px] md:text-[11px] font-serif leading-relaxed text-stone-300 italic">{whisper.text}</p>
+                   <div className="absolute bottom-0 left-0 h-1 bg-orange-500/20 w-full"><div className="h-full bg-orange-500 animate-[whisperLife_10s_linear_forwards]" /></div>
+                </div>
+              </div>
+            )}
+
             {copilotSuggestions.length > 0 && (
-              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-full max-w-2xl px-6 animate-fade-in z-30">
-                 <div className="glass-bright rounded-[2.5rem] p-8 border border-orange-500/30 shadow-2xl space-y-5">
+              <div className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 w-full max-w-3xl px-6 md:px-8 animate-fade-in z-50">
+                 <div className="glass-bright rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-orange-500/40 shadow-[0_30px_100px_-20px_rgba(0,0,0,0.8)] space-y-4 md:space-y-6">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-2">
-                        <Sparkles size={14} /> AI Copilot 提案
-                      </span>
-                      <button onClick={() => setCopilotSuggestions([])} className="text-stone-600 hover:text-white transition-colors"><X size={16}/></button>
+                      <span className="text-[9px] md:text-[11px] font-black text-orange-400 uppercase tracking-[0.3em] flex items-center gap-2 md:gap-3"><Sparkles size={16} /> AI Copilot</span>
+                      <button onClick={() => setCopilotSuggestions([])} className="p-2 hover:bg-stone-800 rounded-full text-stone-500 hover:text-white transition-all"><X size={18}/></button>
                     </div>
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-1 gap-3 md:gap-4">
                       {copilotSuggestions.map((text, idx) => (
-                        <button 
-                          key={idx} 
-                          onClick={() => { 
-                            const newText = localContent + (localContent.endsWith(' ') ? '' : ' ') + text;
-                            setLocalContent(newText);
-                            projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { content: newText } });
-                            setCopilotSuggestions([]); 
-                          }} 
-                          className="w-full text-left p-5 bg-stone-900/60 hover:bg-orange-600/10 border border-white/5 rounded-2xl text-sm font-serif text-stone-300 hover:text-white transition-all animate-fade-in"
-                        >
-                          {text}
+                        <button key={idx} onClick={() => { const currentVal = textareaRef.current?.value || ""; const newText = currentVal + (currentVal.endsWith(' ') || currentVal.endsWith('\n') ? '' : ' ') + text; if (textareaRef.current) textareaRef.current.value = newText; lastSyncedContent.current = newText; projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapter.id, content: newText }); saveChapterContent(activeChapter.id, newText); setCopilotSuggestions([]); }} className="w-full text-left p-4 md:p-6 bg-stone-900/60 hover:bg-orange-600/20 border border-white/5 hover:border-orange-500/40 rounded-[1.5rem] md:rounded-[2rem] text-xs md:text-sm font-serif text-stone-300 hover:text-white transition-all group">
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity mr-2 text-orange-400">»</span>{text}
                         </button>
                       ))}
                     </div>
@@ -179,79 +275,54 @@ const WriterView: React.FC = () => {
               </div>
             )}
 
-            {/* Floating Action Menu */}
-            <div className={`fixed bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-3 p-2 glass-bright rounded-3xl border border-white/10 z-20 shadow-2xl transition-all duration-500 ${isZenMode ? 'opacity-20 hover:opacity-100' : ''}`}>
-               <button onClick={handleSuggest} disabled={isCopilotLoading} className="p-4 bg-stone-800 text-orange-400 hover:bg-orange-600 hover:text-white rounded-2xl transition-all disabled:opacity-50">
-                  {isCopilotLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
-               </button>
-               <div className="w-px h-8 bg-white/10 mx-1" />
-               <button onClick={handleGenDraft} disabled={isProcessing} className="flex items-center gap-3 px-6 py-4 bg-orange-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-500 transition-all shadow-xl shadow-orange-900/20 active:scale-95 disabled:opacity-50">
-                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Pen size={16} />}
-                  AI執筆
-               </button>
+            {/* Float Actions */}
+            <div className={`fixed bottom-24 md:bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-3 md:gap-4 p-2 md:p-3 glass rounded-full md:rounded-[2.5rem] border border-white/10 z-50 shadow-2xl transition-all duration-700 ${isZenMode ? 'opacity-20 hover:opacity-100 scale-90 translate-y-4' : ''}`}>
+               <div className="hidden md:flex items-center gap-2 px-4 border-r border-white/10 mr-2"><div className="w-10 h-1 rounded-full bg-stone-800 overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-1000" style={{ width: `${progressPercentage}%` }} /></div><span className="text-[10px] font-mono text-stone-500">{progressPercentage}%</span></div>
+               <button onClick={handleSuggest} disabled={isCopilotLoading} className="p-3 md:p-4 bg-stone-800 text-orange-400 hover:bg-orange-600 hover:text-white rounded-full md:rounded-2xl transition-all disabled:opacity-50 active:scale-95 group relative">{isCopilotLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}</button>
+               <button onClick={handleGenDraft} disabled={isProcessing} className="flex items-center gap-2 md:gap-4 px-5 md:px-8 py-3 md:py-5 bg-orange-600 text-white rounded-full md:rounded-[1.5rem] font-black text-[10px] md:text-[12px] uppercase tracking-[0.2em] hover:bg-orange-500 transition-all shadow-2xl active:scale-95 disabled:opacity-50">{isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Pen size={16} />}AI執筆</button>
+               <div className="w-px h-8 md:h-10 bg-white/10 mx-1 md:mx-2" />
+               <button onClick={() => setView(2 as any)} className="p-3 md:p-4 text-stone-500 hover:text-white transition-colors"><MessageCircle size={20} /></button>
             </div>
           </main>
 
+          {/* Planner Aside (Slideover on Mobile) */}
           {showPlanner && !isZenMode && (
-            <aside className="w-96 glass border-l border-white/5 flex flex-col p-8 space-y-10 animate-fade-in overflow-y-auto custom-scrollbar">
-               <div className="space-y-4">
-                 <div className="flex items-center justify-between">
-                   <span className="text-[10px] font-black text-stone-600 uppercase tracking-widest">Chapter Synopsis</span>
-                   <Settings2 size={14} className="text-stone-700"/>
-                 </div>
-                 <textarea 
-                   value={activeChapter.summary} 
-                   onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { summary: e.target.value } })} 
-                   className="w-full bg-stone-950/50 border border-white/10 rounded-2xl p-5 text-[12px] h-40 outline-none font-serif resize-none text-stone-300 focus:border-orange-500/30 transition-all leading-relaxed" 
-                   placeholder="この章で何が起きるのか..." 
-                 />
-               </div>
-
-               <div className="space-y-5">
-                 <span className="text-[10px] font-black text-stone-600 uppercase tracking-widest">Plot Beats</span>
-                 <div className="space-y-3">
-                    {activeChapter.beats.map((beat, i) => (
-                      <div key={beat.id} className="group relative flex items-start gap-3 p-4 bg-stone-900/40 border border-white/5 rounded-2xl hover:border-orange-500/20 transition-all">
-                        <span className="text-[10px] font-mono text-orange-400/30 mt-0.5">{i+1}</span>
-                        <p className="text-[11px] text-stone-400 font-serif leading-relaxed">{beat.text}</p>
-                      </div>
+            <aside className={`fixed inset-0 z-[130] md:relative md:inset-auto md:z-auto w-full md:w-[420px] glass border-l border-white/5 flex flex-col p-6 md:p-10 space-y-8 md:space-y-12 animate-fade-in overflow-y-auto custom-scrollbar`}>
+               <div className="flex md:hidden justify-end"><button onClick={() => setShowPlanner(false)} className="p-2 text-stone-500"><X size={24}/></button></div>
+               <section className="space-y-4 md:space-y-5">
+                 <div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen size={16} className="text-orange-400" /><span className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Synopsis</span></div><button className="text-stone-700 hover:text-orange-400 transition-colors"><RotateCcw size={14}/></button></div>
+                 <textarea defaultValue={activeChapter.summary} key={`summary-${activeChapter.id}`} onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { summary: e.target.value } })} className="w-full bg-stone-950/50 border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-6 text-[12px] md:text-[13px] h-40 md:h-44 outline-none font-serif resize-none text-stone-300 focus:border-orange-500/30 transition-all leading-relaxed shadow-inner" placeholder="この章のあらすじを記す..." />
+               </section>
+               <section className="space-y-4 md:space-y-6">
+                 <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Feather size={16} className="text-orange-400" /><span className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Plot Beats</span></div><span className="text-[9px] font-mono text-stone-600">{completedBeats.size} / {(activeChapter.beats || []).length}</span></div>
+                 <div className="space-y-3 md:space-y-4">
+                    {(activeChapter.beats || []).map((beat, i) => (
+                      <BeatItem key={beat.id} beat={beat} isCompleted={completedBeats.has(beat.id)} onToggle={toggleBeat} />
                     ))}
-                    <button className="w-full py-4 border-2 border-dashed border-stone-800 rounded-2xl text-[9px] font-black text-stone-700 uppercase tracking-widest hover:text-stone-400 hover:border-stone-700 transition-all">
-                      ビートを手動で追加
-                    </button>
                  </div>
-               </div>
-               
-               <div className="mt-auto space-y-4 pt-6">
-                 <div className="p-5 bg-orange-400/5 rounded-2xl border border-orange-400/10 space-y-2">
-                    <div className="flex items-center gap-2 text-orange-400"><Info size={14}/><span className="text-[9px] font-black uppercase tracking-widest">Tip</span></div>
-                    <p className="text-[10px] text-stone-500 font-serif leading-relaxed italic">「フルオート構築」は、あらすじから展開案を自動生成し、本文の初稿まで一気通貫で行います。</p>
-                 </div>
-                 <button 
-                  onClick={async () => {
-                    if (isProcessing) return;
-                    setIsProcessing(true);
-                    addLog('info', 'Writer', '章全体を構築中...');
-                    try {
-                      const res = await generateFullChapterPackage(project, activeChapter, (u:any) => projectDispatch({type:'TRACK_USAGE',payload:u}), addLog);
-                      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { strategy: res.strategy, beats: res.beats, content: res.draft, status: 'Polished' } });
-                      addLog('success', 'Writer', '構築完了');
-                    } catch(e) { addLog('error','Writer','構築失敗'); }
-                    finally { setIsProcessing(false); }
-                  }}
-                  disabled={isProcessing} 
-                  className="w-full py-6 bg-gradient-to-r from-orange-600 to-rose-600 text-white rounded-3xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-2xl shadow-orange-900/30 active:scale-95 transition-all"
-                 >
-                   {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Wand size={18} />}
-                   フルオート構築
-                 </button>
-               </div>
+               </section>
+               <section className="mt-auto space-y-4 md:space-y-5 pt-8 pb-10 md:pb-0">
+                 <div className="p-4 md:p-6 bg-orange-400/5 rounded-2xl md:rounded-3xl border border-orange-400/10 space-y-2 md:space-y-3"><div className="flex items-center gap-3 text-orange-400"><Info size={14}/><span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest">Architect Tip</span></div><p className="text-[10px] md:text-[11px] text-stone-500 font-serif leading-relaxed italic">「フルオート構築」を実行すると、あらすじから展開案を自動生成し、本文の初稿まで一気通貫で設計士が仕上げます。</p></div>
+                 <button onClick={async () => { if (isProcessing) return; setIsProcessing(true); addLog('info', 'Writer', '章全体を再構築中...'); try { const res = await generateFullChapterPackage({ bible, chapters, meta } as any, activeChapter, (u:any) => metaDispatch({type:'TRACK_USAGE',payload:u}), addLog); if (textareaRef.current) textareaRef.current.value = res.draft; lastSyncedContent.current = res.draft; projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapter.id, content: res.draft }); projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { strategy: res.strategy, beats: res.beats, status: 'Polished' } }); saveChapterContent(activeChapter.id, res.draft); addLog('success', 'Writer', '物語の構造化が完了しました。'); if (window.innerWidth < 1024) setShowPlanner(false); } catch(e) { addLog('error','Writer','構築に失敗しました。'); } finally { setIsProcessing(false); } }} disabled={isProcessing} className="w-full py-5 md:py-7 bg-gradient-to-br from-orange-600 to-rose-700 text-white rounded-[1.5rem] md:rounded-[2rem] text-[10px] md:text-[12px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 md:gap-4 shadow-2xl active:scale-95 hover:brightness-110 transition-all">{isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}フルオート構築</button>
+               </section>
             </aside>
           )}
         </div>
       </div>
+      <style>{`@keyframes whisperLife { from { width: 100%; } to { width: 0%; } }`}</style>
     </div>
   );
 };
 
-export default WriterView;
+const BeatItem = React.memo(({ beat, isCompleted, onToggle }: any) => (
+  <button onClick={() => onToggle(beat.id)} className={`w-full text-left flex items-start gap-3 md:gap-4 p-4 md:p-5 rounded-2xl md:rounded-3xl border transition-all group ${isCompleted ? 'bg-emerald-500/5 border-emerald-500/20 opacity-50' : 'bg-stone-900/40 border-white/5 hover:border-orange-500/20'}`}>
+    <div className={`mt-0.5 md:mt-1 transition-colors ${isCompleted ? 'text-emerald-500' : 'text-stone-700 group-hover:text-orange-400'}`}>
+      <CheckCircle2 size={16} fill={isCompleted ? "currentColor" : "none"} />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className={`text-[11px] md:text-[12px] font-serif leading-relaxed ${isCompleted ? 'line-through text-stone-600' : 'text-stone-300'}`}>{beat.text}</p>
+    </div>
+  </button>
+));
+
+export default React.memo(WriterView);

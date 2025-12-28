@@ -12,6 +12,8 @@
         --font-sans: 'Inter', sans-serif;
         --font-serif: 'Noto Serif JP', serif;
         --font-display: 'Playfair Display', serif;
+        --color-warm-stone: #1c1917;
+        --color-accent: #d68a6d;
       }
       ::-webkit-scrollbar { width: 4px; height: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
@@ -19,7 +21,7 @@
       ::-webkit-scrollbar-thumb:hover { background: rgba(214, 138, 109, 0.4); }
       
       body {
-        background-color: #1c1917; /* Warm Stone 900 */
+        background-color: var(--color-warm-stone);
         background-image: 
           radial-gradient(circle at 50% -20%, rgba(214, 138, 109, 0.15), transparent),
           radial-gradient(circle at 0% 100%, rgba(120, 113, 108, 0.1), transparent),
@@ -36,22 +38,40 @@
       .font-serif-bold { font-family: var(--font-serif); font-weight: 700; }
       .font-display { font-family: var(--font-display); }
 
-      /* 原稿用紙（Genko Yoshi）ライクなタイポグラフィ */
       .prose-literary {
         font-family: var(--font-serif);
-        line-height: 2.8;
-        letter-spacing: 0.12em;
+        line-height: 2.5;
+        letter-spacing: 0.1em;
         font-weight: 400;
-        font-variant-ligatures: common-ligatures;
         color: #e7e5e4;
-        text-underline-offset: 0.4em;
-        text-decoration-color: rgba(214, 138, 109, 0.1);
+        transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+      }
+
+      /* 縦書きモードの定義 */
+      .writing-vertical {
+        writing-mode: vertical-rl;
+        -webkit-writing-mode: vertical-rl;
+        text-orientation: upright;
+        height: 80vh;
+        max-height: 1000px;
+        margin: auto;
+        padding: 2rem;
+        line-height: 2.8;
+      }
+
+      .writing-vertical textarea {
+        height: 100% !important;
+        width: auto !important;
+        min-width: 80vw;
       }
 
       @media (max-width: 768px) {
-        .prose-literary {
-          line-height: 2.2;
-          letter-spacing: 0.08em;
+        .writing-vertical {
+          height: 60vh;
+          padding: 1rem;
+        }
+        .writing-vertical textarea {
+          min-width: 90vw;
         }
       }
 
@@ -62,38 +82,31 @@
       }
 
       .glass {
-        background: rgba(28, 25, 23, 0.65);
+        background: rgba(28, 25, 23, 0.85);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
       }
 
       .glass-bright {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(255, 255, 255, 0.04);
         backdrop-filter: blur(30px);
         -webkit-backdrop-filter: blur(30px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
       }
 
-      .text-glow-warm {
-        text-shadow: 0 0 20px rgba(214, 138, 109, 0.4);
+      .paper-texture {
+        background-image: url("https://www.transparenttextures.com/patterns/natural-paper.png");
       }
 
-      ::selection {
-        background: rgba(214, 138, 109, 0.3);
-        color: #fff;
-      }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+      .pt-safe { padding-top: env(safe-area-inset-top); }
 
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-      /* モバイルでのタップターゲット拡張 */
-      @media (max-width: 768px) {
-        button, a {
-          min-height: 44px;
-          min-width: 44px;
-        }
-      }
+      .focus-ring { transition: box-shadow 0.3s ease; }
+      .focus-ring:focus { box-shadow: 0 0 0 2px rgba(214, 138, 109, 0.4); }
     </style>
     <script type="importmap">
     {

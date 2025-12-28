@@ -175,13 +175,14 @@ export interface ChapterLog {
   id: string;
   title: string;
   summary: string;
-  content: string;
+  content?: string; 
   beats: PlotBeat[];
   strategy: ChapterStrategy;
   status: 'Idea' | 'Beats' | 'Drafting' | 'Polished';
   wordCount: number;
   stateDeltas: StateDelta[]; 
   postStateCache?: { [characterId: string]: CharacterStatus }; 
+  updatedAt: number; 
 }
 
 export interface WorldBible {
@@ -197,9 +198,11 @@ export interface WorldBible {
   entries: WorldEntry[]; 
   nexusBranches: NexusBranch[]; 
   integrityIssues: BibleIssue[];
+  summaryBuffer: string; 
+  lastSummaryUpdate: number;
 }
 
-export interface StoryProject {
+export interface StoryProjectMetadata {
   id: string;
   title: string;
   author: string;
@@ -207,12 +210,20 @@ export interface StoryProject {
   createdAt: number;
   updatedAt: number;
   language: 'ja';
+  tokenUsage: TokenUsageEntry[];
+}
+
+export interface SyncState {
+  chatHistory: ChatMessage[];
+  pendingChanges: SyncOperation[];
+  history: HistoryEntry[];
+}
+
+export interface StoryProject {
+  meta: StoryProjectMetadata;
   bible: WorldBible;
-  chapters: ChapterLog[]; 
-  tokenUsage: TokenUsageEntry[]; 
-  chatHistory?: ChatMessage[]; 
-  pendingChanges: SyncOperation[]; 
-  history: HistoryEntry[]; 
+  chapters: ChapterLog[];
+  sync: SyncState;
 }
 
 export interface SystemLog {
@@ -249,18 +260,34 @@ export interface DialogState {
   onCancel?: () => void;
 }
 
-// Actions for Reducer
+export type MetaAction = 
+  | { type: 'LOAD_META'; payload: StoryProjectMetadata }
+  | { type: 'UPDATE_META'; payload: Partial<StoryProjectMetadata> }
+  | { type: 'TRACK_USAGE'; payload: { model: string, source: string, input: number, output: number } };
+
+export type BibleAction = 
+  | { type: 'LOAD_BIBLE'; payload: WorldBible }
+  | { type: 'UPDATE_BIBLE'; payload: Partial<WorldBible> }
+  | { type: 'APPLY_SYNC_OP'; payload: { nextBible: WorldBible; historyEntry: HistoryEntry } }
+  | { type: 'UNDO_BIBLE'; payload: { nextBible: WorldBible } };
+
+export type ChapterAction = 
+  | { type: 'LOAD_CHAPTERS'; payload: ChapterLog[] }
+  | { type: 'UPDATE_CHAPTER'; id: string; updates: Partial<ChapterLog> }
+  | { type: 'SET_CHAPTER_CONTENT'; id: string; content: string }
+  | { type: 'ADD_CHAPTER'; payload: ChapterLog }
+  | { type: 'REMOVE_CHAPTER'; id: string };
+
+export type SyncAction = 
+  | { type: 'LOAD_SYNC'; payload: SyncState }
+  | { type: 'SET_CHAT_HISTORY'; payload: ChatMessage[] }
+  | { type: 'ADD_PENDING_OPS'; payload: SyncOperation[] }
+  | { type: 'REMOVE_PENDING_OP'; id: string }
+  | { type: 'ADD_HISTORY_ENTRY'; payload: HistoryEntry }
+  | { type: 'REMOVE_HISTORY_ENTRY'; id: string };
+
 export type ProjectAction = 
   | { type: 'LOAD_PROJECT'; payload: StoryProject }
-  | { type: 'UPDATE_PROJECT_META'; payload: Partial<StoryProject> }
-  | { type: 'UPDATE_BIBLE'; payload: Partial<WorldBible> }
-  | { type: 'COMMIT_SYNC_OP'; payload: SyncOperation }
-  | { type: 'REJECT_SYNC_OP'; payload: string }
-  | { type: 'ADD_PENDING_OPS'; payload: SyncOperation[] }
-  | { type: 'UPDATE_CHAPTER'; id: string; updates: Partial<ChapterLog> }
-  | { type: 'ADD_CHAPTER'; payload: ChapterLog }
-  | { type: 'SET_CHAT_HISTORY'; payload: ChatMessage[] }
-  | { type: 'TRACK_USAGE'; payload: { model: string, source: string, input: number, output: number } }
   | { type: 'CLEAR_DATA' };
 
 export type NotificationAction = 

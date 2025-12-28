@@ -1,24 +1,25 @@
 
 import React, { useState } from 'react';
-import { StoryProject } from '../types';
+import { useMetadata, useManuscript } from '../App';
 import { Copy, X, Check, BookOpen, FileJson, Eye, Settings2 } from 'lucide-react';
 
 interface Props {
-    project: StoryProject;
     onClose: () => void;
 }
 
-const PublicationModal: React.FC<Props> = ({ project, onClose }) => {
+const PublicationModal: React.FC<Props> = ({ onClose }) => {
+    const { title, author } = useMetadata();
+    const { chapters } = useManuscript();
     const [header, setHeader] = useState('');
     const [footer, setFooter] = useState('');
     const [copied, setCopied] = useState(false);
     const [mobileTab, setMobileTab] = useState<'settings' | 'preview'>('preview');
     
-    const fullText = project.chapters.map((ch) => {
+    const fullText = chapters.map((ch) => {
         return `### ${ch.title}\n\n${ch.content}\n\n***\n`;
     }).join('\n');
 
-    const previewText = `${header}\n\n# ${project.title}\n著者: ${project.author}\n\n${fullText}\n\n${footer}`;
+    const previewText = `${header}\n\n# ${title}\n著者: ${author}\n\n${fullText}\n\n${footer}`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(previewText);
@@ -27,10 +28,11 @@ const PublicationModal: React.FC<Props> = ({ project, onClose }) => {
     };
 
     const handleDownloadBackup = () => {
+        const project = { title, author, chapters }; // 簡略化したエクスポート
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(project, null, 2));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `${project.title}_backup.json`);
+        downloadAnchorNode.setAttribute("download", `${title}_backup.json`);
         document.body.appendChild(downloadAnchorNode);
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
