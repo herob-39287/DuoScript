@@ -265,7 +265,11 @@ export const normalizeProject = (data: any): StoryProject => {
   };
 
   const chapters: ChapterLog[] = Array.isArray(data?.chapters) && data.chapters.length > 0 
-    ? data.chapters.map((c: any) => ({ ...c, updatedAt: c.updatedAt || now }))
+    ? data.chapters.map((c: any) => ({
+        ...c,
+        updatedAt: c.updatedAt || now,
+        foreshadowingLinks: Array.isArray(c.foreshadowingLinks) ? c.foreshadowingLinks : []
+      }))
     : [{ 
         id: crypto.randomUUID(), 
         title: '序章', 
@@ -276,6 +280,7 @@ export const normalizeProject = (data: any): StoryProject => {
         status: 'Idea', 
         wordCount: 0, 
         stateDeltas: [],
+        foreshadowingLinks: [],
         updatedAt: now
       }];
 

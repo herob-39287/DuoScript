@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { BibleIssue, SystemLog, ViewMode } from '../types';
+import { BibleIssue, SystemLog, ViewMode, Foreshadowing } from '../types';
 import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
 import { 
   useMetadata, useBible, useBibleDispatch, useManuscript, 
@@ -9,7 +9,7 @@ import * as Actions from '../store/actions';
 import { 
   Activity, Terminal, Trash2, ShieldCheck, Loader2, Zap, 
   ShieldAlert, RefreshCcw, MessageSquareShare, Database,
-  BrainCircuit, Sparkles
+  BrainCircuit, Sparkles, Flag, TrendingUp, CheckCircle2
 } from 'lucide-react';
 
 interface Props {
@@ -32,6 +32,60 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const totalTokens = useMemo(() => {
     return (tokenUsage || []).reduce((acc, entry) => acc + entry.input + entry.output, 0);
   }, [tokenUsage]);
+
+  const foreshadowingTrace = useMemo(() => {
+    const entries = new Map<string, {
+      foreshadowing: Foreshadowing;
+      plant: ChapterForeshadowLink[];
+      progress: ChapterForeshadowLink[];
+      payoff: ChapterForeshadowLink[];
+    }>();
+
+    const ensureEntry = (id: string, fallbackTitle = '未登録の伏線'): {
+      foreshadowing: Foreshadowing;
+      plant: ChapterForeshadowLink[];
+      progress: ChapterForeshadowLink[];
+      payoff: ChapterForeshadowLink[];
+    } => {
+      const existing = entries.get(id);
+      if (existing) return existing;
+      const foreshadowing = bible.foreshadowing.find((item) => item.id === id) ?? {
+        id,
+        title: fallbackTitle,
+        description: '',
+        status: 'Open',
+        priority: 'Low'
+      };
+      const created = { foreshadowing, plant: [], progress: [], payoff: [] };
+      entries.set(id, created);
+      return created;
+    };
+
+    bible.foreshadowing.forEach((item) => {
+      ensureEntry(item.id, item.title);
+    });
+
+    chapters.forEach((chapter, index) => {
+      (chapter.foreshadowingLinks ?? []).forEach((link) => {
+        const entry = ensureEntry(link.foreshadowingId);
+        const target =
+          link.action === 'Plant' ? entry.plant : link.action === 'Progress' ? entry.progress : entry.payoff;
+        target.push({
+          chapterId: chapter.id,
+          chapterIndex: index + 1,
+          chapterTitle: chapter.title,
+          note: link.note
+        });
+      });
+    });
+
+    return Array.from(entries.values());
+  }, [bible.foreshadowing, chapters]);
+
+  const unresolvedForeshadowing = useMemo(
+    () => foreshadowingTrace.filter((entry) => entry.payoff.length === 0),
+    [foreshadowingTrace]
+  );
 
   const handleIntegrityScan = async () => {
     if (isScanning) return;
@@ -120,6 +174,31 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
           </div>
         )}
 
+        <div className="glass rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-10 space-y-6 md:space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Flag size={18} className="text-orange-400" />
+                <h3 className="text-xl md:text-2xl font-display font-black text-white italic tracking-tight">伏線トレーサビリティ</h3>
+              </div>
+              <p className="text-[11px] text-stone-500 font-serif">章ごとの提示・進展・回収をIDで結び、未回収の伏線を可視化します。</p>
+            </div>
+            <div className="flex gap-3">
+              <TraceStat label="総伏線" value={foreshadowingTrace.length.toString()} color="text-orange-400" />
+              <TraceStat label="未回収" value={unresolvedForeshadowing.length.toString()} color="text-rose-400" />
+            </div>
+          </div>
+          {foreshadowingTrace.length === 0 ? (
+            <div className="p-6 md:p-10 text-center text-stone-600 italic font-serif text-sm">伏線データがまだありません。</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+              {foreshadowingTrace.map((entry) => (
+                <ForeshadowingTraceCard key={entry.foreshadowing.id} entry={entry} />
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
             <div className="lg:col-span-8 glass rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-12 flex flex-col h-[400px] md:h-[600px] shadow-2xl">
                 <div className="flex justify-between items-center mb-6 px-2 shrink-0">
@@ -164,6 +243,20 @@ interface LogItemProps {
   log: SystemLog;
 }
 
+interface ChapterForeshadowLink {
+  chapterId: string;
+  chapterIndex: number;
+  chapterTitle: string;
+  note: string;
+}
+
+interface ForeshadowingTraceEntry {
+  foreshadowing: Foreshadowing;
+  plant: ChapterForeshadowLink[];
+  progress: ChapterForeshadowLink[];
+  payoff: ChapterForeshadowLink[];
+}
+
 const LogItem = React.memo(({ log }: LogItemProps) => (
   <div className={`flex flex-col p-4 md:p-6 glass-bright rounded-2xl border-l-4 animate-fade-in ${log.type === 'error' ? 'border-l-rose-500' : log.type === 'success' ? 'border-l-emerald-500' : 'border-l-orange-400/50'}`}>
       <div className="flex gap-3 md:gap-4 items-start">
@@ -191,5 +284,65 @@ const StatCard = React.memo(({ icon, label, value, unit, color }: StatCardProps)
     </div>
   </div>
 ));
+
+const TraceStat = ({ label, value, color }: { label: string; value: string; color: string }) => (
+  <div className="px-4 py-3 bg-stone-900/60 border border-white/5 rounded-2xl">
+    <div className="text-[8px] font-black uppercase tracking-widest text-stone-600">{label}</div>
+    <div className={`text-xl font-display font-black italic ${color}`}>{value}</div>
+  </div>
+);
+
+const TraceSection = ({ label, icon, links }: { label: string; icon: React.ReactNode; links: ChapterForeshadowLink[] }) => (
+  <div className="space-y-2">
+    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-stone-500">
+      {icon}
+      {label}
+    </div>
+    {links.length === 0 ? (
+      <div className="text-[10px] text-stone-600 italic font-serif">未設定</div>
+    ) : (
+      <div className="flex flex-wrap gap-2">
+        {links.map((link, index) => (
+          <div key={`${link.chapterId}-${index}`} className="px-3 py-2 bg-stone-900/60 border border-white/5 rounded-xl space-y-1">
+            <div className="text-[9px] font-black text-stone-300 uppercase tracking-widest">
+              第{link.chapterIndex}章 {link.chapterTitle}
+            </div>
+            {link.note && <div className="text-[9px] text-stone-500 font-serif">{link.note}</div>}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const ForeshadowingTraceCard = ({ entry }: { entry: ForeshadowingTraceEntry }) => {
+  const unresolved = entry.payoff.length === 0;
+  return (
+    <div className={`glass-bright p-6 md:p-7 rounded-[1.5rem] md:rounded-[2rem] border transition-all space-y-4 ${unresolved ? 'border-rose-500/30' : 'border-white/5'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          <div className="text-[8px] font-black uppercase tracking-widest text-stone-500">{entry.foreshadowing.id}</div>
+          <div className="text-base font-serif-bold text-stone-100 truncate">{entry.foreshadowing.title}</div>
+        </div>
+        <div className="text-right space-y-1">
+          <div className={`text-[8px] font-black uppercase tracking-widest ${entry.foreshadowing.priority === 'Critical' ? 'text-rose-400' : 'text-stone-500'}`}>
+            {entry.foreshadowing.priority}
+          </div>
+          <div className={`text-[8px] font-black uppercase tracking-widest ${unresolved ? 'text-rose-400' : 'text-emerald-400'}`}>
+            {unresolved ? '未回収' : '回収済み'}
+          </div>
+        </div>
+      </div>
+      {entry.foreshadowing.description && (
+        <p className="text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-2">{entry.foreshadowing.description}</p>
+      )}
+      <div className="space-y-3">
+        <TraceSection label="提示" icon={<Flag size={12} className="text-orange-400" />} links={entry.plant} />
+        <TraceSection label="進展" icon={<TrendingUp size={12} className="text-blue-400" />} links={entry.progress} />
+        <TraceSection label="回収" icon={<CheckCircle2 size={12} className="text-emerald-400" />} links={entry.payoff} />
+      </div>
+    </div>
+  );
+};
 
 export default React.memo(DashboardView);
