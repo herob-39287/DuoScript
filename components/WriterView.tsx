@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { generateDraftStream, suggestNextSentence, generateFullChapterPackage, generateSpeech } from '../services/geminiService';
 import { 
   useManuscript, useBible, useUI, useMetadata, 
@@ -10,9 +10,9 @@ import { saveChapterContent } from '../services/storageService';
 import { 
   Sparkles, Plus, Maximize2, Minimize2, Loader2, Feather, LayoutDashboard, Pen, 
   X, Info, BookOpen, AlignLeft, AlignRight, CheckCircle2, MessageCircle, Zap, RotateCcw, Menu,
-  Volume2
+  Volume2, Flag, TrendingUp, Trash2
 } from 'lucide-react';
-import { ViewMode, PlotBeat } from '../types';
+import { ViewMode, PlotBeat, ForeshadowingLink } from '../types';
 import { useManuscriptEditor } from '../hooks/useManuscriptEditor';
 
 const WriterView: React.FC = () => {
@@ -49,6 +49,15 @@ const WriterView: React.FC = () => {
   const [fontSize] = useState(window.innerWidth < 768 ? 18 : 22);
   const [completedBeats, setCompletedBeats] = useState<Set<string>>(new Set());
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [newForeshadowingId, setNewForeshadowingId] = useState('');
+  const [newForeshadowingAction, setNewForeshadowingAction] = useState<ForeshadowingLink['action']>('Plant');
+  const [newForeshadowingNote, setNewForeshadowingNote] = useState('');
+
+  useEffect(() => {
+    if (!newForeshadowingId && bible.foreshadowing.length > 0) {
+      setNewForeshadowingId(bible.foreshadowing[0].id);
+    }
+  }, [newForeshadowingId, bible.foreshadowing]);
 
   const toggleBeat = useCallback((id: string) => {
     setCompletedBeats(prev => {
@@ -58,6 +67,27 @@ const WriterView: React.FC = () => {
       return next;
     });
   }, []);
+
+  const handleAddForeshadowingLink = useCallback(() => {
+    if (!activeChapter || !newForeshadowingId) return;
+    const trimmedNote = newForeshadowingNote.trim();
+    const updatedLinks = [
+      ...(activeChapter.foreshadowingLinks ?? []),
+      {
+        foreshadowingId: newForeshadowingId,
+        action: newForeshadowingAction,
+        note: trimmedNote
+      }
+    ];
+    projectDispatch(Actions.updateChapter(activeChapter.id, { foreshadowingLinks: updatedLinks }));
+    setNewForeshadowingNote('');
+  }, [activeChapter, newForeshadowingAction, newForeshadowingId, newForeshadowingNote, projectDispatch]);
+
+  const handleRemoveForeshadowingLink = useCallback((index: number) => {
+    if (!activeChapter) return;
+    const updatedLinks = (activeChapter.foreshadowingLinks ?? []).filter((_, idx) => idx !== index);
+    projectDispatch(Actions.updateChapter(activeChapter.id, { foreshadowingLinks: updatedLinks }));
+  }, [activeChapter, projectDispatch]);
 
   const handleSuggest = async () => {
     const currentVal = textareaRef.current?.value || "";
@@ -171,7 +201,7 @@ const WriterView: React.FC = () => {
           <div className="flex gap-2">
             <button onClick={() => {
               const id = crypto.randomUUID();
-              projectDispatch(Actions.addChapter({ id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [], updatedAt: Date.now() }));
+              projectDispatch(Actions.addChapter({ id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [], foreshadowingLinks: [], updatedAt: Date.now() }));
               setActiveChapterId(id);
               setShowManuscriptMobile(false);
             }} className="p-2 bg-stone-800 hover:bg-orange-600 text-orange-400 hover:text-white rounded-xl transition-all shadow-lg active:scale-90"><Plus size={16}/></button>
@@ -286,6 +316,87 @@ const WriterView: React.FC = () => {
                     {(activeChapter.beats || []).map((beat) => (
                       <BeatItem key={beat.id} beat={beat} isCompleted={completedBeats.has(beat.id)} onToggle={toggleBeat} />
                     ))}
+                 </div>
+               </section>
+               <section className="space-y-4 md:space-y-5">
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     <Flag size={16} className="text-orange-400" />
+                     <span className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Foreshadowing</span>
+                   </div>
+                   <span className="text-[9px] font-mono text-stone-600">{(activeChapter.foreshadowingLinks ?? []).length}</span>
+                 </div>
+                 {(activeChapter.foreshadowingLinks ?? []).length === 0 ? (
+                   <div className="text-[10px] text-stone-600 italic font-serif">伏線リンクはまだありません。</div>
+                 ) : (
+                   <div className="space-y-3">
+                     {(activeChapter.foreshadowingLinks ?? []).map((link, idx) => {
+                       const title = bible.foreshadowing.find((item) => item.id === link.foreshadowingId)?.title || '未登録の伏線';
+                       const actionLabel = link.action === 'Plant' ? '提示' : link.action === 'Progress' ? '進展' : '回収';
+                       return (
+                         <div key={`${link.foreshadowingId}-${idx}`} className="p-3 bg-stone-900/60 border border-white/5 rounded-2xl flex items-start gap-3">
+                           <div className={`mt-0.5 ${link.action === 'Plant' ? 'text-orange-400' : link.action === 'Progress' ? 'text-blue-400' : 'text-emerald-400'}`}>
+                             {link.action === 'Plant' ? <Flag size={14} /> : link.action === 'Progress' ? <TrendingUp size={14} /> : <CheckCircle2 size={14} />}
+                           </div>
+                           <div className="flex-1 min-w-0 space-y-1">
+                             <div className="text-[10px] font-black text-stone-300 uppercase tracking-widest">{actionLabel}</div>
+                             <div className="text-[11px] text-stone-200 font-serif-bold truncate">{title}</div>
+                             {link.note && <div className="text-[10px] text-stone-500 font-serif leading-relaxed">{link.note}</div>}
+                           </div>
+                           <button onClick={() => handleRemoveForeshadowingLink(idx)} className="p-2 text-stone-600 hover:text-rose-400 transition-colors">
+                             <Trash2 size={14} />
+                           </button>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 )}
+                 <div className="space-y-3">
+                   <div className="grid grid-cols-1 gap-3">
+                     <select
+                       value={newForeshadowingId}
+                       onChange={(e) => setNewForeshadowingId(e.target.value)}
+                       className="w-full bg-stone-950/60 border border-white/5 rounded-2xl px-4 py-3 text-[11px] font-serif-bold text-stone-300 focus:border-orange-500/30 transition-all"
+                     >
+                       {bible.foreshadowing.length === 0 && (
+                         <option value="">伏線がまだ登録されていません</option>
+                       )}
+                       {bible.foreshadowing.map((item) => (
+                         <option key={item.id} value={item.id}>
+                           {item.title}
+                         </option>
+                       ))}
+                     </select>
+                     <div className="grid grid-cols-3 gap-2">
+                       {(['Plant', 'Progress', 'Payoff'] as ForeshadowingLink['action'][]).map((action) => (
+                         <button
+                           key={action}
+                           type="button"
+                           onClick={() => setNewForeshadowingAction(action)}
+                           className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                             newForeshadowingAction === action
+                               ? 'bg-orange-600 text-white'
+                               : 'bg-stone-900/60 text-stone-500 hover:text-stone-300'
+                           }`}
+                         >
+                           {action === 'Plant' ? '提示' : action === 'Progress' ? '進展' : '回収'}
+                         </button>
+                       ))}
+                     </div>
+                     <input
+                       value={newForeshadowingNote}
+                       onChange={(e) => setNewForeshadowingNote(e.target.value)}
+                       placeholder="メモ（任意）"
+                       className="w-full bg-stone-950/60 border border-white/5 rounded-2xl px-4 py-3 text-[11px] font-serif text-stone-300 focus:border-orange-500/30 transition-all"
+                     />
+                   </div>
+                   <button
+                     onClick={handleAddForeshadowingLink}
+                     disabled={!newForeshadowingId}
+                     className="w-full py-3 bg-stone-800 hover:bg-orange-600 text-stone-200 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
+                   >
+                     伏線リンクを追加
+                   </button>
                  </div>
                </section>
                <section className="mt-auto space-y-4 md:space-y-5 pt-8 pb-10 md:pb-0">

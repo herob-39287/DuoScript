@@ -211,6 +211,7 @@ export interface ChapterLog {
   status: 'Idea' | 'Beats' | 'Drafting' | 'Polished';
   wordCount: number;
   stateDeltas: StateDelta[]; 
+  foreshadowingLinks?: ForeshadowingLink[];
   postStateCache?: { [characterId: string]: CharacterStatus }; 
   updatedAt: number; 
 }
