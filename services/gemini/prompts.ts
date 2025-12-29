@@ -1,3 +1,4 @@
+
 /**
  * DuoScript Prompt Templates
  */
@@ -9,11 +10,14 @@ export const ARCHITECT_SYSTEM_INSTRUCTION = (ctx: string) => `
 【現在の物語コンテキスト】
 ${ctx}
 
-【回答の指針】
+【設計士の責任：構造化された思考】
 1. キャラクターの動機と矛盾しないか常にチェックする。
-2. 読者の予想を裏切るが、伏線によって納得できる展開を提案する。
-3. 設定の変更が必要な場合は、その影響範囲（Canonへの影響）を指摘する。
-4. 常に専門的かつインスピレーションを与えるトーンで対話してください。
+2. 世界設定（Entries）の深掘り：地理(Geography)なら気候や隣接国、魔法(Magic)なら代償と難易度、歴史(History)なら現代への影響を考慮してください。
+3. 物語の計画：年表(Timeline)ではイベント間の「因果関係(CausalLinks)」を意識し、伏線(Foreshadowing)は「設置(Plant)→進展(Progress)→回収(Payoff)」の段階を追跡してください。
+4. トーンの数値化：物語の雰囲気を Hope, Darkness, Tension, Logic, Magic の5軸(0.0-1.0)で捉えてください。
+5. 設定の変更が必要な場合は、その影響範囲（Canonへの影響）を論理的に指摘する。
+
+常に専門的かつインスピレーションを与えるトーンで対話してください。
 `.trim();
 
 export const WRITER_SYSTEM_INSTRUCTION = (ctx: string, tone: string) => `
@@ -31,7 +35,7 @@ ${ctx}
 
 export const WHISPER_PROMPT = (lastChunk: string, ctx: string) => `
 執筆中の小説家に対し、設計士として短い「ささやき（助言）」を1つだけ送ってください。
-物語の整合性、伏線の未回収、キャラクターの心理描写の不足などを100文字以内で鋭く指摘してください。
+物語の整合性、伏線の未回収、因果関係の破綻、キャラクターの心理描写の不足などを100文字以内で鋭く指摘してください。
 特に助言が必要ない場合（順調な場合）は「なし」とだけ返してください。
 
 【直近の執筆内容】
@@ -43,8 +47,100 @@ ${ctx}
 
 export const INTEGRITY_SCAN_PROMPT = (compactBible: string) => `
 以下の物語設定の中に、矛盾、未回収の伏線、または物語の理に反する箇所がないか徹底的に分析してください。
-設定の重複、因果関係の破綻、キャラクターの行動原理の揺らぎに特に注目してください。
+設定の重複、因果関係のデッドロック、キャラクターの行動原理の揺らぎに特に注目してください。
 
 【設定データ】
 ${compactBible}
+`.trim();
+
+export const DETECTION_PROMPT = (userInput: string) => `
+以下の発言に、物語の設定を変更・追加・削除・精緻化しようとする意図が含まれているか判定してください。
+
+発言: "${userInput}"
+
+【ドメイン定義】
+- ENTITIES: 登場人物(characters)、用語・世界設定(entries)（地理、魔法、歴史等のメタデータを含む）
+- NARRATIVE: 大筋(grandArc)、年表(timeline: 因果関係含む)、伏線(foreshadowing: 段階管理含む)
+- FOUNDATION: 世界背景(setting)、執筆トーン(tone: 数値ベクトル含む)、物理・魔法法則(laws)
+
+【出力形式】
+JSON形式で hasChangeIntent, domains (配列), categories, instructionSummary を返してください。
+`.trim();
+
+export const DRAFT_PROMPT = (title: string, summary: string, beats: any[]) => `
+章「${title}」の執筆を開始してください。
+
+【あらすじ】
+${summary}
+
+【プロットビート】
+${beats.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}
+
+これまでの執筆内容の続き、または最初から書き始めてください。
+`.trim();
+
+export const PORTRAIT_PROMPT = (description: string) => `
+A cinematic character portrait based on this description: ${description}. 
+Art style: Semi-realistic, painterly, moody lighting, professional concept art.
+`.trim();
+
+export const SYNC_EXTRACT_PROMPT = (history: any[], summary: string, categories: string[]) => `
+以下の対話から設定変更内容を抽出してください。
+特に WorldEntry の metadata や Timeline の causalLinks、Foreshadowing の milestones などの詳細な構造を考慮してください。
+
+要約: ${summary}
+対象カテゴリ: ${categories.join(', ')}
+
+【対話履歴（直近）】
+${JSON.stringify(history)}
+
+【出力ルール】
+- op: add, update, merge, delete を使用。
+- value: 拡張された型（metadata, causalLinks, milestones等）に適合するJSON。
+`.trim();
+
+export const SUMMARY_BUFFER_PROMPT = (bibleJson: string) => `
+以下の全設定（拡張メタデータ、因果関係、トーンベクトルを含む）を統合し、長編執筆のプロンプトとして最適な「高密度要約」を作成してください。
+この要約は、AIが物語の全体像と詳細な設定（キャラクター、世界の理、進行中のアーク）を即座に把握できるように構造化してください。
+
+現在の設定: 
+${bibleJson}
+`.trim();
+
+export const NEXUS_SIM_PROMPT = (hyp: string, ctx: string) => `
+仮説: 「${hyp}」が起きた場合の世界線の分岐をシミュレートせよ。
+物語の理（Canon）やキャラクターの運命への影響、そして生じる可能性のある「もう一つの時間軸（因果の鎖の再構成）」を詳細に提示してください。
+
+コンテキスト: 
+${ctx}
+`.trim();
+
+export const NEXT_SENTENCE_PROMPT = (content: string, ctx: string) => `
+物語の続きとして、文脈の異なる3つのパターンを提案してください。
+1. 物語を推し進める展開（因果の進展）
+2. 心理描写を深める展開（キャラクターアーク）
+3. 予期せぬ転換（フック・伏線）
+
+本文末尾: 
+${content.slice(-800)}
+
+コンテキスト: 
+${ctx}
+`.trim();
+
+export const CHAPTER_PACKAGE_PROMPT = (title: string, summary: string, ctx: string) => `
+章「${title}」の全体構造を設計し、初稿を生成してください。
+あらすじを具体的な「プロットビート」へ分解し、それらに基づいた高品質な本文を執筆してください。
+
+章のあらすじ: 
+${summary}
+
+物語のコンテキスト: 
+${ctx}
+`.trim();
+
+export const PROJECT_GEN_PROMPT = (theme: string) => `
+テーマ「${theme}」に基づき、新しい長編小説の初期設定を生成してください。
+タイトル、ジャンル、世界の基本設定、そして物語の大きな流れ（グランドアーク）を含めてください。
+初期のトーンベクトル(hope, darkness, tension, logic, magic)も考慮してください。
 `.trim();

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Upload, Loader2, ChevronRight, Rocket, Coffee, Feather, Book, BookOpen, FileJson, X } from 'lucide-react';
 import { generateRandomProject } from '../services/geminiService';

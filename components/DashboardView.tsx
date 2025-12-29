@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { BibleIssue, SystemLog, ViewMode } from '../types';
 import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
@@ -6,6 +5,7 @@ import {
   useMetadata, useBible, useBibleDispatch, useManuscript, 
   useNotificationDispatch, useNotifications, useUIDispatch 
 } from '../contexts/StoryContext';
+import * as Actions from '../store/actions';
 import { 
   Activity, Terminal, Trash2, ShieldCheck, Loader2, Zap, 
   ShieldAlert, RefreshCcw, MessageSquareShare, Database,
@@ -38,8 +38,8 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     setIsScanning(true);
     addLog('info', 'Architect', '物語設定の整合性をスキャン中...');
     try {
-      const issues = await analyzeBibleIntegrity({ bible } as any, (usage: any) => bibleDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
-      bibleDispatch({ type: 'UPDATE_BIBLE', payload: { integrityIssues: issues } });
+      const issues = await analyzeBibleIntegrity({ bible } as any, (usage: any) => bibleDispatch(Actions.trackUsage(usage)), addLog);
+      bibleDispatch(Actions.updateBible({ integrityIssues: issues }));
       if (issues.length === 0) addLog('success', 'Architect', '不整合は見つかりませんでした。完璧な理です。');
       else addLog('error', 'Architect', `${issues.length}件の潜在的な問題が発見されました。`);
     } catch (e: any) {
@@ -54,8 +54,8 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     setIsSummarizing(true);
     addLog('info', 'Architect', 'コンテキスト・バッファを最適化中...');
     try {
-      const newSummary = await maintainSummaryBuffer({ bible } as any, (usage: any) => bibleDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
-      bibleDispatch({ type: 'UPDATE_BIBLE', payload: { summaryBuffer: newSummary, lastSummaryUpdate: Date.now() } });
+      const newSummary = await maintainSummaryBuffer({ bible } as any, (usage: any) => bibleDispatch(Actions.trackUsage(usage)), addLog);
+      bibleDispatch(Actions.updateBible({ summaryBuffer: newSummary, lastSummaryUpdate: Date.now() }));
       addLog('success', 'Architect', 'コンテキストが最新の状態に統合されました。');
     } catch (e: any) {
       addLog('error', 'Architect', '要約に失敗しました。');
@@ -66,9 +66,9 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
   const handleConsultIssue = (issue: BibleIssue) => {
     const message = `不整合が見つかりました：${issue.description}\n解決策：${issue.suggestion}`;
-    uiDispatch({ type: 'SET_PENDING_MSG', payload: message });
-    uiDispatch({ type: 'SET_PLOTTER_TAB', payload: 'characters' });
-    uiDispatch({ type: 'SET_VIEW', payload: ViewMode.PLOTTER });
+    uiDispatch(Actions.setPendingMsg(message));
+    uiDispatch(Actions.setPlotterTab('characters'));
+    uiDispatch(Actions.setView(ViewMode.PLOTTER));
   };
 
   const visibleLogs = useMemo(() => logs.slice(0, logLimit), [logs, logLimit]);
@@ -126,7 +126,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                   <h3 className="text-xl md:text-2xl font-display font-black text-white italic tracking-tight flex items-center gap-3">
                     <Terminal size={18} className="text-orange-400" />アトリエ日誌
                   </h3>
-                  <button onClick={() => notifDispatch({ type: 'CLEAR_LOGS' })} className="p-2 hover:bg-stone-800 rounded-lg text-stone-700 hover:text-rose-400 transition-colors"><Trash2 size={16} /></button>
+                  <button onClick={() => notifDispatch(Actions.clearLogs())} className="p-2 hover:bg-stone-800 rounded-lg text-stone-700 hover:text-rose-400 transition-colors"><Trash2 size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2 pb-4">
                     {visibleLogs.map(log => <LogItem key={log.id} log={log} />)}

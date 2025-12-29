@@ -1,31 +1,44 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { generateDraftStream, suggestNextSentence, generateFullChapterPackage, getArchitectWhisper, generateSpeech } from '../services/geminiService';
+import React, { useState, useMemo, useCallback } from 'react';
+import { generateDraftStream, suggestNextSentence, generateFullChapterPackage, generateSpeech } from '../services/geminiService';
 import { 
   useManuscript, useBible, useUI, useMetadata, 
   useManuscriptDispatch, useMetadataDispatch, useNotificationDispatch, 
   useUIDispatch, useNeuralSync 
 } from '../contexts/StoryContext';
-import { loadChapterContent, saveChapterContent } from '../services/storageService';
+import * as Actions from '../store/actions';
+import { saveChapterContent } from '../services/storageService';
 import { 
   Sparkles, Plus, Maximize2, Minimize2, Loader2, Feather, LayoutDashboard, Pen, 
-  Type, X, Info, BookOpen, AlignLeft, AlignRight, CheckCircle2, MessageCircle, Zap, RotateCcw, Menu,
-  Volume2, Play
+  X, Info, BookOpen, AlignLeft, AlignRight, CheckCircle2, MessageCircle, Zap, RotateCcw, Menu,
+  Volume2
 } from 'lucide-react';
-import { ViewMode, PlotBeat, ChapterLog } from '../types';
+import { ViewMode, PlotBeat } from '../types';
+import { useManuscriptEditor } from '../hooks/useManuscriptEditor';
 
 const WriterView: React.FC = () => {
   const chapters = useManuscript();
   const projectDispatch = useManuscriptDispatch();
   const bible = useBible();
-  const sync = useNeuralSync();
   const meta = useMetadata();
   const { title: projectTitle } = meta;
   const metaDispatch = useMetadataDispatch();
   const { addLog } = useNotificationDispatch();
   const uiDispatch = useUIDispatch();
 
-  const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id || '');
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const {
+    activeChapter,
+    activeChapterId,
+    setActiveChapterId,
+    isLoadingContent,
+    wordCount,
+    setWordCount,
+    whisper,
+    setWhisper,
+    isWhispering,
+    textareaRef,
+    handleTextChange
+  } = useManuscriptEditor(chapters[0]?.id || '');
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
   const [isVertical, setIsVertical] = useState(false);
@@ -33,77 +46,9 @@ const WriterView: React.FC = () => {
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
   const [showPlanner, setShowPlanner] = useState(window.innerWidth > 1024);
   const [showManuscriptMobile, setShowManuscriptMobile] = useState(false);
-  const [fontSize, setFontSize] = useState(window.innerWidth < 768 ? 18 : 22);
+  const [fontSize] = useState(window.innerWidth < 768 ? 18 : 22);
   const [completedBeats, setCompletedBeats] = useState<Set<string>>(new Set());
-  const [wordCount, setWordCount] = useState(0);
-  
-  const [whisper, setWhisper] = useState<{ text: string; type: 'info' | 'alert' } | null>(null);
-  const [isWhispering, setIsWhispering] = useState(false);
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lastSyncedContent = useRef<string>('');
-  const syncTimeoutRef = useRef<number | null>(null);
-  const whisperTimeoutRef = useRef<number | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const activeChapter = useMemo(() => chapters.find(c => c.id === activeChapterId), [chapters, activeChapterId]);
-
-  useEffect(() => {
-    const fetchContent = async () => {
-      if (!activeChapterId) return;
-      const chapter = chapters.find(c => c.id === activeChapterId);
-      if (!chapter) return;
-      
-      setIsLoadingContent(true);
-      try {
-        const content = chapter.content !== undefined ? chapter.content : (await loadChapterContent(activeChapterId) || "");
-        projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content });
-        if (textareaRef.current) textareaRef.current.value = content;
-        lastSyncedContent.current = content;
-        setWordCount(content.length);
-      } catch (e) {
-        addLog('error', 'System', '章の本文読み込みに失敗しました。');
-      } finally {
-        setIsLoadingContent(false);
-      }
-    };
-    fetchContent();
-  }, [activeChapterId, chapters, projectDispatch, addLog]);
-
-  const triggerWhisper = useCallback(async (text: string) => {
-    if (text.length < 100 || isWhispering) return;
-    setIsWhispering(true);
-    try {
-      const advice = await getArchitectWhisper(
-        text.slice(-1000), 
-        { meta, bible, chapters, sync } as any, 
-        (u) => metaDispatch({ type: 'TRACK_USAGE', payload: u }), 
-        addLog
-      );
-      if (advice) setWhisper(advice);
-    } catch (e) {
-      console.warn("Whisper failed", e);
-    } finally {
-      setIsWhispering(false);
-    }
-  }, [bible, meta, chapters, sync, isWhispering, addLog, metaDispatch]);
-
-  const handleTextChange = useCallback(() => {
-    if (!textareaRef.current || !activeChapterId) return;
-    const currentVal = textareaRef.current.value;
-    setWordCount(currentVal.length);
-    
-    if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
-    syncTimeoutRef.current = window.setTimeout(() => {
-      lastSyncedContent.current = currentVal;
-      projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content: currentVal });
-      saveChapterContent(activeChapterId, currentVal);
-    }, 1000);
-
-    if (whisperTimeoutRef.current) window.clearTimeout(whisperTimeoutRef.current);
-    whisperTimeoutRef.current = window.setTimeout(() => triggerWhisper(currentVal), 15000);
-  }, [activeChapterId, projectDispatch, triggerWhisper]);
 
   const toggleBeat = useCallback((id: string) => {
     setCompletedBeats(prev => {
@@ -119,7 +64,7 @@ const WriterView: React.FC = () => {
     if (isCopilotLoading || !currentVal.trim()) return;
     setIsCopilotLoading(true);
     try {
-      const suggestions = await suggestNextSentence(currentVal, { bible, chapters, title: projectTitle, meta } as any, (usage: any) => metaDispatch({ type: 'TRACK_USAGE', payload: usage }), addLog);
+      const suggestions = await suggestNextSentence(currentVal, { bible, chapters, title: projectTitle, meta } as any, (usage: any) => metaDispatch(Actions.trackUsage(usage)), addLog);
       setCopilotSuggestions(suggestions);
     } catch (e) {
       addLog('error', 'Writer', '続きの提案に失敗しました。');
@@ -157,9 +102,8 @@ const WriterView: React.FC = () => {
         }
       }
 
-      lastSyncedContent.current = fullDraft;
-      projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapter.id, content: fullDraft });
-      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { status: 'Drafting' } });
+      projectDispatch(Actions.setChapterContent(activeChapter.id, fullDraft));
+      projectDispatch(Actions.updateChapter(activeChapter.id, { status: 'Drafting' }));
       saveChapterContent(activeChapter.id, fullDraft);
       addLog('success', 'Writer', '物語の紡ぎが完了しました。');
     } catch (e: any) { 
@@ -179,7 +123,7 @@ const WriterView: React.FC = () => {
       const audioBuffer = await generateSpeech(
         selection, 
         'Zephyr', 
-        (u: any) => metaDispatch({ type: 'TRACK_USAGE', payload: u }), 
+        (u: any) => metaDispatch(Actions.trackUsage(u)), 
         addLog
       );
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -227,7 +171,7 @@ const WriterView: React.FC = () => {
           <div className="flex gap-2">
             <button onClick={() => {
               const id = crypto.randomUUID();
-              projectDispatch({ type: 'ADD_CHAPTER', payload: { id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [], updatedAt: Date.now() } });
+              projectDispatch(Actions.addChapter({ id, title: '新章', summary: '', content: '', beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, stateDeltas: [], updatedAt: Date.now() }));
               setActiveChapterId(id);
               setShowManuscriptMobile(false);
             }} className="p-2 bg-stone-800 hover:bg-orange-600 text-orange-400 hover:text-white rounded-xl transition-all shadow-lg active:scale-90"><Plus size={16}/></button>
@@ -255,7 +199,7 @@ const WriterView: React.FC = () => {
            <div className="flex items-center gap-4 md:gap-8 min-w-0">
               <button onClick={() => setShowManuscriptMobile(true)} className="md:hidden p-2 text-orange-400"><Menu size={20}/></button>
               <div className="flex flex-col">
-                <input defaultValue={activeChapter?.title} key={`title-${activeChapter?.id}`} onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter!.id, updates: { title: e.target.value } })} className="bg-transparent text-white font-display font-black italic text-xl md:text-2xl outline-none focus:text-orange-400 transition-all min-w-[150px] md:min-w-[300px] truncate" />
+                <input defaultValue={activeChapter?.title} key={`title-${activeChapter?.id}`} onChange={e => projectDispatch(Actions.updateChapter(activeChapter!.id, { title: e.target.value }))} className="bg-transparent text-white font-display font-black italic text-xl md:text-2xl outline-none focus:text-orange-400 transition-all min-w-[150px] md:min-w-[300px] truncate" />
                 <span className="text-[9px] font-mono text-stone-500 tracking-widest uppercase">{wordCount.toLocaleString()} 文字</span>
               </div>
            </div>
@@ -280,7 +224,7 @@ const WriterView: React.FC = () => {
         </header>
 
         <div className="flex-1 flex overflow-hidden relative">
-          <main className={`flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative paper-texture transition-colors duration-1000 ${isZenMode ? 'bg-[#100e0c]' : 'bg-stone-950/20'}`} ref={scrollRef}>
+          <main className={`flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative paper-texture transition-colors duration-1000 ${isZenMode ? 'bg-[#100e0c]' : 'bg-stone-950/20'}`} >
             <div className={`max-w-5xl mx-auto px-6 md:px-24 py-12 md:py-32 min-h-full flex flex-col items-center ${isVertical ? 'writing-vertical' : ''}`}>
               <textarea ref={textareaRef} className={`w-full bg-transparent text-stone-200 prose-literary outline-none resize-none min-h-[70vh] caret-orange-500 focus-ring rounded-xl p-4 transition-all ${isVertical ? 'leading-[3] tracking-[0.2em]' : ''}`} onInput={handleTextChange} style={{ fontSize: `${fontSize}px` }} placeholder="物語の続きをここに..." />
               <div className="h-48 md:h-96 shrink-0" />
@@ -311,7 +255,7 @@ const WriterView: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:gap-4">
                       {copilotSuggestions.map((text, idx) => (
-                        <button key={idx} onClick={() => { const currentVal = textareaRef.current?.value || ""; const newText = currentVal + (currentVal.endsWith(' ') || currentVal.endsWith('\n') ? '' : ' ') + text; if (textareaRef.current) textareaRef.current.value = newText; lastSyncedContent.current = newText; setWordCount(newText.length); projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapter!.id, content: newText }); saveChapterContent(activeChapter!.id, newText); setCopilotSuggestions([]); }} className="w-full text-left p-4 md:p-6 bg-stone-900/60 hover:bg-orange-600/20 border border-white/5 hover:border-orange-500/40 rounded-[1.5rem] md:rounded-[2rem] text-xs md:text-sm font-serif-bold text-stone-300 hover:text-white transition-all group">
+                        <button key={idx} onClick={() => { const currentVal = textareaRef.current?.value || ""; const newText = currentVal + (currentVal.endsWith(' ') || currentVal.endsWith('\n') ? '' : ' ') + text; if (textareaRef.current) textareaRef.current.value = newText; setWordCount(newText.length); projectDispatch(Actions.setChapterContent(activeChapter!.id, newText)); saveChapterContent(activeChapter!.id, newText); setCopilotSuggestions([]); }} className="w-full text-left p-4 md:p-6 bg-stone-900/60 hover:bg-orange-600/20 border border-white/5 hover:border-orange-500/40 rounded-[1.5rem] md:rounded-[2rem] text-xs md:text-sm font-serif-bold text-stone-300 hover:text-white transition-all group">
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity mr-2 text-orange-400">»</span>{text}
                         </button>
                       ))}
@@ -325,7 +269,7 @@ const WriterView: React.FC = () => {
                <button onClick={handleSuggest} disabled={isCopilotLoading} className="p-3 md:p-4 bg-stone-800 text-orange-400 hover:bg-orange-600 hover:text-white rounded-full md:rounded-2xl transition-all disabled:opacity-50 active:scale-95 group relative">{isCopilotLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}</button>
                <button onClick={handleGenDraft} disabled={isProcessing} className="flex items-center gap-2 md:gap-4 px-5 md:px-8 py-3 md:py-5 bg-orange-600 text-white rounded-full md:rounded-[1.5rem] font-black text-[10px] md:text-[12px] uppercase tracking-[0.2em] hover:bg-orange-500 transition-all shadow-2xl active:scale-95 disabled:opacity-50">{isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Pen size={16} />}AI執筆</button>
                <div className="w-px h-8 md:h-10 bg-white/10 mx-1 md:mx-2" />
-               <button onClick={() => uiDispatch({ type: 'SET_VIEW', payload: ViewMode.PLOTTER })} className="p-3 md:p-4 text-stone-500 hover:text-white transition-colors"><MessageCircle size={20} /></button>
+               <button onClick={() => uiDispatch(Actions.setView(ViewMode.PLOTTER))} className="p-3 md:p-4 text-stone-500 hover:text-white transition-colors"><MessageCircle size={20} /></button>
             </div>
           </main>
 
@@ -334,19 +278,19 @@ const WriterView: React.FC = () => {
                <div className="flex md:hidden justify-end"><button onClick={() => setShowPlanner(false)} className="p-2 text-stone-500"><X size={24}/></button></div>
                <section className="space-y-4 md:space-y-5">
                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><BookOpen size={16} className="text-orange-400" /><span className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Synopsis</span></div><button className="text-stone-700 hover:text-orange-400 transition-colors"><RotateCcw size={14}/></button></div>
-                 <textarea defaultValue={activeChapter.summary} key={`summary-${activeChapter.id}`} onChange={e => projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { summary: e.target.value } })} className="w-full bg-stone-950/50 border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-6 text-[12px] md:text-[13px] h-40 md:h-44 outline-none font-serif-bold resize-none text-stone-300 focus:border-orange-500/30 transition-all leading-relaxed shadow-inner" placeholder="この章のあらすじを記す..." />
+                 <textarea defaultValue={activeChapter.summary} key={`summary-${activeChapter.id}`} onChange={e => projectDispatch(Actions.updateChapter(activeChapter.id, { summary: e.target.value }))} className="w-full bg-stone-950/50 border border-white/5 rounded-2xl md:rounded-3xl p-5 md:p-6 text-[12px] md:text-[13px] h-40 md:h-44 outline-none font-serif-bold resize-none text-stone-300 focus:border-orange-500/30 transition-all leading-relaxed shadow-inner" placeholder="この章のあらすじを記す..." />
                </section>
                <section className="space-y-4 md:space-y-6">
                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Feather size={16} className="text-orange-400" /><span className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Plot Beats</span></div><span className="text-[9px] font-mono text-stone-600">{completedBeats.size} / {(activeChapter.beats || []).length}</span></div>
                  <div className="space-y-3 md:space-y-4">
-                    {(activeChapter.beats || []).map((beat, i) => (
+                    {(activeChapter.beats || []).map((beat) => (
                       <BeatItem key={beat.id} beat={beat} isCompleted={completedBeats.has(beat.id)} onToggle={toggleBeat} />
                     ))}
                  </div>
                </section>
                <section className="mt-auto space-y-4 md:space-y-5 pt-8 pb-10 md:pb-0">
                  <div className="p-4 md:p-6 bg-orange-400/5 rounded-2xl md:rounded-3xl border border-orange-400/10 space-y-2 md:space-y-3"><div className="flex items-center gap-3 text-orange-400"><Info size={14}/><span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest">Architect Tip</span></div><p className="text-[10px] md:text-[11px] text-stone-500 font-serif-bold leading-relaxed italic">「フルオート構築」を実行すると、あらすじから展開案を自動生成し、本文の初稿まで一気通貫で設計士が仕上げます。</p></div>
-                 <button onClick={async () => { if (isProcessing) return; setIsProcessing(true); addLog('info', 'Writer', '章全体を再構築中...'); try { const res = await generateFullChapterPackage({ bible, chapters, meta } as any, activeChapter, (u:any) => metaDispatch({type:'TRACK_USAGE',payload:u}), addLog); if (textareaRef.current) textareaRef.current.value = res.draft; lastSyncedContent.current = res.draft; setWordCount(res.draft.length); projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapter.id, content: res.draft }); projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapter.id, updates: { strategy: res.strategy, beats: res.beats, status: 'Polished' } }); saveChapterContent(activeChapter.id, res.draft); addLog('success', 'Writer', '物語の構造化が完了しました。'); if (window.innerWidth < 1024) setShowPlanner(false); } catch(e) { addLog('error','Writer','構築に失敗しました。'); } finally { setIsProcessing(false); } }} disabled={isProcessing} className="w-full py-5 md:py-7 bg-gradient-to-br from-orange-600 to-rose-700 text-white rounded-[1.5rem] md:rounded-[2rem] text-[10px] md:text-[12px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 md:gap-4 shadow-2xl active:scale-95 hover:brightness-110 transition-all">{isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}フルオート構築</button>
+                 <button onClick={async () => { if (isProcessing || !activeChapter) return; setIsProcessing(true); addLog('info', 'Writer', '章全体を再構築中...'); try { const res = await generateFullChapterPackage({ bible, chapters, meta } as any, activeChapter, (u:any) => metaDispatch(Actions.trackUsage(u)), addLog); if (textareaRef.current) textareaRef.current.value = res.draft; setWordCount(res.draft.length); projectDispatch(Actions.setChapterContent(activeChapter.id, res.draft)); projectDispatch(Actions.updateChapter(activeChapter.id, { strategy: { ...activeChapter.strategy, ...res.strategy }, beats: res.beats, status: 'Polished' })); saveChapterContent(activeChapter.id, res.draft); addLog('success', 'Writer', '物語の構造化が完了しました。'); if (window.innerWidth < 1024) setShowPlanner(false); } catch(e) { addLog('error','Writer','構築に失敗しました。'); } finally { setIsProcessing(false); } }} disabled={isProcessing} className="w-full py-5 md:py-7 bg-gradient-to-br from-orange-600 to-rose-700 text-white rounded-[1.5rem] md:rounded-[2rem] text-[10px] md:text-[12px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 md:gap-4 shadow-2xl active:scale-95 hover:brightness-110 transition-all">{isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}フルオート構築</button>
                </section>
             </aside>
           )}

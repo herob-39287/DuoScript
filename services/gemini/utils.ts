@@ -1,4 +1,6 @@
-import { StoryProject, AiModel } from "../../types";
+
+import { StoryProject, AiModel, UsageCallback, LogCallback, TaskComplexity, ModelRequestConfig } from "../../types";
+import { GenerateContentResponse } from "@google/genai";
 
 export class DuoScriptError extends Error {
   constructor(
@@ -65,7 +67,7 @@ export function repairTruncatedJson(text: string): string {
 export function safeJsonParse<T>(
   text: string | undefined, 
   defaultValue: T, 
-  logCallback?: (type: string, source: string, msg: string, detail?: string) => void
+  logCallback?: LogCallback
 ): T {
   if (!text || text === "undefined" || text.trim() === "") return defaultValue;
   
@@ -82,7 +84,7 @@ export function safeJsonParse<T>(
       return cleanAndParse(repaired);
     } catch (e2) {
       if (logCallback) {
-        logCallback('error', 'NeuralSync', "構造化データの解析に失敗しました。デフォルト値を使用します。", (e2 as Error).message);
+        logCallback('error', 'NeuralSync', "構造化データの解析に失敗しました。デフォルトの安全な値を返します。", (e2 as Error).message);
       }
       return defaultValue;
     }
@@ -95,7 +97,7 @@ export function safeJsonParse<T>(
 export async function withRetry<T>(
   fn: () => Promise<T>, 
   source: string, 
-  logCallback?: any, 
+  logCallback?: LogCallback, 
   retries = 3, 
   baseDelay = 2000
 ): Promise<T> {
@@ -125,7 +127,7 @@ export async function withRetry<T>(
   throw new Error("Maximum retries reached");
 }
 
-export async function handleGeminiError<T>(fn: () => Promise<T>, source: string, logCallback?: any): Promise<T> {
+export async function handleGeminiError<T>(fn: () => Promise<T>, source: string, logCallback?: LogCallback): Promise<T> {
   try {
     return await withRetry(fn, source, logCallback);
   } catch (error: any) {
@@ -133,7 +135,7 @@ export async function handleGeminiError<T>(fn: () => Promise<T>, source: string,
     const detail = error.message || "No details available";
     
     if (logCallback) {
-      logCallback('error', source, friendlyMsg, detail);
+      logCallback('error', source as any, friendlyMsg, detail);
     }
     
     throw new DuoScriptError(friendlyMsg, detail, source, error.status);
@@ -141,10 +143,10 @@ export async function handleGeminiError<T>(fn: () => Promise<T>, source: string,
 }
 
 export const trackUsage = (
-  response: any, 
+  response: GenerateContentResponse, 
   model: string, 
   source: string, 
-  callback?: (usage: { input: number; output: number; model: string; source: string }) => void
+  callback?: UsageCallback
 ) => {
   if (response && response.usageMetadata && callback) {
     callback({
@@ -187,19 +189,43 @@ ${recentChapters}
 };
 
 /**
- * Determines the appropriate thinking budget based on task complexity.
- * タスクの種類と入力コンテキストの大きさに応じて予算を動的に計算します。
+ * タスクの種類と複雑度に基づいて、最適なモデルと設定を解決します。
  */
-export const determineThinkingBudget = (model: string, taskComplexity: 'low' | 'medium' | 'high' | 'critical'): number => {
-  if (model !== AiModel.REASONING) return 0;
-  
-  const MAX_PRO = 32768;
-  const budgets = {
-    low: 4000,      // 軽い推敲、単純なQ&A
-    medium: 10000,  // キャラクター設定の深掘り、短文生成
-    high: 20000,    // 複雑なプロット分岐、長文生成
-    critical: MAX_PRO // 章全体の再構築、不整合スキャン
-  };
-  
-  return budgets[taskComplexity];
+export const resolveModelConfig = (
+  task: 'CHAT' | 'DRAFT' | 'SIM' | 'SCAN' | 'IMAGE' | 'TTS' | 'AUTO_GEN',
+  complexity: TaskComplexity = 'basic'
+): ModelRequestConfig => {
+  switch (task) {
+    case 'CHAT':
+      return {
+        model: AiModel.REASONING,
+        thinkingBudget: complexity === 'complex' ? 12000 : 4000
+      };
+    case 'DRAFT':
+      return {
+        model: complexity === 'creative' ? AiModel.REASONING : AiModel.FAST,
+        thinkingBudget: complexity === 'creative' ? 24000 : 0
+      };
+    case 'SIM':
+      return {
+        model: AiModel.REASONING,
+        thinkingBudget: 20000
+      };
+    case 'SCAN':
+      return {
+        model: AiModel.REASONING,
+        thinkingBudget: 32768
+      };
+    case 'IMAGE':
+      return { model: AiModel.IMAGE };
+    case 'TTS':
+      return { model: AiModel.TTS };
+    case 'AUTO_GEN':
+      return {
+        model: AiModel.FAST,
+        thinkingBudget: 0
+      };
+    default:
+      return { model: AiModel.FAST };
+  }
 };

@@ -1,5 +1,5 @@
 
-import { StoryProject, SyncOperation, HistoryEntry, WorldBible, Character, StoryProjectMetadata, SyncState, ChapterLog } from '../types';
+import { StoryProject, SyncOperation, HistoryEntry, WorldBible, Character, StoryProjectMetadata, SyncState, ChapterLog, ToneVector } from '../types';
 
 /**
  * Strategy interface for handling different types of synchronization operations.
@@ -16,12 +16,27 @@ interface SyncStrategy {
 
 /**
  * Strategy for scalar fields like 'setting', 'tone', 'laws', and 'grandArc'.
+ * Support for 'tone' now updates both string representation and toneVector if provided.
  */
 class ScalarStrategy implements SyncStrategy {
   apply(bible: WorldBible, op: SyncOperation) {
     const nextBible = { ...bible };
     const oldVal = (nextBible as any)[op.path];
     const rawValue = op.value;
+    
+    // Support for complex tone update (string + vector)
+    if (op.path === 'tone' && typeof rawValue === 'object' && rawValue !== null) {
+      if (rawValue.text) nextBible.tone = rawValue.text;
+      if (rawValue.vector) nextBible.toneVector = { ...nextBible.toneVector, ...rawValue.vector };
+      
+      return {
+        nextBible,
+        targetName: "TONE",
+        oldValue: { text: bible.tone, vector: bible.toneVector },
+        newValue: { text: nextBible.tone, vector: nextBible.toneVector }
+      };
+    }
+
     const newVal = (typeof rawValue === 'object' && rawValue !== null)
       ? (rawValue.content || rawValue.text || rawValue.value || JSON.stringify(rawValue))
       : rawValue;
@@ -37,7 +52,12 @@ class ScalarStrategy implements SyncStrategy {
   }
   revert(bible: WorldBible, history: HistoryEntry) {
     const nextBible = { ...bible };
-    (nextBible as any)[history.path] = history.oldValue;
+    if (history.path === 'tone' && typeof history.oldValue === 'object') {
+      nextBible.tone = history.oldValue.text;
+      nextBible.toneVector = history.oldValue.vector;
+    } else {
+      (nextBible as any)[history.path] = history.oldValue;
+    }
     return nextBible;
   }
 }
@@ -117,7 +137,6 @@ class CharacterStrategy implements SyncStrategy {
     if (history.opType === 'delete') {
       characters.push(history.oldValue);
     } else if (history.oldValue === null || history.opType === 'add') {
-      // 実際にはIDベースで削除
       const idx = characters.findIndex(c => c.name === history.targetName);
       if (idx !== -1) characters.splice(idx, 1);
     } else {
@@ -142,6 +161,7 @@ class CharacterStrategy implements SyncStrategy {
 
 /**
  * Strategy for generic collections like 'entries', 'foreshadowing', 'timeline'.
+ * Support for extended metadata merge in WorldEntry.
  */
 class CollectionStrategy implements SyncStrategy {
   apply(bible: WorldBible, op: SyncOperation) {
@@ -161,6 +181,23 @@ class CollectionStrategy implements SyncStrategy {
 
     if (idx === -1 && op.op !== 'delete') {
       const newItem = { id: crypto.randomUUID(), ...op.value };
+      
+      // Ensure specific structure for WorldEntry
+      if (op.path === 'entries') {
+        newItem.metadata = newItem.metadata || {};
+        newItem.linkedIds = newItem.linkedIds || [];
+        newItem.aliases = newItem.aliases || [];
+      }
+      // Ensure specific structure for Timeline
+      if (op.path === 'timeline') {
+        newItem.causalLinks = newItem.causalLinks || [];
+        newItem.involvedCharacterIds = newItem.involvedCharacterIds || [];
+      }
+      // Ensure specific structure for Foreshadowing
+      if (op.path === 'foreshadowing') {
+        newItem.milestones = newItem.milestones || [];
+      }
+
       if (!newItem.title && !newItem.event && !newItem.name && op.targetName) {
         if (op.path === 'timeline') newItem.event = op.targetName;
         else newItem.title = op.targetName;
@@ -178,9 +215,16 @@ class CollectionStrategy implements SyncStrategy {
         newVal = "DELETED";
       } else {
         if (op.field) {
-          oldVal = current[op.field];
-          newVal = op.value && typeof op.value === 'object' && op.value[op.field] !== undefined ? op.value[op.field] : op.value;
-          current[op.field] = newVal;
+          // Special handle for metadata/causalLinks/milestones
+          if (op.field === 'metadata' && typeof op.value === 'object') {
+            oldVal = { ...current.metadata };
+            current.metadata = { ...current.metadata, ...op.value };
+            newVal = { ...current.metadata };
+          } else {
+            oldVal = current[op.field];
+            newVal = op.value && typeof op.value === 'object' && op.value[op.field] !== undefined ? op.value[op.field] : op.value;
+            current[op.field] = newVal;
+          }
         } else {
           oldVal = { ...current };
           newVal = { ...current, ...op.value };
@@ -247,6 +291,8 @@ export const normalizeProject = (data: any): StoryProject => {
                 Array.isArray(data?.meta?.tokenUsage) ? data.meta.tokenUsage : []
   };
 
+  const defaultToneVector: ToneVector = { hope: 0.5, darkness: 0.5, tension: 0.5, logic: 0.8, magic: 0.2 };
+
   const bible: WorldBible = {
     version: data?.bible?.version || 1,
     setting: data?.bible?.setting || data?.setting || '',
@@ -254,6 +300,7 @@ export const normalizeProject = (data: any): StoryProject => {
     grandArc: data?.bible?.grandArc || data?.grandArc || '',
     themes: Array.isArray(data?.bible?.themes) ? data.bible.themes : [],
     tone: data?.bible?.tone || 'ニュートラル',
+    toneVector: data?.bible?.toneVector || defaultToneVector,
     characters: Array.isArray(data?.bible?.characters) ? data.bible.characters : [],
     timeline: Array.isArray(data?.bible?.timeline) ? data.bible.timeline : [],
     foreshadowing: Array.isArray(data?.bible?.foreshadowing) ? data.bible.foreshadowing : [],
@@ -288,6 +335,7 @@ export const normalizeProject = (data: any): StoryProject => {
              Array.isArray(data?.sync?.history) ? data.sync.history : []
   };
 
+  // Ensure robust normalization for nested objects
   bible.characters = bible.characters.map((c: any) => ({
     ...c,
     status: c.status || { 
@@ -295,6 +343,24 @@ export const normalizeProject = (data: any): StoryProject => {
       currentGoal: '', socialStanding: '', internalState: '平常' 
     },
     relationships: c.relationships || []
+  }));
+
+  bible.entries = bible.entries.map((e: any) => ({
+    ...e,
+    metadata: e.metadata || {},
+    linkedIds: e.linkedIds || [],
+    aliases: e.aliases || []
+  }));
+
+  bible.timeline = bible.timeline.map((t: any) => ({
+    ...t,
+    causalLinks: t.causalLinks || [],
+    involvedCharacterIds: t.involvedCharacterIds || []
+  }));
+
+  bible.foreshadowing = bible.foreshadowing.map((f: any) => ({
+    ...f,
+    milestones: f.milestones || []
   }));
 
   return { meta, bible, chapters, sync };
