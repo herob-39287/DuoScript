@@ -1,5 +1,5 @@
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
 interface Props {
@@ -16,8 +16,8 @@ interface State {
  * ErrorBoundary provides a fallback UI when a component tree crashes.
  * It catches JavaScript errors anywhere in their child component tree.
  */
-// Fix: Explicitly extend Component to resolve inheritance recognition issues
-class ErrorBoundary extends Component<Props, State> {
+// Explicitly extend React.Component to resolve inheritance recognition issues
+class ErrorBoundary extends React.Component<Props, State> {
   // Define initial state for the component
   public state: State = {
     hasError: false,
@@ -34,12 +34,13 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   // Lifecycle method called after an error is thrown
+  // Removed override as inheritance recognition issues were causing errors
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Fix: Access inherited props from Component base
+    // Access inherited props from Component base
     console.error(`Error in ${this.props.viewName}:`, error, errorInfo);
   }
 
-  // Fix: Use setState which is inherited from Component
+  // Use setState which is inherited from React.Component
   private handleReset = () => {
     this.setState({ hasError: false, error: null });
   };
@@ -63,7 +64,6 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-2xl font-display font-black text-white italic">回路の不具合</h2>
               <p className="text-sm text-stone-500 font-serif leading-relaxed">
-                {/* Fix: Property 'props' recognition */}
                 {this.props.viewName}の読み込み中に予期せぬエラーが発生しました。設計士の推論またはデータの整合性に一時的な問題がある可能性があります。
               </p>
             </div>
@@ -93,7 +93,6 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: Property 'props' recognition for children
     return this.props.children || null;
   }
 }

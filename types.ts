@@ -150,29 +150,6 @@ export interface StateDelta {
   timestamp: number;
 }
 
-// --- World Entry Metadata Extensions ---
-
-export interface GeoMetadata {
-  climate?: string;
-  neighbors?: string[];
-  resources?: string[];
-  cultureType?: string;
-  dangerLevel?: number; // 0-10
-}
-
-export interface MagicMetadata {
-  cost?: string;
-  difficulty?: string;
-  limitation?: string;
-  commonality?: string; // High, Medium, Low, Secret
-}
-
-export interface HistoryMetadata {
-  era?: string;
-  relevanceToCurrent?: string;
-  keyFigures?: string[];
-}
-
 export interface WorldEntry {
   id: string;
   category: 'History' | 'Culture' | 'Technology' | 'Magic' | 'Geography' | 'Lore' | 'Terminology';
@@ -185,17 +162,12 @@ export interface WorldEntry {
   isSecret: boolean; 
   tags: string[];
   linkedIds: string[]; 
-  // Extended Metadata
-  metadata: GeoMetadata | MagicMetadata | HistoryMetadata | Record<string, any>;
 }
 
-export interface ForeshadowingMilestone {
-  id: string;
-  type: 'Plant' | 'Progress' | 'Payoff';
-  description: string;
-  beatId?: string;
-  chapterId?: string;
-  isResolved: boolean;
+export interface ForeshadowingLink {
+  foreshadowingId: string;
+  action: 'Plant' | 'Progress' | 'Payoff';
+  note: string;
 }
 
 export interface TimelineEvent {
@@ -205,8 +177,7 @@ export interface TimelineEvent {
   description?: string;
   involvedCharacterIds: string[];
   importance: 'Minor' | 'Major' | 'Climax';
-  causalLinks: string[]; // IDs of preceding events that triggered this
-  foreshadowingLinks: string[]; // IDs of foreshadowing items related to this
+  foreshadowingLinks: ForeshadowingLink[];
 }
 
 export interface Foreshadowing {
@@ -215,15 +186,33 @@ export interface Foreshadowing {
   description: string;
   status: 'Open' | 'Resolved' | 'Stale';
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
-  milestones: ForeshadowingMilestone[];
 }
 
-export interface ToneVector {
-  hope: number; // 0 to 1
-  darkness: number;
-  tension: number;
-  logic: number;
-  magic: number;
+export interface ChapterStrategy {
+  milestones: string[];
+  forbiddenResolutions: string[];
+  characterArcProgress: string;
+  pacing: string;
+  povCharacterId?: string; 
+}
+
+export interface PlotBeat {
+  id: string;
+  text: string;
+}
+
+export interface ChapterLog {
+  id: string;
+  title: string;
+  summary: string;
+  content?: string; 
+  beats: PlotBeat[];
+  strategy: ChapterStrategy;
+  status: 'Idea' | 'Beats' | 'Drafting' | 'Polished';
+  wordCount: number;
+  stateDeltas: StateDelta[]; 
+  postStateCache?: { [characterId: string]: CharacterStatus }; 
+  updatedAt: number; 
 }
 
 export interface WorldBible {
@@ -233,7 +222,6 @@ export interface WorldBible {
   grandArc: string; 
   themes: string[]; 
   tone: string;     
-  toneVector: ToneVector; // Quantified tone
   characters: Character[]; 
   timeline: TimelineEvent[]; 
   foreshadowing: Foreshadowing[]; 
@@ -394,31 +382,4 @@ export interface ProjectGenerationResponse {
     setting: string;
     grandArc: string;
   };
-}
-
-export interface PlotBeat {
-  id: string;
-  text: string;
-}
-
-export interface ChapterStrategy {
-  milestones: string[];
-  forbiddenResolutions: string[];
-  characterArcProgress: string;
-  pacing: string;
-  povCharacterId?: string; 
-}
-
-export interface ChapterLog {
-  id: string;
-  title: string;
-  summary: string;
-  content?: string; 
-  beats: PlotBeat[];
-  strategy: ChapterStrategy;
-  status: 'Idea' | 'Beats' | 'Drafting' | 'Polished';
-  wordCount: number;
-  stateDeltas: StateDelta[]; 
-  postStateCache?: { [characterId: string]: CharacterStatus }; 
-  updatedAt: number; 
 }
