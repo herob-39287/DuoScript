@@ -1,5 +1,4 @@
-
-import { StoryProject, SyncOperation, HistoryEntry, WorldBible, Character, StoryProjectMetadata, SyncState, ChapterLog } from '../types';
+import { StoryProject, SyncOperation, HistoryEntry, WorldBible, Character, StoryProjectMetadata, SyncState, ChapterLog, CharacterStatus } from '../types';
 
 /**
  * Strategy interface for handling different types of synchronization operations.
@@ -13,19 +12,6 @@ interface SyncStrategy {
   };
   revert(bible: WorldBible, history: HistoryEntry): WorldBible;
 }
-
-const normalizeSyncOperation = (op: SyncOperation): SyncOperation => {
-  if (!op.field || !op.value || typeof op.value !== 'object' || Array.isArray(op.value)) {
-    return op;
-  }
-
-  const valueKeys = Object.keys(op.value);
-  if (valueKeys.length <= 1) {
-    return op;
-  }
-
-  return { ...op, field: undefined };
-};
 
 /**
  * Strategy for scalar fields like 'setting', 'tone', 'laws', and 'grandArc'.
@@ -59,6 +45,8 @@ class ScalarStrategy implements SyncStrategy {
  * Strategy for the 'characters' collection, supporting nested status updates.
  */
 class CharacterStrategy implements SyncStrategy {
+  private statusFields = ['location', 'health', 'inventory', 'knowledge', 'currentGoal', 'socialStanding', 'internalState'];
+
   apply(bible: WorldBible, op: SyncOperation) {
     const nextBible = { ...bible };
     const characters = [...(nextBible.characters || [])];
@@ -71,27 +59,49 @@ class CharacterStrategy implements SyncStrategy {
       idx = characters.findIndex(c => c.name.toLowerCase().trim() === op.targetName?.toLowerCase().trim());
     }
 
+    // AIからの入力を整理
+    const incomingValue = (typeof op.value === 'object' && op.value !== null) ? op.value : { content: op.value };
+    
+    // ネストされたステータスフィールドの抽出
+    const statusUpdates: Partial<CharacterStatus> = {};
+    const mainUpdates: any = {};
+    
+    Object.keys(incomingValue).forEach(key => {
+      if (this.statusFields.includes(key)) {
+        (statusUpdates as any)[key] = incomingValue[key];
+      } else {
+        mainUpdates[key] = incomingValue[key];
+      }
+    });
+
     if (idx === -1 && op.op !== 'delete') {
+      // 新規作成
       const newChar: Character = {
         id: crypto.randomUUID(),
-        name: op.targetName || "名もなき登場人物",
-        role: 'Supporting',
-        description: '',
-        traits: [],
-        motivation: '',
-        flaw: '',
-        arc: '',
+        name: mainUpdates.name || op.targetName || "名もなき登場人物",
+        role: mainUpdates.role || 'Supporting',
+        description: mainUpdates.description || '',
+        traits: Array.isArray(mainUpdates.traits) ? mainUpdates.traits : [],
+        motivation: mainUpdates.motivation || '',
+        flaw: mainUpdates.flaw || '',
+        arc: mainUpdates.arc || '',
         relationships: [],
         status: {
-          location: '不明', health: '良好', inventory: [], knowledge: [],
-          currentGoal: '', socialStanding: '', internalState: '平常'
+          location: statusUpdates.location || '不明',
+          health: statusUpdates.health || '良好',
+          inventory: statusUpdates.inventory || [],
+          knowledge: statusUpdates.knowledge || [],
+          currentGoal: statusUpdates.currentGoal || '',
+          socialStanding: statusUpdates.socialStanding || '',
+          internalState: statusUpdates.internalState || '平常'
         },
-        ...op.value
+        ...mainUpdates
       };
       characters.push(newChar);
       targetName = newChar.name;
       newVal = newChar;
     } else if (idx !== -1) {
+      // 更新
       const current = { ...characters[idx] };
       targetName = current.name;
 
@@ -100,21 +110,23 @@ class CharacterStrategy implements SyncStrategy {
         characters.splice(idx, 1);
         newVal = "DELETED";
       } else {
+        oldVal = { ...current };
+        
+        // フィールド指定がある場合（レガシー互換）
         if (op.field) {
-          const statusFields = ['location', 'health', 'currentGoal', 'internalState', 'socialStanding', 'inventory', 'knowledge'];
-          if (statusFields.includes(op.field)) {
-            oldVal = current.status?.[op.field as keyof typeof current.status];
-            newVal = op.value && typeof op.value === 'object' && op.value[op.field] !== undefined ? op.value[op.field] : op.value;
-            current.status = { ...current.status, [op.field]: newVal };
+          if (this.statusFields.includes(op.field)) {
+            current.status = { ...current.status, [op.field]: op.value };
           } else {
-            oldVal = (current as any)[op.field];
-            newVal = op.value && typeof op.value === 'object' && op.value[op.field] !== undefined ? op.value[op.field] : op.value;
-            (current as any)[op.field] = newVal;
+            (current as any)[op.field] = op.value;
           }
         } else {
-          oldVal = { ...current };
-          newVal = { ...current, ...op.value };
+          // オブジェクトマージ
+          Object.assign(current, mainUpdates);
+          // Fix: Ensure current.status is correctly assigned as CharacterStatus by explicitly casting the merged object
+          current.status = { ...current.status, ...statusUpdates } as CharacterStatus;
         }
+        
+        newVal = current;
         characters[idx] = newVal;
       }
     }
@@ -130,22 +142,12 @@ class CharacterStrategy implements SyncStrategy {
     if (history.opType === 'delete') {
       characters.push(history.oldValue);
     } else if (history.oldValue === null || history.opType === 'add') {
-      // 実際にはIDベースで削除
       const idx = characters.findIndex(c => c.name === history.targetName);
       if (idx !== -1) characters.splice(idx, 1);
     } else {
       const idx = characters.findIndex(c => c.name === history.targetName);
       if (idx !== -1) {
-        if (history.field) {
-           const statusFields = ['location', 'health', 'currentGoal', 'internalState', 'socialStanding', 'inventory', 'knowledge'];
-           if (statusFields.includes(history.field)) {
-             characters[idx].status = { ...characters[idx].status, [history.field]: history.oldValue };
-           } else {
-             (characters[idx] as any)[history.field] = history.oldValue;
-           }
-        } else {
-           characters[idx] = history.oldValue;
-        }
+        characters[idx] = history.oldValue;
       }
     }
     nextBible.characters = characters;
@@ -172,8 +174,10 @@ class CollectionStrategy implements SyncStrategy {
       });
     }
 
+    const incomingValue = (typeof op.value === 'object' && op.value !== null) ? op.value : { content: op.value };
+
     if (idx === -1 && op.op !== 'delete') {
-      const newItem = { id: crypto.randomUUID(), ...op.value };
+      const newItem = { id: crypto.randomUUID(), ...incomingValue };
       if (!newItem.title && !newItem.event && !newItem.name && op.targetName) {
         if (op.path === 'timeline') newItem.event = op.targetName;
         else newItem.title = op.targetName;
@@ -190,14 +194,13 @@ class CollectionStrategy implements SyncStrategy {
         collection.splice(idx, 1);
         newVal = "DELETED";
       } else {
+        oldVal = { ...current };
         if (op.field) {
-          oldVal = current[op.field];
-          newVal = op.value && typeof op.value === 'object' && op.value[op.field] !== undefined ? op.value[op.field] : op.value;
-          current[op.field] = newVal;
+          current[op.field] = op.value;
         } else {
-          oldVal = { ...current };
-          newVal = { ...current, ...op.value };
+          Object.assign(current, incomingValue);
         }
+        newVal = current;
         collection[idx] = newVal;
       }
     }
@@ -218,11 +221,7 @@ class CollectionStrategy implements SyncStrategy {
     } else {
       const idx = collection.findIndex((i: any) => (i.title || i.event || i.name) === history.targetName);
       if (idx !== -1) {
-        if (history.field) {
-           collection[idx][history.field] = history.oldValue;
-        } else {
-           collection[idx] = history.oldValue;
-        }
+        collection[idx] = history.oldValue;
       }
     }
     (nextBible as any)[history.path] = collection;
@@ -322,28 +321,27 @@ export const normalizeProject = (data: any): StoryProject => {
  * Applies a SyncOperation and returns the calculated next state components.
  */
 export const calculateSyncResult = (bible: WorldBible, op: SyncOperation): { nextBible: WorldBible; historyEntry: HistoryEntry } => {
-  const normalizedOp = normalizeSyncOperation(op);
-  const strategy = STRATEGY_MAP[normalizedOp.path];
+  const strategy = STRATEGY_MAP[op.path];
   
   if (!strategy) {
-    throw new Error(`No strategy found for path: ${normalizedOp.path}`);
+    throw new Error(`No strategy found for path: ${op.path}`);
   }
 
-  const { nextBible, targetName, oldValue, newValue } = strategy.apply(bible, normalizedOp);
+  const { nextBible, targetName, oldValue, newValue } = strategy.apply(bible, op);
   
   nextBible.version += 1;
 
   const historyEntry: HistoryEntry = {
     id: crypto.randomUUID(),
     timestamp: Date.now(),
-    operationId: normalizedOp.id,
-    opType: normalizedOp.op,
-    path: normalizedOp.path,
+    operationId: op.id,
+    opType: op.op,
+    path: op.path,
     targetName,
     oldValue,
     newValue,
-    rationale: normalizedOp.rationale,
-    evidence: normalizedOp.evidence || "NeuralSync",
+    rationale: op.rationale,
+    evidence: op.evidence || "NeuralSync",
     versionAtCommit: nextBible.version
   };
 

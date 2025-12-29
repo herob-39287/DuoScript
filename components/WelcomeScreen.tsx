@@ -98,7 +98,8 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
                     <BookOpen size={18}/>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-display font-black text-base md:text-lg text-stone-200 italic truncate">{existingProject.title}</div>
+                    {/* Fix: Access title from meta property of StoryProject */}
+                    <div className="font-display font-black text-base md:text-lg text-stone-200 italic truncate">{existingProject.meta.title}</div>
                     <div className="text-[8px] md:text-[9px] font-black text-stone-600 uppercase tracking-widest mt-0.5 truncate">執筆を再開 (V{existingProject.bible.version})</div>
                   </div>
                 </div>

@@ -20,16 +20,21 @@ export const syncOperationSchema = {
       type: Type.OBJECT, 
       properties: {
         name: { type: Type.STRING },
-        description: { type: Type.STRING },
+        description: { type: Type.STRING, description: "外見や役割の短い説明" },
+        personality: { type: Type.STRING, description: "性格の核心" },
+        motivation: { type: Type.STRING, description: "行動原理" },
+        flaw: { type: Type.STRING, description: "欠点" },
+        arc: { type: Type.STRING, description: "物語を通じた変化" },
+        traits: { type: Type.ARRAY, items: { type: Type.STRING }, description: "特徴タグ" },
         title: { type: Type.STRING },
         priority: { type: Type.STRING },
         status: { type: Type.STRING },
         text: { type: Type.STRING },
         content: { type: Type.STRING },
-        location: { type: Type.STRING },
+        location: { type: Type.STRING, description: "現在の居場所" },
         health: { type: Type.STRING },
-        internalState: { type: Type.STRING },
-        currentGoal: { type: Type.STRING }
+        internalState: { type: Type.STRING, description: "現在の心理状態・葛藤" },
+        currentGoal: { type: Type.STRING, description: "直近の目的" }
       }
     },
     rationale: { type: Type.STRING, description: "変更理由" },

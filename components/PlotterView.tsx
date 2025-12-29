@@ -1,4 +1,3 @@
-
 import { 
   Users, Globe, ArrowUpRight, Target, 
   Plus, Loader2, Menu, Anchor, History,
@@ -160,9 +159,11 @@ const PlotterView: React.FC = () => {
       const branch = await simulateBranch(nexusHypothesis, { meta, bible, sync } as any, usageCb, logCb);
       bibleDispatch(Actions.updateBible({ nexusBranches: [branch, ...(bible.nexusBranches || [])] }));
       setNexusHypothesis('');
-      addLog('success', 'Nexus', 'シミュレーション完了');
+      // Fix: Use 'Architect' source for logs as 'Nexus' is not a valid log source type
+      addLog('success', 'Architect', 'シミュレーション完了');
     } catch (e) {
-      addLog('error', 'Nexus', 'シミュレーションに失敗しました。');
+      // Fix: Use 'Architect' source for logs as 'Nexus' is not a valid log source type
+      addLog('error', 'Architect', 'シミュレーションに失敗しました。');
     } finally {
       setIsSimulating(false);
     }

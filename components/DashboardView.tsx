@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BibleIssue, SystemLog, ViewMode, Foreshadowing } from '../types';
 import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
 import { 
-  useMetadata, useBible, useBibleDispatch, useManuscript, 
+  useMetadata, useMetadataDispatch, useBible, useBibleDispatch, useManuscript, 
   useNotificationDispatch, useNotifications, useUIDispatch 
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
@@ -18,6 +18,7 @@ interface Props {
 
 const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const { title, tokenUsage } = useMetadata();
+  const metaDispatch = useMetadataDispatch();
   const bible = useBible();
   const bibleDispatch = useBibleDispatch();
   const chapters = useManuscript();
@@ -92,7 +93,8 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     setIsScanning(true);
     addLog('info', 'Architect', '物語設定の整合性をスキャン中...');
     try {
-      const issues = await analyzeBibleIntegrity({ bible } as any, (usage: any) => bibleDispatch(Actions.trackUsage(usage)), addLog);
+      // Fix: Use metaDispatch for tracking token usage as trackUsage returns MetaAction
+      const issues = await analyzeBibleIntegrity({ bible } as any, (usage: any) => metaDispatch(Actions.trackUsage(usage)), addLog);
       bibleDispatch(Actions.updateBible({ integrityIssues: issues }));
       if (issues.length === 0) addLog('success', 'Architect', '不整合は見つかりませんでした。完璧な理です。');
       else addLog('error', 'Architect', `${issues.length}件の潜在的な問題が発見されました。`);
@@ -108,7 +110,8 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     setIsSummarizing(true);
     addLog('info', 'Architect', 'コンテキスト・バッファを最適化中...');
     try {
-      const newSummary = await maintainSummaryBuffer({ bible } as any, (usage: any) => bibleDispatch(Actions.trackUsage(usage)), addLog);
+      // Fix: Use metaDispatch for tracking token usage as trackUsage returns MetaAction
+      const newSummary = await maintainSummaryBuffer({ bible } as any, (usage: any) => metaDispatch(Actions.trackUsage(usage)), addLog);
       bibleDispatch(Actions.updateBible({ summaryBuffer: newSummary, lastSummaryUpdate: Date.now() }));
       addLog('success', 'Architect', 'コンテキストが最新の状態に統合されました。');
     } catch (e: any) {
