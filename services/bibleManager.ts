@@ -14,6 +14,19 @@ interface SyncStrategy {
   revert(bible: WorldBible, history: HistoryEntry): WorldBible;
 }
 
+const normalizeSyncOperation = (op: SyncOperation): SyncOperation => {
+  if (!op.field || !op.value || typeof op.value !== 'object' || Array.isArray(op.value)) {
+    return op;
+  }
+
+  const valueKeys = Object.keys(op.value);
+  if (valueKeys.length <= 1) {
+    return op;
+  }
+
+  return { ...op, field: undefined };
+};
+
 /**
  * Strategy for scalar fields like 'setting', 'tone', 'laws', and 'grandArc'.
  */
@@ -309,27 +322,28 @@ export const normalizeProject = (data: any): StoryProject => {
  * Applies a SyncOperation and returns the calculated next state components.
  */
 export const calculateSyncResult = (bible: WorldBible, op: SyncOperation): { nextBible: WorldBible; historyEntry: HistoryEntry } => {
-  const strategy = STRATEGY_MAP[op.path];
+  const normalizedOp = normalizeSyncOperation(op);
+  const strategy = STRATEGY_MAP[normalizedOp.path];
   
   if (!strategy) {
-    throw new Error(`No strategy found for path: ${op.path}`);
+    throw new Error(`No strategy found for path: ${normalizedOp.path}`);
   }
 
-  const { nextBible, targetName, oldValue, newValue } = strategy.apply(bible, op);
+  const { nextBible, targetName, oldValue, newValue } = strategy.apply(bible, normalizedOp);
   
   nextBible.version += 1;
 
   const historyEntry: HistoryEntry = {
     id: crypto.randomUUID(),
     timestamp: Date.now(),
-    operationId: op.id,
-    opType: op.op,
-    path: op.path,
+    operationId: normalizedOp.id,
+    opType: normalizedOp.op,
+    path: normalizedOp.path,
     targetName,
     oldValue,
     newValue,
-    rationale: op.rationale,
-    evidence: op.evidence || "NeuralSync",
+    rationale: normalizedOp.rationale,
+    evidence: normalizedOp.evidence || "NeuralSync",
     versionAtCommit: nextBible.version
   };
 
