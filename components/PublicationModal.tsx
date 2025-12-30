@@ -1,27 +1,51 @@
 
-import React, { useState } from 'react';
-// Changed import source from '../App' to '../contexts/StoryContext' as these hooks are defined and exported there.
-import { useMetadata, useManuscript } from '../contexts/StoryContext';
-import { Copy, X, Check, BookOpen, FileJson, Eye, Settings2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useMetadata } from '../contexts/StoryContext';
+import { X, Check, BookOpen, FileJson, Eye, Settings2, Loader2 } from 'lucide-react';
+import { loadFullSnapshot, getHeadRev } from '../services/storageService';
+import { StoryProject } from '../types';
 
 interface Props {
     onClose: () => void;
 }
 
 const PublicationModal: React.FC<Props> = ({ onClose }) => {
-    const { title, author } = useMetadata();
-    // Corrected: useManuscript returns ChapterLog[] directly, not an object containing chapters.
-    const chapters = useManuscript();
+    const meta = useMetadata();
+    
     const [header, setHeader] = useState('');
     const [footer, setFooter] = useState('');
     const [copied, setCopied] = useState(false);
     const [mobileTab, setMobileTab] = useState<'settings' | 'preview'>('preview');
-    
-    const fullText = chapters.map((ch) => {
-        return `### ${ch.title}\n\n${ch.content}\n\n***\n`;
-    }).join('\n');
+    const [isPreparing, setIsPreparing] = useState(true);
+    const [exportData, setExportData] = useState<StoryProject | null>(null);
+    const [fullDraftContent, setFullDraftContent] = useState('');
 
-    const previewText = `${header}\n\n# ${title}\n著者: ${author}\n\n${fullText}\n\n${footer}`;
+    useEffect(() => {
+        const prepareExport = async () => {
+            setIsPreparing(true);
+            try {
+                // エクスポート開始時点での最新Revisionを特定し、固定する
+                const currentHead = await getHeadRev(meta.id);
+                // そのRevisionに含まれる全データを一貫したスナップショットとしてロード
+                const fullProject = await loadFullSnapshot(meta.id, currentHead);
+                
+                if (fullProject) {
+                    setExportData(fullProject);
+                    const draft = (fullProject.chapters || []).map((ch: any) => {
+                        return `### ${ch.title}\n\n${ch.content || ""}\n\n***\n`;
+                    }).join('\n');
+                    setFullDraftContent(draft);
+                }
+            } catch (e) {
+                console.error("Export preparation failed", e);
+            } finally {
+                setIsPreparing(false);
+            }
+        };
+        prepareExport();
+    }, [meta.id]);
+
+    const previewText = `${header}\n\n# ${exportData?.meta?.title || meta.title}\n著者: ${exportData?.meta?.author || meta.author}\n\n${fullDraftContent}\n\n${footer}`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(previewText);
@@ -29,12 +53,13 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const handleDownloadBackup = () => {
-        const project = { title, author, chapters }; // 簡略化したエクスポート
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(project, null, 2));
+    const handleDownloadFullBackup = async () => {
+        if (!exportData) return;
+        
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `${title}_backup.json`);
+        downloadAnchorNode.setAttribute("download", `DuoScript_${exportData.meta.title}_Rev${exportData.meta.headRev || 0}_${new Date().toISOString().split('T')[0]}.json`);
         document.body.appendChild(downloadAnchorNode);
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
@@ -66,7 +91,14 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
                 </div>
                 
                 {/* Content Area */}
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+                    {isPreparing && (
+                      <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-4">
+                        <Loader2 className="animate-spin text-orange-400" size={32} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-stone-400">スナップショットを編纂中...</span>
+                      </div>
+                    )}
+
                     {/* Settings Sidebar */}
                     <div className={`${mobileTab === 'settings' ? 'flex' : 'hidden md:flex'} w-full md:w-80 border-b md:border-b-0 md:border-r border-stone-800 p-6 space-y-6 overflow-y-auto bg-stone-900/20 shrink-0 custom-scrollbar`}>
                         <div className="space-y-5">
@@ -85,12 +117,14 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
 
                         <div className="space-y-4 pb-20 md:pb-0">
                             <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest">データバックアップ</h4>
-                            <button onClick={handleDownloadBackup} className="w-full py-4 bg-stone-800 hover:bg-orange-600 hover:text-white text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95">
-                                <FileJson size={14}/> プロジェクトを保存
+                            <button onClick={handleDownloadFullBackup} disabled={!exportData} className="w-full py-4 bg-stone-800 hover:bg-orange-600 hover:text-white text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40">
+                                <FileJson size={14}/> 完全なバックアップ (.json)
                             </button>
-                            <p className="text-[8px] text-stone-600 leading-relaxed font-black uppercase tracking-widest text-center px-4">
-                                JSON形式で全ての情報を出力します。
-                            </p>
+                            {exportData && (
+                              <p className="text-[8px] text-stone-600 leading-relaxed font-black uppercase tracking-widest text-center px-4">
+                                Revision: {exportData.meta.headRev} の全データをエクスポートします。
+                              </p>
+                            )}
                         </div>
                     </div>
                     
@@ -105,8 +139,8 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
                 {/* Footer Actions */}
                 <div className="fixed md:static bottom-0 inset-x-0 p-4 md:p-6 border-t border-stone-800 bg-stone-900/95 backdrop-blur-xl flex flex-row justify-end gap-3 md:gap-4 shrink-0 z-10 pb-safe">
                      <button onClick={onClose} className="hidden sm:block px-6 py-2 rounded-xl text-stone-500 hover:text-white font-bold text-sm transition-colors">閉じる</button>
-                     <button onClick={handleCopy} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-8 py-4 md:py-3 rounded-xl font-bold text-sm shadow-xl shadow-orange-900/20 transition-all active:scale-95">
-                         {copied ? <Check size={18}/> : <Copy size={18}/>}
+                     <button onClick={handleCopy} disabled={isPreparing} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-8 py-4 md:py-3 rounded-xl font-bold text-sm shadow-xl shadow-orange-900/20 transition-all active:scale-95 disabled:opacity-50">
+                         {copied ? <Check size={18}/> : <FileJson size={18}/>}
                          {copied ? "コピー完了" : "原稿をコピー"}
                      </button>
                 </div>

@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Upload, Loader2, ChevronRight, Rocket, Coffee, Feather, Book, BookOpen, FileJson, X } from 'lucide-react';
 import { generateRandomProject } from '../services/geminiService';
 import { StoryProject } from '../types';
 import { normalizeProject } from '../services/bibleManager';
+import { getAllProjects } from '../services/storageService';
 
 interface Props {
   onStart: (projectData: StoryProject) => void;
@@ -16,18 +18,23 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
   const [title, setTitle] = useState('');
   const [idea, setIdea] = useState('');
   const [autoTheme, setAutoTheme] = useState('');
-  const [existingProject, setExistingProject] = useState<StoryProject | null>(null);
+  const [projects, setProjects] = useState<StoryProject[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem('duoscript_project');
-    if (saved) {
+    const fetchProjects = async () => {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed && (parsed.id || parsed.title)) {
-          setExistingProject(normalizeProject(parsed));
+        const stored = await getAllProjects();
+        if (stored && stored.length > 0) {
+          setProjects(stored.map(p => normalizeProject(p)));
         }
-      } catch (e) {}
-    }
+      } catch (e) {
+        console.error("Failed to fetch project list", e);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
+    fetchProjects();
   }, []);
 
   const handleLaunchManual = () => {
@@ -61,7 +68,7 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (json && (json.title || json.bible || json.chapters)) {
+        if (json && (json.title || json.bible || json.chapters || json.meta)) {
           onStart(normalizeProject(json));
         } else {
           showAlert("読み込み失敗", "無効なプロジェクトファイルです。");
@@ -91,20 +98,26 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
         <div className="space-y-4">
           <div className="text-[9px] md:text-[10px] font-black uppercase text-stone-700 tracking-[0.4em] mb-2 text-center">続行または読み込み</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-            {existingProject ? (
-              <button onClick={() => onStart(existingProject)} className="p-5 md:p-6 bg-stone-800/40 border border-stone-700/50 rounded-2xl md:rounded-[1.5rem] flex items-center justify-between hover:bg-stone-800 transition-all shadow-xl group text-left">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-700 flex items-center justify-center text-orange-400 shrink-0">
-                    <BookOpen size={18}/>
+            {isLoadingProjects ? (
+              <div className="col-span-1 md:col-span-2 p-10 flex items-center justify-center text-stone-700 gap-3">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-[10px] uppercase font-black tracking-widest">書庫を確認中...</span>
+              </div>
+            ) : projects.length > 0 ? (
+              projects.map(project => (
+                <button key={project.meta.id} onClick={() => onStart(project)} className="p-5 md:p-6 bg-stone-800/40 border border-stone-700/50 rounded-2xl md:rounded-[1.5rem] flex items-center justify-between hover:bg-stone-800 transition-all shadow-xl group text-left">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-700 flex items-center justify-center text-orange-400 shrink-0">
+                      <BookOpen size={18}/>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-display font-black text-base md:text-lg text-stone-200 italic truncate">{project.meta.title}</div>
+                      <div className="text-[8px] md:text-[9px] font-black text-stone-600 uppercase tracking-widest mt-0.5 truncate">V{project.bible.version} / {new Date(project.meta.updatedAt).toLocaleDateString()}</div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    {/* Fix: Access title from meta property of StoryProject */}
-                    <div className="font-display font-black text-base md:text-lg text-stone-200 italic truncate">{existingProject.meta.title}</div>
-                    <div className="text-[8px] md:text-[9px] font-black text-stone-600 uppercase tracking-widest mt-0.5 truncate">執筆を再開 (V{existingProject.bible.version})</div>
-                  </div>
-                </div>
-                <ChevronRight size={18} className="text-stone-600 group-hover:text-orange-400 transition-colors shrink-0"/>
-              </button>
+                  <ChevronRight size={18} className="text-stone-600 group-hover:text-orange-400 transition-colors shrink-0"/>
+                </button>
+              ))
             ) : (
               <div className="p-5 border border-dashed border-stone-800 rounded-2xl md:rounded-[1.5rem] flex items-center justify-center text-stone-700 italic text-[10px] font-serif">
                 アーカイブされた物語はありません

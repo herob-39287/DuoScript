@@ -25,12 +25,31 @@ export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): St
       return action.payload;
     case 'UPDATE_META':
       return updateWithTimestamp(state, action.payload);
+    case 'UPDATE_PREFERENCES':
+      return {
+        ...state,
+        preferences: { ...state.preferences, ...action.payload },
+        updatedAt: Date.now()
+      };
     case 'TRACK_USAGE':
       const entry = { id: crypto.randomUUID(), timestamp: Date.now(), ...action.payload };
       return { 
         ...state, 
         tokenUsage: [entry, ...(state.tokenUsage || [])].slice(0, 500), 
         updatedAt: Date.now() 
+      };
+    case 'RECORD_VIOLATION':
+      return {
+        ...state,
+        violationCount: (state.violationCount || 0) + 1,
+        violationHistory: [action.payload, ...(state.violationHistory || [])].slice(0, 50),
+        updatedAt: Date.now()
+      };
+    case 'RESET_VIOLATIONS':
+      return {
+        ...state,
+        violationCount: 0,
+        updatedAt: Date.now()
       };
     default:
       return state;
@@ -57,29 +76,41 @@ export const bibleReducer = (state: WorldBible, action: BibleAction): WorldBible
 /**
  * Chapters Reducer
  */
-export const chaptersReducer = (state: ChapterLog[], action: ChapterAction): ChapterLog[] => {
+export const chaptersReducer = (state: ChapterLog[], action: ChapterAction | BibleAction): ChapterLog[] => {
   switch (action.type) {
     case 'LOAD_CHAPTERS':
       return action.payload;
     case 'UPDATE_CHAPTER':
-      return state.map(c => 
-        c.id === action.id 
-          ? { 
-              ...c, 
-              ...action.updates, 
-              updatedAt: Date.now(), 
-              wordCount: action.updates.content !== undefined ? action.updates.content.length : c.wordCount 
-            } 
-          : c
-      );
+      if (action.type === 'UPDATE_CHAPTER') {
+        return state.map(c => 
+          c.id === action.id 
+            ? { 
+                ...c, 
+                ...action.updates, 
+                updatedAt: Date.now(), 
+                wordCount: action.updates.content !== undefined ? action.updates.content.length : c.wordCount 
+              } 
+            : c
+        );
+      }
+      return state;
     case 'SET_CHAPTER_CONTENT':
-      return state.map(c => 
-        c.id === action.id ? { ...c, content: action.content, wordCount: action.content.length, updatedAt: Date.now() } : c
-      );
+      if (action.type === 'SET_CHAPTER_CONTENT') {
+        return state.map(c => 
+          c.id === action.id ? { ...c, content: action.content, wordCount: action.content.length, updatedAt: Date.now() } : c
+        );
+      }
+      return state;
     case 'ADD_CHAPTER':
-      return [...state, action.payload];
+      return action.type === 'ADD_CHAPTER' ? [...state, action.payload] : state;
     case 'REMOVE_CHAPTER':
-      return state.filter(c => c.id !== action.id);
+      return action.type === 'REMOVE_CHAPTER' ? state.filter(c => c.id !== action.id) : state;
+    case 'APPLY_SYNC_OP':
+    case 'UNDO_BIBLE':
+      if (action.type === 'APPLY_SYNC_OP' || action.type === 'UNDO_BIBLE') {
+        return action.payload.nextChapters || state;
+      }
+      return state;
     default:
       return state;
   }
@@ -97,8 +128,18 @@ export const syncReducer = (state: SyncState, action: SyncAction): SyncState => 
     case 'ADD_PENDING_OPS':
       const newOps = action.payload.filter(nop => !state.pendingChanges.some(sop => sop.id === nop.id));
       return update(state, { pendingChanges: [...state.pendingChanges, ...newOps] });
+    case 'UPDATE_PENDING_OP':
+      return update(state, { 
+        pendingChanges: state.pendingChanges.map(op => 
+          op.id === action.id ? { ...op, ...action.updates } : op
+        ) 
+      });
     case 'REMOVE_PENDING_OP':
       return update(state, { pendingChanges: state.pendingChanges.filter(op => op.id !== action.id) });
+    case 'ADD_QUARANTINE_ITEMS':
+      return update(state, { quarantine: [...(state.quarantine || []), ...action.payload] });
+    case 'REMOVE_QUARANTINE_ITEM':
+      return update(state, { quarantine: (state.quarantine || []).filter(i => i.id !== action.id) });
     case 'ADD_HISTORY_ENTRY':
       return update(state, { history: [action.payload, ...state.history].slice(0, 100) });
     case 'REMOVE_HISTORY_ENTRY':
@@ -119,7 +160,7 @@ export const projectReducer = (state: StoryProject, action: ProjectAction): Stor
   return {
     meta: metaReducer(state.meta, action as MetaAction),
     bible: bibleReducer(state.bible, action as BibleAction),
-    chapters: chaptersReducer(state.chapters, action as ChapterAction),
+    chapters: chaptersReducer(state.chapters, action as any),
     sync: syncReducer(state.sync, action as SyncAction),
   };
 };
@@ -139,12 +180,16 @@ export const uiReducer = (state: UIState, action: UIAction): UIState => {
       return update(state, { dialog: { ...action.payload, isOpen: true } });
     case 'CLOSE_DIALOG':
       return update(state, { dialog: { ...state.dialog, isOpen: false } });
+    case 'SET_SAFETY_INTERVENTION':
+      return update(state, { safetyIntervention: { ...state.safetyIntervention, ...action.payload } });
     case 'SET_PUB_MODAL':
       return update(state, { showPubModal: action.payload });
     case 'SET_HELP_MODAL':
       return update(state, { showHelpModal: action.payload });
     case 'SET_SAVE_STATUS':
       return update(state, { saveStatus: action.payload });
+    case 'SET_CONFLICT':
+      return update(state, { isConflict: action.payload });
     default:
       return state;
   }
@@ -157,8 +202,14 @@ export const notificationReducer = (state: { logs: SystemLog[], notifications: A
   switch (action.type) {
     case 'ADD_LOG':
       const log = action.payload;
-      const notif = (['error', 'success', 'usage'] as const).includes(log.type as any) 
-        ? { id: crypto.randomUUID(), type: log.type as any, message: log.message }
+      const notifTypeMap: Record<string, AppNotification['type']> = {
+        'error': 'error',
+        'success': 'success',
+        'usage': 'usage',
+        'Safety': 'warning'
+      };
+      const notif = (['error', 'success', 'usage', 'Safety'] as const).includes(log.type as any || log.source as any) 
+        ? { id: crypto.randomUUID(), type: notifTypeMap[log.type] || notifTypeMap[log.source] || 'info', message: log.message }
         : null;
       return {
         logs: [log, ...state.logs].slice(0, 500),

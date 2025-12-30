@@ -1,9 +1,10 @@
+
 import { 
   StoryProject, StoryProjectMetadata, WorldBible, ChapterLog, 
   SyncOperation, HistoryEntry, ChatMessage, ViewMode, 
   UsagePayload, SystemLog, DialogState, ProjectAction, 
   MetaAction, BibleAction, ChapterAction, SyncAction, UIAction, NotificationAction,
-  SyncState
+  SyncState, QuarantineItem, AppPreferences, SafetyIntervention
 } from '../types';
 
 /**
@@ -11,6 +12,7 @@ import {
  */
 export const loadMeta = (meta: StoryProjectMetadata): MetaAction => ({ type: 'LOAD_META', payload: meta });
 export const updateMeta = (updates: Partial<StoryProjectMetadata>): MetaAction => ({ type: 'UPDATE_META', payload: updates });
+export const updatePreferences = (prefs: Partial<AppPreferences>): MetaAction => ({ type: 'UPDATE_PREFERENCES', payload: prefs });
 export const trackUsage = (usage: UsagePayload): MetaAction => ({ type: 'TRACK_USAGE', payload: usage });
 
 /**
@@ -18,11 +20,16 @@ export const trackUsage = (usage: UsagePayload): MetaAction => ({ type: 'TRACK_U
  */
 export const loadBible = (bible: WorldBible): BibleAction => ({ type: 'LOAD_BIBLE', payload: bible });
 export const updateBible = (updates: Partial<WorldBible>): BibleAction => ({ type: 'UPDATE_BIBLE', payload: updates });
-export const applySyncOp = (nextBible: WorldBible, historyEntry: HistoryEntry): BibleAction => ({ 
+
+export const applySyncOp = (nextBible: WorldBible, nextChapters: ChapterLog[], historyEntry: HistoryEntry): BibleAction => ({ 
   type: 'APPLY_SYNC_OP', 
-  payload: { nextBible, historyEntry } 
+  payload: { nextBible, nextChapters, historyEntry } 
 });
-export const undoBible = (nextBible: WorldBible): BibleAction => ({ type: 'UNDO_BIBLE', payload: { nextBible } });
+
+export const undoBible = (nextBible: WorldBible, nextChapters: ChapterLog[]): BibleAction => ({ 
+  type: 'UNDO_BIBLE', 
+  payload: { nextBible, nextChapters } 
+});
 
 /**
  * Chapter Actions
@@ -39,7 +46,10 @@ export const removeChapter = (id: string): ChapterAction => ({ type: 'REMOVE_CHA
 export const loadSync = (sync: SyncState): SyncAction => ({ type: 'LOAD_SYNC', payload: sync });
 export const setChatHistory = (history: ChatMessage[]): SyncAction => ({ type: 'SET_CHAT_HISTORY', payload: history });
 export const addPendingOps = (ops: SyncOperation[]): SyncAction => ({ type: 'ADD_PENDING_OPS', payload: ops });
+export const updatePendingOp = (id: string, updates: Partial<SyncOperation>): SyncAction => ({ type: 'UPDATE_PENDING_OP', id, updates });
 export const removePendingOp = (id: string): SyncAction => ({ type: 'REMOVE_PENDING_OP', id });
+export const addQuarantineItems = (items: QuarantineItem[]): SyncAction => ({ type: 'ADD_QUARANTINE_ITEMS', payload: items });
+export const removeQuarantineItem = (id: string): SyncAction => ({ type: 'REMOVE_QUARANTINE_ITEM', id });
 export const addHistoryEntry = (entry: HistoryEntry): SyncAction => ({ type: 'ADD_HISTORY_ENTRY', payload: entry });
 export const removeHistoryEntry = (id: string): SyncAction => ({ type: 'REMOVE_HISTORY_ENTRY', id });
 
@@ -51,9 +61,12 @@ export const setPlotterTab = (tab: string): UIAction => ({ type: 'SET_PLOTTER_TA
 export const setPendingMsg = (msg: string | null): UIAction => ({ type: 'SET_PENDING_MSG', payload: msg });
 export const openDialog = (dialog: DialogState): UIAction => ({ type: 'OPEN_DIALOG', payload: dialog });
 export const closeDialog = (): UIAction => ({ type: 'CLOSE_DIALOG' });
+// Added missing setSafetyIntervention action creator
+export const setSafetyIntervention = (payload: Partial<SafetyIntervention>): UIAction => ({ type: 'SET_SAFETY_INTERVENTION', payload });
 export const setPubModal = (show: boolean): UIAction => ({ type: 'SET_PUB_MODAL', payload: show });
 export const setHelpModal = (show: boolean): UIAction => ({ type: 'SET_HELP_MODAL', payload: show });
 export const setSaveStatus = (status: 'idle' | 'saving' | 'saved'): UIAction => ({ type: 'SET_SAVE_STATUS', payload: status });
+export const setConflict = (isConflict: boolean): UIAction => ({ type: 'SET_CONFLICT', payload: isConflict });
 
 /**
  * Notification Actions
@@ -68,7 +81,6 @@ export const dismissNotification = (id: string): NotificationAction => ({ type: 
 export const loadProject = (project: StoryProject): ProjectAction => ({ type: 'LOAD_PROJECT', payload: project });
 export const clearData = (): ProjectAction => ({ type: 'CLEAR_DATA' });
 
-// Enhanced Utility for generating a standard log
 export const createLog = (
   type: SystemLog['type'], 
   source: SystemLog['source'], 

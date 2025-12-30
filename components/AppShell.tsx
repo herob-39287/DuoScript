@@ -1,7 +1,8 @@
+
 import React, { Suspense, lazy } from 'react';
 import { 
   LayoutDashboard, PenTool, GitBranch, Share2, Home, 
-  HelpCircle, Loader2, CloudCheck 
+  HelpCircle, Loader2, CloudCheck, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { useUI, useUIDispatch, useMetadata } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
@@ -56,7 +57,36 @@ const AppShell: React.FC<AppShellProps> = ({ onLoadProject }) => {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-stone-900 text-stone-200 overflow-hidden font-sans select-none">
+    <div className="flex flex-col md:flex-row h-screen bg-stone-900 text-stone-200 overflow-hidden font-sans select-none relative">
+      {/* 競合アラートオーバーレイ */}
+      {ui.isConflict && (
+        <div className="fixed inset-0 z-[1000] bg-stone-950/95 backdrop-blur-xl flex items-center justify-center p-6 animate-fade-in">
+          <div className="max-w-md w-full glass p-10 rounded-[3rem] border border-rose-500/30 shadow-3xl text-center space-y-8">
+            <div className="flex justify-center">
+              <div className="p-5 bg-rose-600/20 text-rose-500 rounded-2xl animate-pulse">
+                <AlertTriangle size={48} />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <h2 className="text-2xl md:text-3xl font-display font-black text-white italic tracking-tight">保存の競合が発生しました</h2>
+              <p className="text-sm text-stone-400 font-serif leading-relaxed">
+                別のタブ、または別のデバイスで物語が更新されています。データの不整合を防ぐため、自動保存を一時停止しました。
+              </p>
+              <div className="p-4 bg-stone-900/60 rounded-2xl border border-white/5 text-[11px] text-stone-500 font-medium italic">
+                ※ 編集中の内容はクリップボードにコピーしてバックアップすることをお勧めします。
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-5 bg-orange-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-orange-500 transition-all shadow-2xl shadow-orange-950/40 active:scale-95"
+            >
+              <RefreshCw size={18} /> 最新の状態を読み込む
+            </button>
+          </div>
+        </div>
+      )}
+
       <aside className="hidden md:flex w-24 bg-stone-900/95 border-r border-stone-800 flex-col items-center py-10 gap-10 z-[60]">
         <div className="w-14 h-14 bg-orange-500 rounded-[1.25rem] flex items-center justify-center cursor-pointer shadow-xl hover:scale-105 transition-transform" onClick={() => uiDispatch(Actions.setView(ViewMode.DASHBOARD))}>
           <span className="font-display font-black text-stone-950 text-3xl italic">D</span>

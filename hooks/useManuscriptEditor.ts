@@ -6,8 +6,9 @@ import {
 } from '../contexts/StoryContext';
 import { loadChapterContent, saveChapterContent } from '../services/storageService';
 import { getArchitectWhisper } from '../services/geminiService';
+import { WhisperAdvice } from '../types';
 
-export const useManuscriptEditor = (initialChapterId: string) => {
+export const useManuscriptEditor = (initialChapterId: string, isProcessing: boolean = false) => {
   const chapters = useManuscript();
   const projectDispatch = useManuscriptDispatch();
   const bible = useBible();
@@ -19,25 +20,38 @@ export const useManuscriptEditor = (initialChapterId: string) => {
   const [activeChapterId, setActiveChapterId] = useState(initialChapterId);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [wordCount, setWordCount] = useState(0);
-  const [whisper, setWhisper] = useState<{ text: string; type: 'info' | 'alert' } | null>(null);
+  const [whisper, setWhisper] = useState<WhisperAdvice | null>(null);
   const [isWhispering, setIsWhispering] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const syncTimeoutRef = useRef<number | null>(null);
-  const whisperTimeoutRef = useRef<number | null>(null);
+  const lastWhisperTimeRef = useRef<number>(0);
+  const draftVersionRef = useRef(0);
 
   const activeChapter = chapters.find(c => c.id === activeChapterId);
 
-  // Load content when chapter changes
+  useEffect(() => {
+    if (activeChapter) {
+      draftVersionRef.current = activeChapter.draftVersion || 0;
+    }
+  }, [activeChapterId]);
+
   useEffect(() => {
     const fetchContent = async () => {
-      if (!activeChapterId) return;
+      if (!activeChapterId || !meta.id) return;
       const chapter = chapters.find(c => c.id === activeChapterId);
       if (!chapter) return;
       
+      if (chapter.content !== undefined && chapter.content !== null) {
+        if (textareaRef.current) textareaRef.current.value = chapter.content;
+        setWordCount(chapter.content.length);
+        return;
+      }
+
       setIsLoadingContent(true);
       try {
-        const content = chapter.content !== undefined ? chapter.content : (await loadChapterContent(activeChapterId) || "");
+        const rev = meta.headRev || 1;
+        const content = await loadChapterContent(meta.id, activeChapterId, rev) || "";
         projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content });
         if (textareaRef.current) textareaRef.current.value = content;
         setWordCount(content.length);
@@ -48,40 +62,60 @@ export const useManuscriptEditor = (initialChapterId: string) => {
       }
     };
     fetchContent();
-  }, [activeChapterId, projectDispatch, addLog]);
+  }, [activeChapterId, projectDispatch, addLog, meta.id, meta.headRev]);
 
-  const triggerWhisper = useCallback(async (text: string) => {
-    if (text.length < 100 || isWhispering) return;
+  const triggerWhisper = useCallback(async () => {
+    const text = textareaRef.current?.value || "";
+    const currentVersion = draftVersionRef.current;
+    
+    if (text.length < 50) {
+      addLog('info', 'Architect', '分析にはもう少し本文の長さが必要です。');
+      return;
+    }
+    
+    if (isWhispering || isProcessing || !activeChapterId) return;
+
     setIsWhispering(true);
+    setWhisper(null);
+    addLog('info', 'Architect', '設定との矛盾や伏線をスキャンしています...');
+    
     try {
       const advice = await getArchitectWhisper(
-        text.slice(-1000), 
+        text.slice(-1500), 
         { meta, bible, chapters, sync } as any, 
+        activeChapterId,
         (u) => metaDispatch({ type: 'TRACK_USAGE', payload: u }), 
         addLog
       );
-      if (advice) setWhisper(advice);
+      
+      if (advice && !isProcessing && draftVersionRef.current === currentVersion) {
+        setWhisper(advice);
+        lastWhisperTimeRef.current = Date.now();
+        addLog('success', 'Architect', '設計士の助言が届きました。');
+      } else if (!advice) {
+        addLog('success', 'Architect', '特に矛盾は見つかりませんでした。順調です。');
+      }
     } catch (e) {
       console.warn("Whisper failed", e);
     } finally {
       setIsWhispering(false);
     }
-  }, [bible, meta, chapters, sync, isWhispering, addLog, metaDispatch]);
+  }, [bible, meta, chapters, sync, isWhispering, isProcessing, addLog, metaDispatch, activeChapterId]);
 
   const handleTextChange = useCallback(() => {
-    if (!textareaRef.current || !activeChapterId) return;
+    if (!textareaRef.current || !activeChapterId || !meta.id) return;
     const currentVal = textareaRef.current.value;
     setWordCount(currentVal.length);
     
+    draftVersionRef.current += 1;
+    const currentVersion = draftVersionRef.current;
+
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = window.setTimeout(() => {
-      projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content: currentVal });
-      saveChapterContent(activeChapterId, currentVal);
+      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapterId, updates: { content: currentVal, draftVersion: currentVersion } });
+      saveChapterContent(meta.id, activeChapterId, meta.headRev || 1, currentVal);
     }, 1000);
-
-    if (whisperTimeoutRef.current) window.clearTimeout(whisperTimeoutRef.current);
-    whisperTimeoutRef.current = window.setTimeout(() => triggerWhisper(currentVal), 15000);
-  }, [activeChapterId, projectDispatch, triggerWhisper]);
+  }, [activeChapterId, projectDispatch, meta.id, meta.headRev]);
 
   return {
     activeChapter,
@@ -94,6 +128,7 @@ export const useManuscriptEditor = (initialChapterId: string) => {
     setWhisper,
     isWhispering,
     textareaRef,
-    handleTextChange
+    handleTextChange,
+    triggerWhisper
   };
 };

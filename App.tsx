@@ -4,55 +4,56 @@ import ComplianceModal from './components/ComplianceModal';
 import { AppProviders } from './components/AppProviders';
 import AppShell from './components/AppShell';
 import { 
-  ViewMode, StoryProject, SystemLog, UIState
+  ViewMode, StoryProject, SystemLog, UIState, AppPreferences
 } from './types';
 import { normalizeProject } from './services/bibleManager';
 import { projectReducer, uiReducer, notificationReducer } from './store/reducers';
 import { usePersistence } from './hooks/usePersistence';
 import { useProjectLoader } from './hooks/useProjectLoader';
+import * as Actions from './store/actions';
 
 const App: React.FC = () => {
   const emptyProject = normalizeProject(null);
   
-  // Integrated Project State
   const [project, projectDispatch] = useReducer(projectReducer, emptyProject);
   
-  // UI State
   const initialUIState: UIState = {
     view: ViewMode.WELCOME,
     plotterTab: 'grandArc',
     pendingMsg: null,
     dialog: { isOpen: false, type: 'alert', title: '', message: '' },
+    safetyIntervention: { isOpen: false, alternatives: [], isLocked: false },
     showPubModal: false,
     showHelpModal: false,
-    saveStatus: 'idle'
+    saveStatus: 'idle',
+    isConflict: false
   };
   const [ui, uiDispatch] = useReducer(uiReducer, initialUIState);
   
-  // Notification State
   const [notifState, notifDispatch] = useReducer(notificationReducer, { logs: [], notifications: [] });
   
-  // Project Loader Hook
   const { loadFullProject } = useProjectLoader(projectDispatch);
 
-  // Non-reducer transient state
-  const [hasAgreed, setHasAgreed] = useState(localStorage.getItem('duoscript_agreed') === 'true');
+  const [hasAgreed, setHasAgreed] = useState(localStorage.getItem('duoscript_agreed_v2') === 'true');
 
-  // Persistence Hook
   usePersistence(project, projectDispatch, uiDispatch);
 
   const addLog = useCallback((type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
     notifDispatch({ type: 'ADD_LOG', payload: { id: crypto.randomUUID(), timestamp: Date.now(), type, source, message, details } });
   }, []);
 
+  const handleCompleteSetup = (prefs: AppPreferences) => {
+    localStorage.setItem('duoscript_agreed_v2', 'true');
+    localStorage.setItem('duoscript_prefs', JSON.stringify(prefs));
+    projectDispatch(Actions.updatePreferences(prefs));
+    setHasAgreed(true);
+  };
+
   const notificationDispatch = useMemo(() => ({ addLog, dispatch: notifDispatch }), [addLog]);
 
   if (!hasAgreed) {
     return (
-      <ComplianceModal onAccept={() => { 
-        localStorage.setItem('duoscript_agreed', 'true'); 
-        setHasAgreed(true); 
-      }} />
+      <ComplianceModal onAccept={handleCompleteSetup} />
     );
   }
 
