@@ -412,22 +412,51 @@ export const normalizeProject = (data: any): StoryProject => {
     grandArc: String(data?.bible?.grandArc || data?.grandArc || ''),
     themes: Array.isArray(data?.bible?.themes) ? data.bible.themes : [],
     tone: String(data?.bible?.tone || 'ニュートラル'),
-    volumes: Array.isArray(data?.bible?.volumes) ? data.bible.volumes : [],
+    volumes: (Array.isArray(data?.bible?.volumes) ? data.bible.volumes : []).map((v: any) => ({
+      ...v,
+      id: v.id || crypto.randomUUID()
+    })),
     characters: (Array.isArray(data?.bible?.characters) ? data.bible.characters : []).map((c: any) => ({
       ...c,
-      isPrivate: c.isPrivate || false
+      id: c.id || crypto.randomUUID(),
+      isPrivate: c.isPrivate || false,
+      status: {
+        location: String(c.status?.location || '不明'),
+        health: String(c.status?.health || '良好'),
+        inventory: Array.isArray(c.status?.inventory) ? c.status.inventory : [],
+        knowledge: Array.isArray(c.status?.knowledge) ? c.status.knowledge : [],
+        currentGoal: String(c.status?.currentGoal || ''),
+        socialStanding: String(c.status?.socialStanding || ''),
+        internalState: String(c.status?.internalState || '平常')
+      },
+      relationships: Array.isArray(c.relationships) ? c.relationships : []
     })),
-    timeline: Array.isArray(data?.bible?.timeline) ? data.bible.timeline : [],
-    foreshadowing: Array.isArray(data?.bible?.foreshadowing) ? data.bible.foreshadowing : [],
+    timeline: (Array.isArray(data?.bible?.timeline) ? data.bible.timeline : []).map((t: any) => ({
+      ...t,
+      id: t.id || crypto.randomUUID(),
+      foreshadowingLinks: Array.isArray(t.foreshadowingLinks) ? t.foreshadowingLinks : []
+    })),
+    foreshadowing: (Array.isArray(data?.bible?.foreshadowing) ? data.bible.foreshadowing : []).map((f: any) => ({
+      ...f,
+      id: f.id || crypto.randomUUID()
+    })),
     entries: (Array.isArray(data?.bible?.entries) ? data.bible.entries : []).map((e: any) => ({
       ...e,
-      isPrivate: e.isPrivate || false
+      id: e.id || crypto.randomUUID(),
+      isPrivate: e.isPrivate || false,
+      aliases: Array.isArray(e.aliases) ? e.aliases : [],
+      tags: Array.isArray(e.tags) ? e.tags : [],
+      linkedIds: Array.isArray(e.linkedIds) ? e.linkedIds : []
     })),
     nexusBranches: (Array.isArray(data?.bible?.nexusBranches) ? data.bible.nexusBranches : []).map((b: any) => ({
       ...b,
+      id: b.id || crypto.randomUUID(),
       timestamp: b.timestamp || now
     })),
-    integrityIssues: Array.isArray(data?.bible?.integrityIssues) ? data.bible.integrityIssues : [],
+    integrityIssues: (Array.isArray(data?.bible?.integrityIssues) ? data.bible.integrityIssues : []).map((i: any) => ({
+      ...i,
+      id: i.id || crypto.randomUUID()
+    })),
     summaryBuffer: String(data?.bible?.summaryBuffer || ''),
     lastSummaryUpdate: data?.bible?.lastSummaryUpdate || 0
   };
@@ -435,12 +464,22 @@ export const normalizeProject = (data: any): StoryProject => {
   const chapters: ChapterLog[] = Array.isArray(data?.chapters) && data.chapters.length > 0 
     ? data.chapters.map((c: any) => ({
         ...c,
+        id: c.id || crypto.randomUUID(),
         title: String(c.title || ''),
         summary: String(c.summary || ''),
         content: String(c.content || ''),
         wordCount: typeof c.wordCount === 'number' ? c.wordCount : (c.content?.length || 0),
         draftVersion: c.draftVersion || 0,
         scenes: Array.isArray(c.scenes) ? c.scenes : [],
+        strategy: {
+          milestones: Array.isArray(c.strategy?.milestones) ? c.strategy.milestones : [],
+          forbiddenResolutions: Array.isArray(c.strategy?.forbiddenResolutions) ? c.strategy.forbiddenResolutions : [],
+          characterArcProgress: String(c.strategy?.characterArcProgress || ''),
+          pacing: String(c.strategy?.pacing || ''),
+          povCharacterId: c.strategy?.povCharacterId
+        },
+        beats: Array.isArray(c.beats) ? c.beats.map((b: any) => ({ ...b, id: b.id || crypto.randomUUID() })) : [],
+        status: c.status || 'Idea',
         updatedAt: c.updatedAt || now,
         involvedCharacterIds: Array.isArray(c.involvedCharacterIds) ? c.involvedCharacterIds : [],
         foreshadowingLinks: Array.isArray(c.foreshadowingLinks) ? c.foreshadowingLinks : []
@@ -465,12 +504,21 @@ export const normalizeProject = (data: any): StoryProject => {
   const sync: SyncState = {
     chatHistory: Array.isArray(data?.chatHistory) ? data.chatHistory : 
                  Array.isArray(data?.sync?.chatHistory) ? data.sync.chatHistory : [],
-    pendingChanges: Array.isArray(data?.pendingChanges) ? data.pendingChanges : 
-                    Array.isArray(data?.sync?.pendingChanges) ? data.sync.pendingChanges : [],
-    quarantine: Array.isArray(data?.quarantine) ? data.quarantine :
-                Array.isArray(data?.sync?.quarantine) ? data.sync.quarantine : [],
-    history: Array.isArray(data?.history) ? data.history : 
-             Array.isArray(data?.sync?.history) ? data.sync.history : []
+    pendingChanges: (Array.isArray(data?.pendingChanges) ? data.pendingChanges : 
+                    Array.isArray(data?.sync?.pendingChanges) ? data.sync.pendingChanges : []).map((p: any) => ({
+                      ...p,
+                      id: p.id || crypto.randomUUID()
+                    })),
+    quarantine: (Array.isArray(data?.quarantine) ? data.quarantine :
+                Array.isArray(data?.sync?.quarantine) ? data.sync.quarantine : []).map((q: any) => ({
+                  ...q,
+                  id: q.id || crypto.randomUUID()
+                })),
+    history: (Array.isArray(data?.history) ? data.history : 
+             Array.isArray(data?.sync?.history) ? data.sync.history : []).map((h: any) => ({
+               ...h,
+               id: h.id || crypto.randomUUID()
+             }))
   };
 
   return { meta, bible, chapters, sync };

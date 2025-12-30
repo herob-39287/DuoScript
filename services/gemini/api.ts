@@ -6,13 +6,20 @@ import {
   ChapterPackageResponse, ProjectGenerationResponse, Character,
   BibleIssue, GeminiContent, UsageCallback, LogCallback, ExtractionResult, QuarantineItem, WhisperAdvice
 } from "../../types";
-import { handleGeminiError, getCompressedContext, trackUsage, safeJsonParse, resolveModelConfig, generateDeterministicSeed, getSafetySettings, DuoScriptError } from "./utils";
+// Added getFriendlyErrorMessage to imports from utils
+import { handleGeminiError, getCompressedContext, trackUsage, safeJsonParse, resolveModelConfig, generateDeterministicSeed, getSafetySettings, DuoScriptError, getFriendlyErrorMessage } from "./utils";
 import { findMatchCandidates, validateSyncOperation } from "../bibleManager";
 import * as Schemas from "./schemas";
 import * as Prompts from "./prompts";
 
+/**
+ * 常に最新のAPIキーを使用してクライアントを初期化
+ */
 const getClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+/**
+ * Gemini APIへの標準的なリクエスト処理
+ */
 async function runGeminiRequest<T>(params: {
   model: string;
   contents: string | GeminiContent[];
@@ -21,397 +28,510 @@ async function runGeminiRequest<T>(params: {
   onUsage?: UsageCallback;
   logCallback: LogCallback;
   mapper: (response: GenerateContentResponse) => T;
-  safetyPreset?: any;
 }): Promise<T> {
-  return handleGeminiError(async () => {
-    const ai = getClient();
-    const inputForSeed = Array.isArray(params.contents) ? JSON.stringify(params.contents) : String(params.contents);
-    const safetySettings = getSafetySettings(params.safetyPreset);
-    
-    const response = await ai.models.generateContent({
-      model: params.model,
-      contents: (Array.isArray(params.contents) ? { parts: (params.contents[0] as any).parts } : params.contents) as any, 
-      config: {
-        ...params.config,
-        safetySettings,
-        seed: params.config?.seed || generateDeterministicSeed(inputForSeed)
-      },
-    });
+  const ai = getClient();
+  const { model, contents, config, usageLabel, onUsage, logCallback, mapper } = params;
 
-    const candidate = response.candidates?.[0];
-    if (candidate?.finishReason === 'SAFETY') {
-      const blockedCategory = candidate.safetyRatings?.find(r => r.blocked)?.category;
-      throw new DuoScriptError("SAFETY_BLOCK", "安全フィルターにより生成がブロックされました。", "Gemini", 403, blockedCategory);
-    }
-
-    trackUsage(response, params.model, params.usageLabel, params.onUsage);
-    return params.mapper(response);
-  }, params.usageLabel, params.logCallback);
-}
-
-export const chatWithArchitect = async (
-  history: GeminiContent[], 
-  userInput: string, 
-  project: StoryProject, 
-  useSearch: boolean,
-  onUsage: UsageCallback,
-  logCallback: LogCallback
-): Promise<{ text: string; sources?: any[] }> => {
-  const { model, thinkingBudget } = resolveModelConfig('CHAT', userInput.length > 200 ? 'complex' : 'basic');
-  const activeChapterId = project.chapters[project.chapters.length - 1]?.id;
-  const ctx = getCompressedContext(project, activeChapterId);
-
-  return handleGeminiError(async () => {
-    const ai = getClient();
-    const safetySettings = getSafetySettings(project.meta.preferences.safetyPreset);
-    
+  return await handleGeminiError(async () => {
     const response = await ai.models.generateContent({
       model,
-      contents: history as any,
+      contents: typeof contents === 'string' ? contents : contents,
       config: {
-        systemInstruction: Prompts.ARCHITECT_SYSTEM_INSTRUCTION(ctx),
-        thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined,
-        tools: useSearch ? [{ googleSearch: {} }] : undefined,
-        safetySettings,
-        seed: generateDeterministicSeed(userInput + ctx)
-      },
+        ...config,
+        safetySettings: getSafetySettings()
+      }
     });
 
-    trackUsage(response, model, 'Architect Chat', onUsage);
+    trackUsage(response, model, usageLabel, onUsage);
     
-    let sources: any[] = [];
-    if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-      sources = response.candidates[0].groundingMetadata.groundingChunks
-        .filter((c: any) => c.web)
-        .map((c: any) => ({ title: c.web.title, uri: c.web.uri }));
+    // 安全フィルターによるブロックのチェック
+    if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+      const category = response.candidates[0].safetyRatings?.[0]?.category || "HARM_CATEGORY_UNKNOWN";
+      throw new DuoScriptError("SAFETY_BLOCK", "Content blocked by safety filters", usageLabel, 403, category);
     }
-    return { text: response.text || "", sources };
-  }, 'Architect Chat', logCallback);
-};
 
-export const generateDraftStream = async (
-  chapter: ChapterLog,
-  tone: string,
-  useThinking: boolean,
+    return mapper(response);
+  }, usageLabel, logCallback);
+}
+
+/**
+ * 設計士とのチャット対話
+ */
+export async function chatWithArchitect(
+  history: GeminiContent[],
+  input: string,
   project: StoryProject,
+  allowSearch: boolean = true,
+  onUsage: UsageCallback,
   logCallback: LogCallback
-) => {
-  const ai = getClient();
-  const { model, thinkingBudget } = resolveModelConfig('DRAFT', useThinking ? 'creative' : 'basic');
-  const ctx = getCompressedContext(project, chapter.id);
-  const promptText = Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats);
-  const safetySettings = getSafetySettings(project.meta.preferences.safetyPreset);
+) {
+  const context = getCompressedContext(project);
+  const systemInstruction = Prompts.ARCHITECT_SYSTEM_INSTRUCTION(context);
 
-  return ai.models.generateContentStream({
-    model,
-    contents: [{ role: 'user', parts: [{ text: promptText }] }],
+  return runGeminiRequest({
+    model: AiModel.REASONING,
+    contents: history,
     config: {
-      systemInstruction: Prompts.WRITER_SYSTEM_INSTRUCTION(ctx, tone),
-      thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined,
-      safetySettings,
-      seed: generateDeterministicSeed(promptText + ctx)
+      systemInstruction,
+      tools: allowSearch ? [{ googleSearch: {} }] : [],
+      thinkingConfig: { thinkingBudget: 4000 }
     },
-  });
-};
-
-export const getSafetyAlternatives = async (
-  blockedPrompt: string,
-  category: string,
-  logCallback: LogCallback
-): Promise<string[]> => {
-  const { model } = resolveModelConfig('AUTO_GEN');
-  const prompt = Prompts.SAFETY_ALTERNATIVES_PROMPT(blockedPrompt, category);
-  
-  return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-    usageLabel: 'Safety Consultant',
-    logCallback,
-    config: { responseMimeType: "application/json", responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } } },
-    mapper: (response) => {
-      const res = safeJsonParse<string[]>(response.text, 'Safety Consultant', logCallback);
-      return (res.status === 'PARSE_FAILED' || !res.value) ? [] : res.value;
-    }
-  });
-};
-
-export const generateCharacterPortrait = async (
-  character: Character,
-  project: StoryProject,
-  onUsage: UsageCallback,
-  logCallback: LogCallback
-): Promise<string> => {
-  logCallback('info', 'Artist' as any, `${character.name} の外見を詳細に設計中...`);
-  const { model: textModel } = resolveModelConfig('CHAT', 'basic');
-  const visualPrompt = await runGeminiRequest({
-    model: textModel,
-    contents: [{ parts: [{ text: Prompts.VISUAL_DESCRIPTION_PROMPT(character, project.bible.tone) }] } as any],
-    usageLabel: 'Visual Designer',
+    usageLabel: 'Architect',
     onUsage,
     logCallback,
-    mapper: (res) => res.text || ""
+    mapper: (res) => ({
+      text: res.text || "申し訳ありません、お答えできません。",
+      sources: res.candidates?.[0]?.groundingMetadata?.groundingChunks?.map((chunk: any) => ({
+        title: chunk.web?.title || "Reference",
+        uri: chunk.web?.uri || ""
+      })) || []
+    })
   });
+}
 
-  logCallback('info', 'Artist' as any, `設計に基づき肖像画をキャンバスに描いています...`);
-  const { model: imageModel } = resolveModelConfig('IMAGE');
-  return runGeminiRequest({
-    model: imageModel,
-    contents: [{ parts: [{ text: Prompts.PORTRAIT_PROMPT(visualPrompt) }] } as any],
-    usageLabel: 'Portrait Generator',
-    onUsage,
-    logCallback,
-    config: { imageConfig: { aspectRatio: "3:4" } },
-    mapper: (response) => {
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-      }
-      throw new Error("画像生成失敗");
-    }
-  });
-};
-
-export const generateSpeech = async (
-  text: string,
-  voiceName: string = 'Zephyr',
+/**
+ * 設定変更の意図を検出
+ */
+export async function detectSettingChange(
+  input: string,
   onUsage: UsageCallback,
   logCallback: LogCallback
-): Promise<ArrayBuffer> => {
-  const { model } = resolveModelConfig('TTS');
-  const ai = getClient();
-  const response = await ai.models.generateContent({
-    model,
-    contents: [{ parts: [{ text }] }],
+): Promise<DetectionResult> {
+  return runGeminiRequest({
+    model: AiModel.FAST,
+    contents: Prompts.DETECTION_PROMPT(input),
     config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+      responseMimeType: "application/json",
+      responseSchema: Schemas.detectionSchema
     },
-  });
-
-  trackUsage(response, model, 'Speech Generator', onUsage);
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("音声生成失敗");
-  const binary = atob(base64Audio);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-};
-
-export const getArchitectWhisper = async (
-  lastChunk: string,
-  project: StoryProject,
-  activeChapterId: string,
-  onUsage: UsageCallback,
-  logCallback: LogCallback
-): Promise<WhisperAdvice | null> => {
-  const ctx = getCompressedContext(project, activeChapterId);
-  const { model } = resolveModelConfig('AUTO_GEN');
-  
-  const disabledRules = project.meta.preferences.disabledLinterRules || [];
-  const systemInstruction = Prompts.WHISPER_PROMPT(lastChunk, ctx) + 
-    (disabledRules.length > 0 ? `\n以下のルールIDに関する指摘は無効化されているため、行わないでください: ${disabledRules.join(', ')}` : "");
-
-  return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: systemInstruction }] } as any],
-    usageLabel: 'Architect Whisper',
+    usageLabel: 'NeuralSync/Detector',
     onUsage,
     logCallback,
-    config: { responseMimeType: "application/json", responseSchema: Schemas.whisperSchema },
-    mapper: (response) => {
-      const res = safeJsonParse<WhisperAdvice>(response.text, 'Architect Whisper', logCallback);
-      if (res.status === 'PARSE_FAILED' || !res.value) return null;
-      if (res.value.text === "なし") return null;
-      return { ...res.value, id: res.value.id || crypto.randomUUID() };
-    }
+    mapper: (res) => safeJsonParse<DetectionResult>(res.text, 'Detector').value || Schemas.DEFAULT_RESPONSES.DETECTION
   });
-};
+}
 
-export const detectSettingChange = async (userInput: string, onUsage: UsageCallback, logCallback: LogCallback): Promise<DetectionResult> => {
-  const { model } = resolveModelConfig('AUTO_GEN');
-  return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: Prompts.DETECTION_PROMPT(userInput) }] } as any],
-    usageLabel: 'Intent Detector',
-    onUsage,
-    logCallback,
-    config: { responseMimeType: "application/json", responseSchema: Schemas.detectionSchema },
-    mapper: (response) => {
-      const res = safeJsonParse<DetectionResult>(response.text, 'Intent Detector', logCallback);
-      return (res.status === 'PARSE_FAILED' || !res.value) ? Schemas.DEFAULT_RESPONSES.DETECTION : res.value;
-    }
-  });
-};
-
-export const extractSettingsFromChat = async (
-  history: GeminiContent[], 
+/**
+ * チャット履歴から具体的な構造化設定を抽出 (NeuralSync)
+ */
+export async function extractSettingsFromChat(
+  history: GeminiContent[],
   project: StoryProject,
   detection: DetectionResult,
   onUsage: UsageCallback,
   logCallback: LogCallback
-): Promise<ExtractionResult> => {
-  const { model, thinkingBudget } = resolveModelConfig('CHAT', 'complex');
-  const extractionPrompt = Prompts.SYNC_EXTRACT_PROMPT(history.slice(-4), detection.instructionSummary, detection.categories, detection.isHypothetical);
-  const requestId = crypto.randomUUID(); 
+): Promise<ExtractionResult> {
+  const context = getCompressedContext(project);
+  const prompt = Prompts.SYNC_EXTRACT_PROMPT(history, context, detection.categories, detection.isHypothetical);
 
-  const ai = getClient();
-  const response = await ai.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [{ text: extractionPrompt }] }],
-    config: { 
+  return runGeminiRequest({
+    model: AiModel.REASONING,
+    contents: prompt,
+    config: {
       responseMimeType: "application/json",
-      responseSchema: { type: Type.ARRAY, items: Schemas.syncOperationSchema as any },
-      thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined,
-      seed: generateDeterministicSeed(extractionPrompt)
-    },
-  });
-
-  trackUsage(response, model, 'NeuralSync Extractor', onUsage);
-  
-  const result: ExtractionResult = { readyOps: [], quarantineItems: [] };
-  const res = safeJsonParse<any[]>(response.text, 'NeuralSync Extractor', logCallback);
-  if (res.status === 'PARSE_FAILED' || !res.value) {
-    result.quarantineItems.push({ id: crypto.randomUUID(), timestamp: Date.now(), rawText: response.text || "", error: "解析不能なレスポンス", stage: 'PARSE' });
-    return result;
-  }
-  res.value.forEach((op, idx) => {
-    const validationErrors = validateSyncOperation(op);
-    if (validationErrors.length > 0) {
-      result.quarantineItems.push({ id: crypto.randomUUID(), timestamp: Date.now(), rawText: JSON.stringify(op), error: validationErrors.join(", "), stage: 'SCHEMA', partialOp: op });
-      return;
-    }
-
-    const opIsHypothetical = op.isHypothetical !== undefined ? op.isHypothetical : detection.isHypothetical;
-    const collection = op.path === 'chapters' ? project.chapters : (project.bible as any)[op.path];
-    let candidates: any[] = [];
-    let status: any = 'proposal';
-    
-    if (Array.isArray(collection)) {
-      candidates = findMatchCandidates(collection, op.targetId, op.targetName);
-      if (candidates.length === 0 && op.op !== 'add') {
-         status = 'needs_resolution';
-      } else if (candidates.length > 0 && candidates[0].confidence >= 0.98) {
-        op.targetId = candidates[0].id;
-        op.targetName = candidates[0].name;
-      } else if (candidates.length > 0) {
-         status = 'needs_resolution';
+      responseSchema: {
+        type: Type.ARRAY,
+        items: Schemas.syncOperationSchema
       }
-    }
-    
-    result.readyOps.push({ ...op, id: crypto.randomUUID(), requestId, timestamp: Date.now() + idx, status, candidates, isHypothetical: opIsHypothetical });
-  });
-  return result;
-};
+    },
+    usageLabel: 'NeuralSync/Extractor',
+    onUsage,
+    logCallback,
+    mapper: (res) => {
+      const parsed = safeJsonParse<SyncOperation[]>(res.text, 'Extractor');
+      const ops = parsed.value || [];
+      const readyOps: SyncOperation[] = [];
+      const quarantineItems: QuarantineItem[] = [];
 
-export const analyzeBibleIntegrity = async (project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback): Promise<BibleIssue[]> => {
-  const { model, thinkingBudget } = resolveModelConfig('SCAN', 'critical');
-  const chapterContext = project.chapters.map(c => `Chapter ${c.title}: ${c.summary}`).join('\n');
-  const bibleData = JSON.stringify({ grandArc: project.bible.grandArc, characters: project.bible.characters.map(c => ({ id: c.id, name: c.name, status: c.status })), laws: project.bible.laws });
-  const prompt = Prompts.INTEGRITY_SCAN_PROMPT(`Bible Data:\n${bibleData}\n\nManuscript Summaries:\n${chapterContext}`);
+      ops.forEach(op => {
+        const errors = validateSyncOperation(op);
+        if (errors.length > 0) {
+          quarantineItems.push({
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            rawText: JSON.stringify(op),
+            error: `Validation Error: ${errors.join(", ")}`,
+            stage: 'SCHEMA',
+            partialOp: op
+          });
+          return;
+        }
+
+        // 既存項目へのマッピングを試行
+        const list = op.path === 'chapters' ? project.chapters : (project.bible as any)[op.path];
+        if (Array.isArray(list)) {
+          const candidates = findMatchCandidates(list, op.targetId, op.targetName);
+          if (candidates.length > 0) {
+            if (candidates[0].confidence >= 0.95) {
+              op.targetId = candidates[0].id;
+              op.targetName = candidates[0].name;
+              op.status = 'proposal';
+            } else {
+              op.status = 'needs_resolution';
+              op.candidates = candidates;
+              op.resolutionHint = `複数の候補が見つかりました（最も近いもの: ${candidates[0].name}）`;
+            }
+          } else if (op.op !== 'add') {
+             // addでないのに見つからない場合は新規作成として扱うか、要解決へ
+             op.status = 'needs_resolution';
+             op.resolutionHint = "対象が見つかりませんでした。新規作成するか指定し直してください。";
+          }
+        }
+        
+        op.id = crypto.randomUUID();
+        op.timestamp = Date.now();
+        op.isHypothetical = detection.isHypothetical;
+        readyOps.push(op);
+      });
+
+      return { readyOps, quarantineItems };
+    }
+  });
+}
+
+/**
+ * 初稿生成 (Streaming)
+ */
+export async function* generateDraftStream(
+  chapter: ChapterLog,
+  tone: string,
+  usePro: boolean,
+  project: StoryProject,
+  logCallback: LogCallback
+) {
+  const ai = getClient();
+  const context = getCompressedContext(project, chapter.id);
+  const systemInstruction = Prompts.WRITER_SYSTEM_INSTRUCTION(context, tone);
+  const prompt = Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats);
+
+  try {
+    const result = await ai.models.generateContentStream({
+      model: usePro ? AiModel.REASONING : AiModel.FAST,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        thinkingConfig: usePro ? { thinkingBudget: 4000 } : undefined
+      }
+    });
+
+    for await (const chunk of result) {
+      if (chunk.candidates?.[0]?.finishReason === 'SAFETY') {
+        throw new DuoScriptError("SAFETY_BLOCK", "Safe writing interrupted", "Writer");
+      }
+      yield chunk;
+    }
+  } catch (error: any) {
+    const friendly = getFriendlyErrorMessage(error);
+    logCallback('error', 'Writer', friendly, error.message);
+    throw error;
+  }
+}
+
+/**
+ * 続きの文章を提案 (AI Copilot)
+ */
+export async function suggestNextSentence(
+  content: string,
+  project: StoryProject,
+  activeChapterId: string,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<string[]> {
+  const context = getCompressedContext(project, activeChapterId);
+  const prompt = Prompts.NEXT_SENTENCE_PROMPT(content, context);
+
+  return runGeminiRequest({
+    model: AiModel.FAST,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: Schemas.suggestionsSchema
+    },
+    usageLabel: 'Writer/Copilot',
+    onUsage,
+    logCallback,
+    mapper: (res) => safeJsonParse<string[]>(res.text, 'Copilot').value || Schemas.DEFAULT_RESPONSES.SUGGESTIONS
+  });
+}
+
+/**
+ * キャラクターの肖像画を生成
+ */
+export async function generateCharacterPortrait(
+  character: Character,
+  project: StoryProject,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<string> {
+  const ai = getClient();
   
-  return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-    usageLabel: 'Integrity Scan',
+  // 1. 視覚的描写の生成
+  const visualDesc = await runGeminiRequest({
+    model: AiModel.FAST,
+    contents: Prompts.VISUAL_DESCRIPTION_PROMPT(character, project.bible.tone),
+    usageLabel: 'Artist/Describer',
     onUsage,
     logCallback,
-    config: { responseMimeType: "application/json", responseSchema: Schemas.integrityScanSchema, thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined },
-    mapper: (response) => {
-      const res = safeJsonParse<IntegrityScanResponse>(response.text, 'Integrity Scan', logCallback);
-      if (res.status === 'PARSE_FAILED' || !res.value) return [];
-      const disabledRules = project.meta.preferences.disabledLinterRules || [];
-      return res.value.issues
-        .filter(i => !disabledRules.includes(i.ruleId))
-        .map(i => ({ ...i, id: crypto.randomUUID() }));
+    mapper: (res) => res.text || `${character.name}, portrait.`
+  });
+
+  // 2. 画像生成
+  return await handleGeminiError(async () => {
+    const res = await ai.models.generateContent({
+      model: AiModel.IMAGE,
+      contents: Prompts.PORTRAIT_PROMPT(visualDesc),
+      config: {
+        imageConfig: { aspectRatio: "3:4" }
+      }
+    });
+
+    trackUsage(res, AiModel.IMAGE, 'Artist/Painter', onUsage);
+
+    const part = res.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+    if (!part?.inlineData) throw new Error("画像が生成されませんでした。");
+
+    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+  }, 'Artist/Painter', logCallback);
+}
+
+/**
+ * キャラクターボイスの生成
+ */
+export async function generateSpeech(
+  text: string,
+  voiceName: string = 'Zephyr',
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<ArrayBuffer> {
+  const ai = getClient();
+  
+  return await handleGeminiError(async () => {
+    const response = await ai.models.generateContent({
+      model: AiModel.TTS,
+      contents: [{ parts: [{ text: `Say with emotion: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName }
+          }
+        }
+      }
+    });
+
+    trackUsage(response, AiModel.TTS, 'Voice', onUsage);
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("音声が生成されませんでした。");
+
+    // Base64デコード
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }, 'Voice', logCallback);
+}
+
+/**
+ * 整合性スキャン
+ */
+export async function analyzeBibleIntegrity(
+  project: StoryProject,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<BibleIssue[]> {
+  const compactBible = JSON.stringify({
+    bible: project.bible,
+    chapters: project.chapters.map(c => ({ id: c.id, title: c.title, summary: c.summary }))
+  });
+
+  return runGeminiRequest({
+    model: AiModel.REASONING,
+    contents: Prompts.INTEGRITY_SCAN_PROMPT(compactBible),
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: Schemas.integrityScanSchema,
+      thinkingConfig: { thinkingBudget: 12000 }
+    },
+    usageLabel: 'Linter',
+    onUsage,
+    logCallback,
+    mapper: (res) => {
+      const parsed = safeJsonParse<IntegrityScanResponse>(res.text, 'Linter');
+      return (parsed.value?.issues || []).map(issue => ({
+        ...issue,
+        id: crypto.randomUUID()
+      }));
     }
   });
-};
+}
 
-export const maintainSummaryBuffer = async (project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback): Promise<string> => {
-  const { model, thinkingBudget } = resolveModelConfig('CHAT', 'complex');
-  const prompt = Prompts.SUMMARY_BUFFER_PROMPT(JSON.stringify(project.bible));
+/**
+ * 設計士のささやき（リアルタイム分析）
+ */
+export async function getArchitectWhisper(
+  chunk: string,
+  project: StoryProject,
+  activeChapterId: string,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<WhisperAdvice | null> {
+  const context = getCompressedContext(project, activeChapterId);
+  const prompt = Prompts.WHISPER_PROMPT(chunk, context);
+
   return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-    usageLabel: 'Summary Maintenance',
+    model: AiModel.FAST,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: Schemas.whisperSchema
+    },
+    usageLabel: 'Architect/Whisper',
     onUsage,
     logCallback,
-    config: { thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined },
-    mapper: (response) => response.text || ""
-  });
-};
-
-export const simulateBranch = async (hyp: string, project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback): Promise<NexusBranch> => {
-  const { model, thinkingBudget } = resolveModelConfig('SIM', 'complex');
-  const ctx = getCompressedContext(project);
-  const prompt = Prompts.NEXUS_SIM_PROMPT(hyp, ctx);
-  return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-    usageLabel: 'Nexus',
-    onUsage,
-    logCallback,
-    config: { responseMimeType: "application/json", responseSchema: Schemas.nexusSchema, thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined },
-    mapper: (response) => {
-      const res = safeJsonParse<NexusSimulationResponse>(response.text, 'Nexus Sim', logCallback);
-      const val = (res.status === 'PARSE_FAILED' || !res.value) ? Schemas.DEFAULT_RESPONSES.NEXUS : res.value;
-      return { ...val, id: crypto.randomUUID(), timestamp: Date.now() } as NexusBranch;
+    mapper: (res) => {
+      if (res.text?.includes("なし")) return null;
+      return safeJsonParse<WhisperAdvice>(res.text, 'Whisper').value;
     }
   });
-};
+}
 
-export const suggestNextSentence = async (content: string, project: StoryProject, activeChapterId: string, onUsage: UsageCallback, logCallback: LogCallback): Promise<string[]> => {
-  const ctx = getCompressedContext(project, activeChapterId);
-  const { model } = resolveModelConfig('AUTO_GEN');
-  const prompt = Prompts.NEXT_SENTENCE_PROMPT(content, ctx);
+/**
+ * 分岐シミュレーション (Nexus)
+ */
+export async function simulateBranch(
+  hypothesis: string,
+  project: StoryProject,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<NexusBranch> {
+  const context = getCompressedContext(project);
+  const prompt = Prompts.NEXUS_SIM_PROMPT(hypothesis, context);
+
   return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-    usageLabel: 'Writer Copilot',
+    model: AiModel.REASONING,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: Schemas.nexusSchema,
+      thinkingConfig: { thinkingBudget: 8000 }
+    },
+    usageLabel: 'Nexus/Simulator',
     onUsage,
     logCallback,
-    config: { responseMimeType: "application/json", responseSchema: Schemas.suggestionsSchema as any },
-    mapper: (response) => {
-      const res = safeJsonParse<string[]>(response.text, 'Writer Copilot', logCallback);
-      return (res.status === 'PARSE_FAILED' || !res.value) ? Schemas.DEFAULT_RESPONSES.SUGGESTIONS : res.value;
+    mapper: (res) => {
+      const sim = safeJsonParse<NexusSimulationResponse>(res.text, 'Nexus').value || Schemas.DEFAULT_RESPONSES.NEXUS;
+      return {
+        id: crypto.randomUUID(),
+        hypothesis: sim.hypothesis || hypothesis,
+        impactOnCanon: sim.impactOnCanon,
+        impactOnState: sim.impactOnState,
+        alternateTimeline: sim.alternateTimeline || [],
+        timestamp: Date.now()
+      };
     }
   });
-};
+}
 
-export const generateFullChapterPackage = async (project: StoryProject, chapter: ChapterLog, onUsage: UsageCallback, logCallback: LogCallback): Promise<ChapterPackageResponse> => {
-  const { model, thinkingBudget } = resolveModelConfig('DRAFT', 'critical');
-  const ctx = getCompressedContext(project, chapter.id);
-  const prompt = Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary, ctx);
+/**
+ * コンテキストバッファの要約
+ */
+export async function maintainSummaryBuffer(
+  project: { bible: any },
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<string> {
+  const bibleJson = JSON.stringify(project.bible);
+  const prompt = Prompts.SUMMARY_BUFFER_PROMPT(bibleJson);
+
   return runGeminiRequest({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-    usageLabel: 'Chapter Architect',
+    model: AiModel.REASONING,
+    contents: prompt,
+    usageLabel: 'Architect/Summarizer',
     onUsage,
     logCallback,
-    config: { responseMimeType: "application/json", responseSchema: Schemas.chapterPackageSchema, thinkingConfig: thinkingBudget ? { thinkingBudget } : undefined },
-    mapper: (response) => {
-      const res = safeJsonParse<ChapterPackageResponse>(response.text, 'Chapter Architect', logCallback);
-      const pkg = (res.status === 'PARSE_FAILED' || !res.value) ? Schemas.DEFAULT_RESPONSES.CHAPTER_PACKAGE : res.value;
-      return { ...pkg, beats: (pkg.beats || []).map(b => ({ ...b, id: b.id || crypto.randomUUID() })) };
-    }
+    mapper: (res) => res.text || ""
   });
-};
+}
 
-export const generateRandomProject = async (
+/**
+ * 新規プロジェクト案の自動生成
+ */
+export async function generateRandomProject(
   theme: string,
   logCallback: LogCallback
-): Promise<ProjectGenerationResponse> => {
-  const { model } = resolveModelConfig('AUTO_GEN');
+): Promise<any> {
   const ai = getClient();
   const prompt = Prompts.PROJECT_GEN_PROMPT(theme);
-  const response = await ai.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    config: { 
-      responseMimeType: "application/json", 
-      responseSchema: Schemas.projectGenSchema 
-    },
-  });
 
-  const res = safeJsonParse<ProjectGenerationResponse>(response.text, 'Project Generator', logCallback);
-  return (res.status === 'PARSE_FAILED' || !res.value) ? Schemas.DEFAULT_RESPONSES.PROJECT_GEN : res.value;
-};
+  return await handleGeminiError(async () => {
+    const response = await ai.models.generateContent({
+      model: AiModel.FAST,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: Schemas.projectGenSchema
+      }
+    });
+
+    return safeJsonParse<ProjectGenerationResponse>(response.text, 'Muses').value || Schemas.DEFAULT_RESPONSES.PROJECT_GEN;
+  }, 'Muses', logCallback);
+}
+
+/**
+ * 章の全パッケージ生成（構成案 + ビート + ドラフト）
+ */
+export async function generateFullChapterPackage(
+  project: StoryProject,
+  chapter: ChapterLog,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<ChapterPackageResponse> {
+  const context = getCompressedContext(project, chapter.id);
+  const prompt = Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary, context);
+
+  return runGeminiRequest({
+    model: AiModel.REASONING,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: Schemas.chapterPackageSchema,
+      thinkingConfig: { thinkingBudget: 12000 }
+    },
+    usageLabel: 'Writer/FullPackage',
+    onUsage,
+    logCallback,
+    mapper: (res) => safeJsonParse<ChapterPackageResponse>(res.text, 'Writer').value || Schemas.DEFAULT_RESPONSES.CHAPTER_PACKAGE
+  });
+}
+
+/**
+ * 安全ポリシー抵触時の代替案を提案
+ */
+export async function getSafetyAlternatives(
+  blockedInput: string,
+  category: string,
+  logCallback: LogCallback
+): Promise<string[]> {
+  const ai = getClient();
+  const prompt = Prompts.SAFETY_ALTERNATIVES_PROMPT(blockedInput, category);
+
+  try {
+    const res = await ai.models.generateContent({
+      model: AiModel.FAST,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        }
+      }
+    });
+    return safeJsonParse<string[]>(res.text, 'Safety').value || [];
+  } catch (e) {
+    return [];
+  }
+}

@@ -1,4 +1,5 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
 interface Props {
@@ -15,7 +16,7 @@ interface State {
  * ErrorBoundary provides a fallback UI when a component tree crashes.
  * It catches JavaScript errors anywhere in their child component tree.
  */
-// Fix: Explicitly extend React.Component to ensure props, state, and setState are correctly inherited and typed by the instance.
+// Fix: Explicitly extend React.Component to ensure props, state, and setState are correctly inherited and typed.
 class ErrorBoundary extends React.Component<Props, State> {
   // Initialize state as a class property for clear member definition.
   public state: State = {
@@ -34,14 +35,14 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   // Lifecycle method called after an error is thrown.
-  // Accessing members inherited from the Component base class.
+  // Fix: Correctly inherit and access this.props within lifecycle methods.
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Fix: Correctly accessing viewName from the inherited props member.
+    // Correctly accessing viewName from the inherited props member.
     console.error(`Error in ${this.props.viewName}:`, error, errorInfo);
   }
 
   // handleReset method using property initializer to maintain correct 'this' context.
-  // Fix: Correctly calling setState inherited from the React.Component base class.
+  // Fix: Correctly calling setState inherited from the Component base class.
   private handleReset = () => {
     this.setState({ hasError: false, error: null });
   };
@@ -64,7 +65,7 @@ class ErrorBoundary extends React.Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-2xl font-display font-black text-white italic">回路の不具合</h2>
               <p className="text-sm text-stone-500 font-serif leading-relaxed">
-                {/* Fix: Accessing viewName through the correctly inherited props member. */}
+                {/* Fix: Access viewName through this.props on the component instance. */}
                 {this.props.viewName}の読み込み中に予期せぬエラーが発生しました。設計士の推論またはデータの整合性に一時的な問題がある可能性があります。
               </p>
             </div>
@@ -94,7 +95,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    {/* Fix: Correctly accessing children through the inherited props member. */}
+    {/* Fix: Ensure children are correctly accessed from this.props. */}
     return this.props.children || null;
   }
 }
