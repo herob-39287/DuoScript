@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
@@ -16,43 +15,32 @@ interface State {
  * ErrorBoundary provides a fallback UI when a component tree crashes.
  * It catches JavaScript errors anywhere in their child component tree.
  */
-// Fix: Explicitly extend React.Component to ensure props, state, and setState are correctly inherited and typed.
-class ErrorBoundary extends React.Component<Props, State> {
-  // Initialize state as a class property for clear member definition.
-  public state: State = {
-    hasError: false,
-    error: null
-  };
-
-  // Standard constructor for a React class component.
+class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
   }
 
-  // Static method to update state when a rendering error occurs.
-  public static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  // Lifecycle method called after an error is thrown.
-  // Fix: Correctly inherit and access this.props within lifecycle methods.
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Correctly accessing viewName from the inherited props member.
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`Error in ${this.props.viewName}:`, error, errorInfo);
   }
 
-  // handleReset method using property initializer to maintain correct 'this' context.
-  // Fix: Correctly calling setState inherited from the Component base class.
-  private handleReset = () => {
+  handleReset = () => {
     this.setState({ hasError: false, error: null });
   };
 
-  private handleReload = () => {
+  handleReload = () => {
     window.location.reload();
   };
 
-  // The render method handles the fallback UI or children rendering.
-  public render() {
+  render() {
     if (this.state.hasError) {
       return (
         <div className="h-full w-full flex items-center justify-center p-12 bg-stone-950 animate-fade-in">
@@ -65,7 +53,6 @@ class ErrorBoundary extends React.Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-2xl font-display font-black text-white italic">回路の不具合</h2>
               <p className="text-sm text-stone-500 font-serif leading-relaxed">
-                {/* Fix: Access viewName through this.props on the component instance. */}
                 {this.props.viewName}の読み込み中に予期せぬエラーが発生しました。設計士の推論またはデータの整合性に一時的な問題がある可能性があります。
               </p>
             </div>
@@ -95,7 +82,6 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    {/* Fix: Ensure children are correctly accessed from this.props. */}
     return this.props.children || null;
   }
 }

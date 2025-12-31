@@ -1,4 +1,5 @@
 
+
 import { 
   StoryProject, StoryProjectMetadata, WorldBible, ChapterLog, 
   SyncOperation, HistoryEntry, ChatMessage, ViewMode, 
@@ -45,6 +46,10 @@ export const removeChapter = (id: string): ChapterAction => ({ type: 'REMOVE_CHA
  */
 export const loadSync = (sync: SyncState): SyncAction => ({ type: 'LOAD_SYNC', payload: sync });
 export const setChatHistory = (history: ChatMessage[]): SyncAction => ({ type: 'SET_CHAT_HISTORY', payload: history });
+export const consolidateChat = (newMemory: string, archivedCount: number): SyncAction => ({ 
+  type: 'CONSOLIDATE_CHAT', 
+  payload: { newMemory, archivedCount } 
+});
 export const addPendingOps = (ops: SyncOperation[]): SyncAction => ({ type: 'ADD_PENDING_OPS', payload: ops });
 export const updatePendingOp = (id: string, updates: Partial<SyncOperation>): SyncAction => ({ type: 'UPDATE_PENDING_OP', id, updates });
 export const removePendingOp = (id: string): SyncAction => ({ type: 'REMOVE_PENDING_OP', id });

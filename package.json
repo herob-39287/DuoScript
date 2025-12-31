@@ -13,7 +13,8 @@
     "react-dom": "^19.2.3",
     "@google/genai": "^1.33.0",
     "recharts": "^3.6.0",
-    "lucide-react": "^0.561.0"
+    "lucide-react": "^0.561.0",
+    "immer": "10.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

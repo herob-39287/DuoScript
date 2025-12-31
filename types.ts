@@ -1,4 +1,5 @@
 
+
 export enum ViewMode {
   WELCOME = 'WELCOME',
   DASHBOARD = 'DASHBOARD',
@@ -30,6 +31,8 @@ export enum SafetyPreset {
   MATURE = 'MATURE',       // 小説表現を許容（R15相当の文脈を理解）
   CREATIVE = 'CREATIVE',   // 創作の自由を最大化（過度なフィルタリングを抑制）
 }
+
+export type ContextFocus = 'AUTO' | 'CHARACTERS' | 'WORLD' | 'PLOT';
 
 export interface AppPreferences {
   transmissionScope: TransmissionScope;
@@ -106,7 +109,7 @@ export interface SyncOperation {
   id: string;
   requestId: string; 
   op: 'add' | 'update' | 'delete' | 'merge' | 'rename' | 'set' | 'addAlias';
-  path: 'characters' | 'timeline' | 'foreshadowing' | 'entries' | 'chapters' | 'setting' | 'tone' | 'laws' | 'grandArc' | 'volumes';
+  path: 'characters' | 'timeline' | 'foreshadowing' | 'entries' | 'chapters' | 'setting' | 'tone' | 'laws' | 'grandArc' | 'storyStructure' | 'locations' | 'organizations' | 'volumes' | 'themes' | 'keyItems' | 'storyThreads' | 'races' | 'bestiary' | 'abilities';
   domain?: ProjectDomain;
   targetId?: string;
   targetName?: string;
@@ -168,53 +171,87 @@ export interface NexusBranch {
   color?: string;
 }
 
-export interface Relationship {
-  id: string;
-  targetCharacterId: string;
-  type: string; 
-  description: string;
-  sentiment: number;
+// --- CHARACTER REDESIGN ---
+
+export interface LinguisticProfile {
+  firstPerson: string; // 一人称
+  secondPerson: string; // 二人称
+  speechStyle: 'Polite' | 'Casual' | 'Rough' | 'Archaic' | 'Technical' | 'Unique';
+  catchphrases: string[];
+  forbiddenWords: string[];
+  toneSample?: string;
 }
 
-export interface CharacterStatus {
-  location: string;
-  health: string;
-  inventory: string[];
-  knowledge: string[];
+export interface Relationship {
+  targetId: string; // Directed Edge Target
+  type: 'Ally' | 'Enemy' | 'Romance' | 'Family' | 'Business' | 'Other' | 'Complex';
+  description: string;
+  strength: number; // -100 (Hatred) to 100 (Love/Loyalty)
+  lastChangedAt?: string; // Chapter ID or 'Initial'
+}
+
+export interface CharacterHistoryEvent {
+  chapterId?: string;
+  timestamp: number;
+  diff: string; // "Joined Party", "Lost Arm", etc.
+}
+
+export interface CharacterProfile {
+  name: string;
+  aliases: string[];
+  role: 'Protagonist' | 'Antagonist' | 'Supporting' | 'Minor';
+  description: string; // General summary
+  appearance: string; // Visual features
+  personality: string; // Innate traits
+  background: string; // Backstory
+  voice: LinguisticProfile;
+  traits: string[]; // Keywords
+  motivation: string;
+  flaw: string;
+  arc: string;
+}
+
+export interface CharacterState {
+  location: string; // Location ID or Name
+  internalState: string; // Emotion / Mindset
   currentGoal: string;
+  health: string;
   socialStanding: string;
-  internalState: string;
+  // Inventory is removed; derived from KeyItems.currentOwnerId
 }
 
 export interface Character {
   id: string;
-  name: string;
-  aliases: string[];
-  role: 'Protagonist' | 'Antagonist' | 'Supporting' | 'Minor';
-  description: string; 
-  personality?: string;
-  traits: string[];
-  motivation: string;
-  flaw: string;
-  arc: string;
+  
+  // Immutable / Canon Profile
+  profile: CharacterProfile;
+
+  // Mutable / Dynamic State
+  state: CharacterState;
+
+  // Graph
+  relationships: Relationship[];
+  history: CharacterHistoryEvent[];
+
+  // Meta
   imageUrl?: string;
   voiceId?: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr';
-  relationships: Relationship[];
-  status: CharacterStatus; 
-  isPrivate?: boolean; // ローカル秘匿設定
+  isPrivate?: boolean;
 }
 
 export interface StateDelta {
   id: string;
   characterId: string;
   beatId?: string; 
-  field: keyof CharacterStatus;
+  field: keyof CharacterState;
   op: 'set' | 'add' | 'remove';
   value: any;
   rationale: string;
   evidence: string;
   timestamp: number;
 }
+
+// ----------------------
 
 export interface WorldEntry {
   id: string;
@@ -232,9 +269,114 @@ export interface WorldEntry {
   isPrivate?: boolean; // ローカル秘匿設定
 }
 
+export interface WorldLaw {
+  id: string;
+  name: string;
+  description: string;
+  type: 'Physics' | 'Magic' | 'Social' | 'Divine' | 'Taboo';
+  importance: 'Absolute' | 'Flexible' | 'Conditional';
+}
+
+export interface LocationConnection {
+  targetLocationId: string;
+  travelTime: string; // e.g. "徒歩3日"
+  method: string; // e.g. "街道"
+  dangerLevel: string;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  parentId?: string;
+  type: 'Continent' | 'Country' | 'City' | 'Region' | 'Spot' | 'Building';
+  description: string;
+  connections?: LocationConnection[]; // NEW: 地理的接続
+}
+
+export interface OrganizationRelation {
+  targetOrganizationId: string;
+  stance: 'Ally' | 'Neutral' | 'Hostile' | 'Subordinate';
+  description: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  description: string;
+  type: 'Guild' | 'Government' | 'Cult' | 'Party' | 'Company';
+  memberIds: string[];
+  relations?: OrganizationRelation[]; // NEW: 外交関係
+}
+
+export interface Theme {
+  id: string;
+  concept: string; // e.g. "贖罪"
+  description: string;
+  motifs: string[]; // e.g. ["雨", "錆びた剣"]
+  associatedCharacterIds: string[];
+}
+
+export interface KeyItem { // Artifact
+  id: string;
+  name: string;
+  type: 'Weapon' | 'Tool' | 'Relic' | 'Evidence';
+  description: string;
+  currentOwnerId: string | null;
+  currentLocationId: string | null;
+  history: string[]; // 所有の履歴
+  mechanics?: string; // 特殊能力や作動原理
+}
+
+export interface StoryThread { // SubPlot
+  id: string;
+  title: string;
+  involvedCharacterIds: string[];
+  status: 'Open' | 'Resolved';
+  beats: { chapterId: string; eventDescription: string }[];
+}
+
+// --- NEW STRUCTURES ---
+
+export interface Race {
+  id: string;
+  name: string;
+  description: string;
+  traits: string[]; // 身体的・魔法的特徴
+  lifespan?: string; // 平均寿命
+  locations?: string[]; // 主な居住地ID
+}
+
+export interface Bestiary { // Flora & Fauna
+  id: string;
+  name: string;
+  type: 'Beast' | 'Plant' | 'Monster' | 'Spirit';
+  description: string;
+  habitat: string; // 生息地
+  dangerLevel: 'Safe' | 'Caution' | 'Deadly' | 'Catastrophic';
+  dropItems?: string[]; // 採取可能な素材など
+}
+
+export interface Ability { // Magic / Skills
+  id: string;
+  name: string;
+  type: 'Magic' | 'Skill' | 'Tech' | 'Divine';
+  description: string;
+  cost: string; // マナ、体力、代償など
+  mechanics: string; // ルール上の効果
+}
+
+// ----------------------
+
+export interface StoryPhase {
+  id: string;
+  name: string; // e.g. "Act 1", "Introduction"
+  summary: string;
+  goal: string;
+}
+
 export interface ForeshadowingLink {
   foreshadowingId: string;
-  action: 'Plant' | 'Progress' | 'Payoff';
+  action: 'Plant' | 'Progress' | 'Payoff' | 'Twist' | 'RedHerring'; // Expanded actions
   note: string;
 }
 
@@ -246,6 +388,8 @@ export interface TimelineEvent {
   involvedCharacterIds: string[];
   importance: 'Minor' | 'Major' | 'Climax';
   foreshadowingLinks: ForeshadowingLink[];
+  status: 'Canon' | 'Plan' | 'Hypothesis'; // 事実か、予定か、仮説か
+  relatedThreadId?: string; // どのスレッドに属するイベントか
 }
 
 export interface Foreshadowing {
@@ -254,6 +398,8 @@ export interface Foreshadowing {
   description: string;
   status: 'Open' | 'Resolved' | 'Stale';
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  relatedThreadId?: string; // 親スレッド
+  relatedThemeId?: string; // 親テーマ
 }
 
 export interface PlotBeat {
@@ -297,7 +443,7 @@ export interface ChapterLog {
   stateDeltas: StateDelta[]; 
   involvedCharacterIds: string[];
   foreshadowingLinks?: ForeshadowingLink[];
-  postStateCache?: { [characterId: string]: CharacterStatus }; 
+  postStateCache?: { [characterId: string]: CharacterState }; 
   updatedAt: number; 
 }
 
@@ -331,9 +477,20 @@ export interface BibleIssue {
 export interface WorldBible {
   version: number;
   setting: string; 
-  laws: string;    
+  laws: WorldLaw[];
   grandArc: string; 
-  themes: string[]; 
+  storyStructure: StoryPhase[];
+  locations: Location[];
+  organizations: Organization[];
+  themes: Theme[]; 
+  keyItems: KeyItem[]; 
+  storyThreads: StoryThread[];
+  
+  // NEW SECTIONS
+  races: Race[]; // 種族・民族
+  bestiary: Bestiary[]; // 博物誌
+  abilities: Ability[]; // 能力・魔法体系
+
   tone: string;     
   volumes: StoryVolume[];
   characters: Character[]; 
@@ -370,6 +527,8 @@ export interface StoryProjectMetadata {
 
 export interface SyncState {
   chatHistory: ChatMessage[];
+  archivedChat?: ChatMessage[]; // UI表示用（コンテキストには含まない古いログ）
+  conversationMemory?: string; // 長期記憶（要約された会話ログ）
   pendingChanges: SyncOperation[];
   quarantine: QuarantineItem[];
   history: HistoryEntry[];
@@ -451,6 +610,7 @@ export type ChapterAction =
 export type SyncAction = 
   | { type: 'LOAD_SYNC'; payload: SyncState }
   | { type: 'SET_CHAT_HISTORY'; payload: ChatMessage[] }
+  | { type: 'CONSOLIDATE_CHAT'; payload: { newMemory: string; archivedCount: number } }
   | { type: 'ADD_PENDING_OPS'; payload: SyncOperation[] }
   | { type: 'UPDATE_PENDING_OP'; id: string; updates: Partial<SyncOperation> }
   | { type: 'REMOVE_PENDING_OP'; id: string }

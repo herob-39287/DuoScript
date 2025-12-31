@@ -1,13 +1,14 @@
 
+
 import { GoogleGenAI, Modality, Type, GenerateContentResponse } from "@google/genai";
 import { 
   AiModel, StoryProject, ChapterLog, SyncOperation, NexusBranch,
   DetectionResult, IntegrityScanResponse, NexusSimulationResponse,
   ChapterPackageResponse, ProjectGenerationResponse, Character,
-  BibleIssue, GeminiContent, UsageCallback, LogCallback, ExtractionResult, QuarantineItem, WhisperAdvice
+  BibleIssue, GeminiContent, UsageCallback, LogCallback, ExtractionResult, QuarantineItem, WhisperAdvice, ContextFocus
 } from "../../types";
-// Added getFriendlyErrorMessage to imports from utils
-import { handleGeminiError, getCompressedContext, trackUsage, safeJsonParse, resolveModelConfig, generateDeterministicSeed, getSafetySettings, DuoScriptError, getFriendlyErrorMessage } from "./utils";
+// Added withRetry to imports
+import { handleGeminiError, withRetry, getCompressedContext, trackUsage, safeJsonParse, resolveModelConfig, generateDeterministicSeed, getSafetySettings, DuoScriptError, getFriendlyErrorMessage } from "./utils";
 import { findMatchCandidates, validateSyncOperation } from "../bibleManager";
 import * as Schemas from "./schemas";
 import * as Prompts from "./prompts";
@@ -35,7 +36,7 @@ async function runGeminiRequest<T>(params: {
   return await handleGeminiError(async () => {
     const response = await ai.models.generateContent({
       model,
-      contents: typeof contents === 'string' ? contents : contents,
+      contents: typeof contents === 'string' ? [{ role: 'user', parts: [{ text: contents }] }] : contents,
       config: {
         ...config,
         safetySettings: getSafetySettings()
@@ -56,17 +57,21 @@ async function runGeminiRequest<T>(params: {
 
 /**
  * 設計士とのチャット対話
+ * Architectは秘密を知る必要があるため revealSecrets=true
+ * Long-Term Memory (memory) を注入
  */
 export async function chatWithArchitect(
   history: GeminiContent[],
   input: string,
   project: StoryProject,
+  memory: string,
   allowSearch: boolean = true,
+  focus: ContextFocus = 'AUTO',
   onUsage: UsageCallback,
   logCallback: LogCallback
 ) {
-  const context = getCompressedContext(project);
-  const systemInstruction = Prompts.ARCHITECT_SYSTEM_INSTRUCTION(context);
+  const context = getCompressedContext(project, undefined, true, focus);
+  const systemInstruction = Prompts.ARCHITECT_SYSTEM_INSTRUCTION(context, memory);
 
   return runGeminiRequest({
     model: AiModel.REASONING,
@@ -74,7 +79,7 @@ export async function chatWithArchitect(
     config: {
       systemInstruction,
       tools: allowSearch ? [{ googleSearch: {} }] : [],
-      thinkingConfig: { thinkingBudget: 4000 }
+      // thinkingConfig: removed to allow default adaptive thinking budget
     },
     usageLabel: 'Architect',
     onUsage,
@@ -86,6 +91,27 @@ export async function chatWithArchitect(
         uri: chunk.web?.uri || ""
       })) || []
     })
+  });
+}
+
+/**
+ * 会話ログの要約 (Long-Term Memory Update)
+ */
+export async function summarizeConversation(
+  currentMemory: string,
+  oldMessages: GeminiContent[],
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<string> {
+  const prompt = Prompts.CHAT_SUMMARIZATION_PROMPT(currentMemory, oldMessages);
+  
+  return runGeminiRequest({
+    model: AiModel.FAST,
+    contents: prompt,
+    usageLabel: 'System/MemoryConsolidator',
+    onUsage,
+    logCallback,
+    mapper: (res) => res.text || currentMemory
   });
 }
 
@@ -102,7 +128,8 @@ export async function detectSettingChange(
     contents: Prompts.DETECTION_PROMPT(input),
     config: {
       responseMimeType: "application/json",
-      responseSchema: Schemas.detectionSchema
+      responseSchema: Schemas.detectionSchema,
+      thinkingConfig: { thinkingBudget: 0 } // Disable thinking for faster detection
     },
     usageLabel: 'NeuralSync/Detector',
     onUsage,
@@ -113,16 +140,52 @@ export async function detectSettingChange(
 
 /**
  * チャット履歴から具体的な構造化設定を抽出 (NeuralSync)
+ * Architectの文脈を理解するため revealSecrets=true
  */
 export async function extractSettingsFromChat(
   history: GeminiContent[],
   project: StoryProject,
+  memory: string,
   detection: DetectionResult,
   onUsage: UsageCallback,
   logCallback: LogCallback
 ): Promise<ExtractionResult> {
-  const context = getCompressedContext(project);
-  const prompt = Prompts.SYNC_EXTRACT_PROMPT(history, context, detection.categories, detection.isHypothetical);
+  // Extraction always uses AUTO context for broader matching unless specifically requested otherwise in future updates
+  const context = getCompressedContext(project, undefined, true, 'AUTO');
+  const prompt = Prompts.SYNC_EXTRACT_PROMPT(history, memory, context, detection.categories, detection.isHypothetical);
+
+  return runGeminiRequest({
+    model: AiModel.REASONING,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: Schemas.syncOperationSchema
+      }
+      // thinkingConfig: removed to allow default adaptive thinking budget
+    },
+    usageLabel: 'NeuralSync/Extractor',
+    onUsage,
+    logCallback,
+    mapper: (res) => processSyncOperations(res.text, 'Extractor', project, detection.isHypothetical)
+  });
+}
+
+/**
+ * ドラフト本文から設定変更を抽出 (Draft Scan)
+ * 執筆者が書いた内容は「正史」候補であるため、revealSecrets=true でコンテキストを渡し、
+ * 既存の秘密設定との矛盾検知や更新を行う。
+ */
+export async function scanDraftAppSettings(
+  draft: string,
+  project: StoryProject,
+  activeChapterId: string,
+  onUsage: UsageCallback,
+  logCallback: LogCallback
+): Promise<ExtractionResult> {
+  const context = getCompressedContext(project, activeChapterId, true, 'AUTO');
+  const prompt = Prompts.DRAFT_SCAN_PROMPT(draft, context);
 
   return runGeminiRequest({
     model: AiModel.REASONING,
@@ -134,63 +197,76 @@ export async function extractSettingsFromChat(
         items: Schemas.syncOperationSchema
       }
     },
-    usageLabel: 'NeuralSync/Extractor',
+    usageLabel: 'NeuralSync/DraftScanner',
     onUsage,
     logCallback,
-    mapper: (res) => {
-      const parsed = safeJsonParse<SyncOperation[]>(res.text, 'Extractor');
-      const ops = parsed.value || [];
-      const readyOps: SyncOperation[] = [];
-      const quarantineItems: QuarantineItem[] = [];
-
-      ops.forEach(op => {
-        const errors = validateSyncOperation(op);
-        if (errors.length > 0) {
-          quarantineItems.push({
-            id: crypto.randomUUID(),
-            timestamp: Date.now(),
-            rawText: JSON.stringify(op),
-            error: `Validation Error: ${errors.join(", ")}`,
-            stage: 'SCHEMA',
-            partialOp: op
-          });
-          return;
-        }
-
-        // 既存項目へのマッピングを試行
-        const list = op.path === 'chapters' ? project.chapters : (project.bible as any)[op.path];
-        if (Array.isArray(list)) {
-          const candidates = findMatchCandidates(list, op.targetId, op.targetName);
-          if (candidates.length > 0) {
-            if (candidates[0].confidence >= 0.95) {
-              op.targetId = candidates[0].id;
-              op.targetName = candidates[0].name;
-              op.status = 'proposal';
-            } else {
-              op.status = 'needs_resolution';
-              op.candidates = candidates;
-              op.resolutionHint = `複数の候補が見つかりました（最も近いもの: ${candidates[0].name}）`;
-            }
-          } else if (op.op !== 'add') {
-             // addでないのに見つからない場合は新規作成として扱うか、要解決へ
-             op.status = 'needs_resolution';
-             op.resolutionHint = "対象が見つかりませんでした。新規作成するか指定し直してください。";
-          }
-        }
-        
-        op.id = crypto.randomUUID();
-        op.timestamp = Date.now();
-        op.isHypothetical = detection.isHypothetical;
-        readyOps.push(op);
-      });
-
-      return { readyOps, quarantineItems };
-    }
+    mapper: (res) => processSyncOperations(res.text, 'DraftScanner', project, false)
   });
 }
 
 /**
+ * SyncOperationの後処理と検証を行うヘルパー関数
+ */
+function processSyncOperations(
+  jsonText: string | undefined, 
+  source: string, 
+  project: StoryProject, 
+  isHypothetical: boolean
+): ExtractionResult {
+  const parsed = safeJsonParse<SyncOperation[]>(jsonText || "[]", source);
+  const ops = parsed.value || [];
+  const readyOps: SyncOperation[] = [];
+  const quarantineItems: QuarantineItem[] = [];
+
+  ops.forEach(op => {
+    const errors = validateSyncOperation(op);
+    if (errors.length > 0) {
+      quarantineItems.push({
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        rawText: JSON.stringify(op),
+        error: `Validation Error: ${errors.join(", ")}`,
+        stage: 'SCHEMA',
+        partialOp: op
+      });
+      return;
+    }
+
+    // 既存項目へのマッピングを試行
+    const list = op.path === 'chapters' ? project.chapters : (project.bible as any)[op.path];
+    if (Array.isArray(list)) {
+      const candidates = findMatchCandidates(list, op.targetId, op.targetName);
+      if (candidates.length > 0) {
+        if (candidates[0].confidence >= 0.95) {
+          op.targetId = candidates[0].id;
+          op.targetName = candidates[0].name;
+          op.status = 'proposal';
+        } else {
+          op.status = 'needs_resolution';
+          op.candidates = candidates;
+          op.resolutionHint = `複数の候補が見つかりました（最も近いもの: ${candidates[0].name}）`;
+        }
+      } else if (op.op !== 'add') {
+         // addでないのに見つからない場合は新規作成として扱うか、要解決へ
+         // ドラフトスキャンの場合は新規要素が多いので、名称がある場合は新規として扱いやすいようにするが
+         // 原則は needs_resolution でユーザーに判断させる
+         op.status = 'needs_resolution';
+         op.resolutionHint = "対象が見つかりませんでした。新規作成するか指定し直してください。";
+      }
+    }
+    
+    op.id = crypto.randomUUID();
+    op.timestamp = Date.now();
+    op.isHypothetical = isHypothetical;
+    readyOps.push(op);
+  });
+
+  return { readyOps, quarantineItems };
+}
+
+/**
  * 初稿生成 (Streaming)
+ * Writerは秘密を知るべきではないため revealSecrets=false
  */
 export async function* generateDraftStream(
   chapter: ChapterLog,
@@ -200,19 +276,22 @@ export async function* generateDraftStream(
   logCallback: LogCallback
 ) {
   const ai = getClient();
-  const context = getCompressedContext(project, chapter.id);
+  const context = getCompressedContext(project, chapter.id, false, 'AUTO');
   const systemInstruction = Prompts.WRITER_SYSTEM_INSTRUCTION(context, tone);
   const prompt = Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats);
 
   try {
-    const result = await ai.models.generateContentStream({
-      model: usePro ? AiModel.REASONING : AiModel.FAST,
-      contents: prompt,
-      config: {
-        systemInstruction,
-        thinkingConfig: usePro ? { thinkingBudget: 4000 } : undefined
-      }
-    });
+    const result = await withRetry(async () => {
+      return await ai.models.generateContentStream({
+        model: usePro ? AiModel.REASONING : AiModel.FAST,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction,
+          // thinkingConfig: removed to allow default adaptive thinking budget
+          safetySettings: getSafetySettings()
+        }
+      });
+    }, 'Writer', logCallback);
 
     for await (const chunk of result) {
       if (chunk.candidates?.[0]?.finishReason === 'SAFETY') {
@@ -229,6 +308,7 @@ export async function* generateDraftStream(
 
 /**
  * 続きの文章を提案 (AI Copilot)
+ * CopilotもWriter同様、秘密を隠蔽
  */
 export async function suggestNextSentence(
   content: string,
@@ -237,7 +317,7 @@ export async function suggestNextSentence(
   onUsage: UsageCallback,
   logCallback: LogCallback
 ): Promise<string[]> {
-  const context = getCompressedContext(project, activeChapterId);
+  const context = getCompressedContext(project, activeChapterId, false, 'AUTO');
   const prompt = Prompts.NEXT_SENTENCE_PROMPT(content, context);
 
   return runGeminiRequest({
@@ -272,14 +352,14 @@ export async function generateCharacterPortrait(
     usageLabel: 'Artist/Describer',
     onUsage,
     logCallback,
-    mapper: (res) => res.text || `${character.name}, portrait.`
+    mapper: (res) => res.text || `${character.profile.name}, portrait.`
   });
 
   // 2. 画像生成
   return await handleGeminiError(async () => {
     const res = await ai.models.generateContent({
       model: AiModel.IMAGE,
-      contents: Prompts.PORTRAIT_PROMPT(visualDesc),
+      contents: [{ parts: [{ text: Prompts.PORTRAIT_PROMPT(visualDesc) }] }],
       config: {
         imageConfig: { aspectRatio: "3:4" }
       }
@@ -336,6 +416,7 @@ export async function generateSpeech(
 
 /**
  * 整合性スキャン
+ * Architect/Linterは秘密を含めて整合性をチェック
  */
 export async function analyzeBibleIntegrity(
   project: StoryProject,
@@ -353,7 +434,7 @@ export async function analyzeBibleIntegrity(
     config: {
       responseMimeType: "application/json",
       responseSchema: Schemas.integrityScanSchema,
-      thinkingConfig: { thinkingBudget: 12000 }
+      // thinkingConfig: removed to allow default adaptive thinking budget
     },
     usageLabel: 'Linter',
     onUsage,
@@ -370,6 +451,7 @@ export async function analyzeBibleIntegrity(
 
 /**
  * 設計士のささやき（リアルタイム分析）
+ * Architectは秘密を知る
  */
 export async function getArchitectWhisper(
   chunk: string,
@@ -378,7 +460,7 @@ export async function getArchitectWhisper(
   onUsage: UsageCallback,
   logCallback: LogCallback
 ): Promise<WhisperAdvice | null> {
-  const context = getCompressedContext(project, activeChapterId);
+  const context = getCompressedContext(project, activeChapterId, true, 'AUTO');
   const prompt = Prompts.WHISPER_PROMPT(chunk, context);
 
   return runGeminiRequest({
@@ -400,6 +482,7 @@ export async function getArchitectWhisper(
 
 /**
  * 分岐シミュレーション (Nexus)
+ * Nexusは世界の全て（秘密含む）を知る必要がある
  */
 export async function simulateBranch(
   hypothesis: string,
@@ -407,7 +490,7 @@ export async function simulateBranch(
   onUsage: UsageCallback,
   logCallback: LogCallback
 ): Promise<NexusBranch> {
-  const context = getCompressedContext(project);
+  const context = getCompressedContext(project, undefined, true, 'AUTO');
   const prompt = Prompts.NEXUS_SIM_PROMPT(hypothesis, context);
 
   return runGeminiRequest({
@@ -416,7 +499,7 @@ export async function simulateBranch(
     config: {
       responseMimeType: "application/json",
       responseSchema: Schemas.nexusSchema,
-      thinkingConfig: { thinkingBudget: 8000 }
+      // thinkingConfig: removed to allow default adaptive thinking budget
     },
     usageLabel: 'Nexus/Simulator',
     onUsage,
@@ -469,7 +552,7 @@ export async function generateRandomProject(
   return await handleGeminiError(async () => {
     const response = await ai.models.generateContent({
       model: AiModel.FAST,
-      contents: prompt,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: Schemas.projectGenSchema
@@ -482,6 +565,7 @@ export async function generateRandomProject(
 
 /**
  * 章の全パッケージ生成（構成案 + ビート + ドラフト）
+ * Writerモードなので秘密は隠す
  */
 export async function generateFullChapterPackage(
   project: StoryProject,
@@ -489,7 +573,7 @@ export async function generateFullChapterPackage(
   onUsage: UsageCallback,
   logCallback: LogCallback
 ): Promise<ChapterPackageResponse> {
-  const context = getCompressedContext(project, chapter.id);
+  const context = getCompressedContext(project, chapter.id, false, 'AUTO');
   const prompt = Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary, context);
 
   return runGeminiRequest({
@@ -498,7 +582,7 @@ export async function generateFullChapterPackage(
     config: {
       responseMimeType: "application/json",
       responseSchema: Schemas.chapterPackageSchema,
-      thinkingConfig: { thinkingBudget: 12000 }
+      // thinkingConfig: removed to allow default adaptive thinking budget
     },
     usageLabel: 'Writer/FullPackage',
     onUsage,
@@ -521,7 +605,7 @@ export async function getSafetyAlternatives(
   try {
     const res = await ai.models.generateContent({
       model: AiModel.FAST,
-      contents: prompt,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {

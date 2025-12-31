@@ -3,6 +3,7 @@ import { Loader2, Image as ImageIcon, Sparkles, Target, Activity, Lock, ChevronD
 import React, { useState, useEffect } from 'react';
 import { Character } from '../../types';
 import { getPortrait } from '../../services/storageService';
+import { useBible } from '../../contexts/StoryContext';
 
 interface CharacterCardProps {
   character: Character;
@@ -11,9 +12,15 @@ interface CharacterCardProps {
 }
 
 export const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isGenerating }: CharacterCardProps) => {
+  const bible = useBible();
   const [imgData, setImgData] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Derive inventory from KeyItems
+  const inventory = bible.keyItems
+    .filter(i => i.currentOwnerId === c.id)
+    .map(i => i.name);
 
   useEffect(() => {
     if (c.imageUrl) {
@@ -63,27 +70,27 @@ export const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isG
            </button>
         </div>
         <div className="absolute bottom-4 left-6 md:bottom-6 md:left-8 bg-stone-950/60 backdrop-blur-md px-4 py-2 rounded-xl flex items-center gap-2">
-          <h4 className="text-base md:text-lg font-display font-black text-white italic">{c.name}</h4>
+          <h4 className="text-base md:text-lg font-display font-black text-white italic">{c.profile.name}</h4>
           {c.isPrivate && <Lock size={12} className="text-emerald-400" />}
         </div>
       </div>
       <div className="p-6 md:p-8 space-y-4 md:space-y-6 flex-1 flex flex-col">
         <div className="flex-1 space-y-4">
-          <p className="text-[10px] md:text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-3 italic">"{c.description}"</p>
+          <p className="text-[10px] md:text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-3 italic">"{c.profile.description}"</p>
           
           <div className="space-y-3 pt-2">
              <div className="flex items-start gap-3">
                <Target size={14} className="text-orange-500 mt-0.5 shrink-0" />
                <div className="space-y-0.5">
                  <span className="text-[8px] font-black text-stone-600 uppercase">Motivation</span>
-                 <p className="text-[10px] text-stone-300 font-serif leading-relaxed">{c.motivation || "未設定"}</p>
+                 <p className="text-[10px] text-stone-300 font-serif leading-relaxed">{c.profile.motivation || "未設定"}</p>
                </div>
              </div>
              <div className="flex items-start gap-3">
                <Activity size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                <div className="space-y-0.5">
-                 <span className="text-[8px] font-black text-stone-600 uppercase">Status</span>
-                 <p className="text-[10px] text-stone-400 font-serif italic">@{c.status?.location || "不明"}: {c.status?.internalState || "平常"}</p>
+                 <span className="text-[8px] font-black text-stone-600 uppercase">State</span>
+                 <p className="text-[10px] text-stone-400 font-serif italic">@{c.state.location || "不明"}: {c.state.internalState || "平常"}</p>
                </div>
              </div>
           </div>
@@ -92,24 +99,15 @@ export const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isG
         {isExpanded && (
           <div className="pt-6 border-t border-white/5 space-y-6 animate-fade-in">
              <div className="grid grid-cols-2 gap-4">
-                <StatusItem icon={<MapPin size={12}/>} label="Location" value={c.status.location} />
-                <StatusItem icon={<Heart size={12}/>} label="Health" value={c.status.health} />
+                <StatusItem icon={<MapPin size={12}/>} label="Location" value={c.state.location} />
+                <StatusItem icon={<Heart size={12}/>} label="Health" value={c.state.health} />
              </div>
              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-[8px] font-black text-stone-600 uppercase tracking-widest"><Package size={12}/> Inventory</div>
+                <div className="flex items-center gap-2 text-[8px] font-black text-stone-600 uppercase tracking-widest"><Package size={12}/> Key Items</div>
                 <div className="flex flex-wrap gap-1.5">
-                   {c.status.inventory.length === 0 ? <span className="text-[9px] text-stone-700 italic">None</span> : 
-                    c.status.inventory.map((item, i) => (
+                   {inventory.length === 0 ? <span className="text-[9px] text-stone-700 italic">None</span> : 
+                    inventory.map((item, i) => (
                       <span key={i} className="px-2 py-1 bg-stone-900 border border-white/5 rounded-lg text-[9px] text-stone-400">{item}</span>
-                    ))}
-                </div>
-             </div>
-             <div className="space-y-3">
-                <div className="flex items-center gap-2 text-[8px] font-black text-stone-600 uppercase tracking-widest"><Brain size={12}/> Knowledge</div>
-                <div className="flex flex-wrap gap-1.5">
-                   {c.status.knowledge.length === 0 ? <span className="text-[9px] text-stone-700 italic">Unknown</span> : 
-                    c.status.knowledge.map((k, i) => (
-                      <span key={i} className="px-2 py-1 bg-stone-900 border border-white/5 rounded-lg text-[9px] text-stone-400">{k}</span>
                     ))}
                 </div>
              </div>
@@ -121,7 +119,7 @@ export const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isG
             {isExpanded ? <ChevronUp size={12}/> : <ChevronDown size={12}/>} {isExpanded ? 'Hide Stats' : 'Show Stats'}
           </button>
           <div className="flex gap-1">
-             {c.traits?.slice(0, 2).map((t: string, i: number) => (
+             {c.profile.traits?.slice(0, 2).map((t: string, i: number) => (
                <span key={i} className="px-2 py-0.5 bg-stone-800 rounded text-[7px] text-stone-400 font-bold">{t}</span>
              ))}
           </div>

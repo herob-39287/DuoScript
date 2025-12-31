@@ -1,17 +1,19 @@
 
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { generateDraftStream, suggestNextSentence, generateFullChapterPackage, generateSpeech, getSafetyAlternatives } from '../services/geminiService';
+import { generateDraftStream, suggestNextSentence, generateFullChapterPackage, generateSpeech, getSafetyAlternatives, scanDraftAppSettings } from '../services/geminiService';
 import { 
   useManuscript, useBible, useUI, useMetadata, 
   useManuscriptDispatch, useMetadataDispatch, useNotificationDispatch, 
-  useUIDispatch, useNeuralSync 
+  useUIDispatch, useNeuralSync, useNeuralSyncDispatch
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
 import { saveChapterContent } from '../services/storageService';
 import { 
   Sparkles, Plus, Maximize2, Minimize2, Loader2, Feather, LayoutDashboard, Pen, 
   X, Info, BookOpen, AlignLeft, AlignRight, CheckCircle2, MessageCircle, Zap, RotateCcw, Menu,
-  Volume2, Flag, TrendingUp, Trash2, ThumbsUp, ThumbsDown, ShieldOff, Quote, ShieldAlert, RefreshCw, Brain
+  Volume2, Flag, TrendingUp, Trash2, ThumbsUp, ThumbsDown, ShieldOff, Quote, ShieldAlert, RefreshCw, Brain,
+  Shuffle, EyeOff, ScanSearch
 } from 'lucide-react';
 import { ViewMode, PlotBeat, ForeshadowingLink, WhisperAdvice } from '../types';
 import { useManuscriptEditor } from '../hooks/useManuscriptEditor';
@@ -28,6 +30,7 @@ const WriterView: React.FC = () => {
   const ui = useUI();
   const uiDispatch = useUIDispatch();
   const sync = useNeuralSync();
+  const syncDispatch = useNeuralSyncDispatch();
 
   const project = useMemo(() => ({ meta, bible, chapters, sync }), [meta, bible, chapters, sync]);
 
@@ -62,6 +65,7 @@ const WriterView: React.FC = () => {
   const [newForeshadowingNote, setNewForeshadowingNote] = useState('');
 
   const [isSafetyMitigating, setIsSafetyMitigating] = useState(false);
+  const [isScanningDraft, setIsScanningDraft] = useState(false);
 
   useEffect(() => {
     if (!newForeshadowingId && bible.foreshadowing.length > 0) {
@@ -106,6 +110,39 @@ const WriterView: React.FC = () => {
       }
     } finally {
       setIsCopilotLoading(false);
+    }
+  };
+
+  const handleDraftScan = async () => {
+    const currentVal = textareaRef.current?.value || "";
+    if (isScanningDraft || !currentVal.trim() || !activeChapterId) return;
+    
+    setIsScanningDraft(true);
+    addLog('info', 'NeuralSync', 'ドラフトから新規設定を抽出中...');
+    
+    try {
+      const extraction = await scanDraftAppSettings(
+        currentVal, 
+        project, 
+        activeChapterId, 
+        (u) => metaDispatch(Actions.trackUsage(u)), 
+        addLog
+      );
+
+      if (extraction.readyOps.length > 0) {
+        syncDispatch(Actions.addPendingOps(extraction.readyOps));
+        addLog('success', 'NeuralSync', `${extraction.readyOps.length}件の設定変更案を検出しました。Architectで確認してください。`);
+      } else {
+        addLog('info', 'NeuralSync', '新しい設定変更は検出されませんでした。');
+      }
+
+      if (extraction.quarantineItems.length > 0) {
+        syncDispatch(Actions.addQuarantineItems(extraction.quarantineItems));
+      }
+    } catch (e) {
+      addLog('error', 'NeuralSync', 'ドラフトスキャンに失敗しました。');
+    } finally {
+      setIsScanningDraft(false);
     }
   };
 
@@ -370,6 +407,10 @@ const WriterView: React.FC = () => {
                <div className="hidden sm:flex items-center gap-2 px-4 border-r border-white/10 mr-2"><div className="w-10 h-1 rounded-full bg-stone-800 overflow-hidden"><div className="h-full bg-orange-500 transition-all duration-1000" style={{ width: `${progressPercentage}%` }} /></div><span className="text-[9px] font-mono text-stone-500">{progressPercentage}%</span></div>
                <button onClick={handleSuggest} disabled={isCopilotLoading} className="p-4 bg-stone-800 text-orange-400 hover:bg-orange-600 hover:text-white rounded-full md:rounded-2xl transition-all disabled:opacity-50 active:scale-95 group relative">{isCopilotLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}</button>
                
+               <button onClick={handleDraftScan} disabled={isScanningDraft} className="p-4 bg-stone-800 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-full md:rounded-2xl transition-all disabled:opacity-50 active:scale-95 group relative" title="設定をスキャンして抽出">
+                 {isScanningDraft ? <Loader2 size={20} className="animate-spin" /> : <ScanSearch size={20} />}
+               </button>
+
                <button onClick={() => triggerWhisper()} disabled={isWhispering} className={`p-4 rounded-full md:rounded-2xl transition-all disabled:opacity-50 active:scale-95 group relative ${isWhispering ? 'bg-orange-600 text-white' : 'bg-stone-800 text-stone-400 hover:text-orange-400'}`}>
                  {isWhispering ? <Loader2 size={20} className="animate-spin" /> : <Brain size={20} />}
                  {!isWhispering && <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-stone-900 text-[8px] text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-white/5">設計士のささやき</div>}
@@ -397,23 +438,59 @@ const WriterView: React.FC = () => {
                  </div>
                </section>
                <section className="space-y-4">
-                 <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flag size={16} className="text-orange-400" /><span className="text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Foreshadowing</span></div><span className="text-[9px] font-mono text-stone-600">{(activeChapter.foreshadowingLinks ?? []).length}</span></div>
+                 <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Flag size={16} className="text-orange-400" /><span className="text-[10px] font-black text-stone-500 uppercase tracking-[0.3em]">Foreshadowing Process</span></div><span className="text-[9px] font-mono text-stone-600">{(activeChapter.foreshadowingLinks ?? []).length}</span></div>
                  <div className="space-y-3">
                    {(activeChapter.foreshadowingLinks ?? []).map((link, idx) => (
-                     <div key={idx} className="p-3 bg-stone-900/60 border border-white/5 rounded-2xl flex items-start gap-3">
-                       <div className={`mt-0.5 ${link.action === 'Plant' ? 'text-orange-400' : 'text-emerald-400'}`}><Flag size={14} /></div>
-                       <div className="flex-1 min-w-0">
-                         <div className="text-[10px] font-black text-stone-300 uppercase tracking-widest">{link.action === 'Plant' ? '提示' : '回収'}</div>
-                         <div className="text-[11px] text-stone-200 font-serif-bold truncate">{bible.foreshadowing.find(f => f.id === link.foreshadowingId)?.title || '伏線'}</div>
+                     <div key={idx} className="p-3 bg-stone-900/60 border border-white/5 rounded-2xl flex items-start gap-3 group">
+                       <div className={`mt-0.5 p-1.5 rounded-lg ${
+                         link.action === 'Plant' ? 'bg-orange-600/20 text-orange-400' :
+                         link.action === 'Progress' ? 'bg-blue-600/20 text-blue-400' :
+                         link.action === 'Twist' ? 'bg-purple-600/20 text-purple-400' :
+                         link.action === 'RedHerring' ? 'bg-pink-600/20 text-pink-400' :
+                         'bg-emerald-600/20 text-emerald-400'
+                       }`}>
+                         {link.action === 'Plant' && <Flag size={12} />}
+                         {link.action === 'Progress' && <TrendingUp size={12} />}
+                         {link.action === 'Twist' && <Shuffle size={12} />}
+                         {link.action === 'RedHerring' && <EyeOff size={12} />}
+                         {link.action === 'Payoff' && <CheckCircle2 size={12} />}
                        </div>
-                       <button onClick={() => handleRemoveForeshadowingLink(idx)} className="p-2 text-stone-600 hover:text-rose-400"><Trash2 size={14} /></button>
+                       <div className="flex-1 min-w-0">
+                         <div className="flex items-center gap-2">
+                           <span className={`text-[8px] font-black uppercase tracking-widest ${
+                             link.action === 'Plant' ? 'text-orange-500' :
+                             link.action === 'Progress' ? 'text-blue-500' :
+                             link.action === 'Twist' ? 'text-purple-500' :
+                             link.action === 'RedHerring' ? 'text-pink-500' :
+                             'text-emerald-500'
+                           }`}>{link.action}</span>
+                         </div>
+                         <div className="text-[11px] text-stone-200 font-serif-bold truncate">{bible.foreshadowing.find(f => f.id === link.foreshadowingId)?.title || '伏線'}</div>
+                         {link.note && <div className="text-[9px] text-stone-500 font-serif italic truncate mt-0.5">"{link.note}"</div>}
+                       </div>
+                       <button onClick={() => handleRemoveForeshadowingLink(idx)} className="p-2 text-stone-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
                      </div>
                    ))}
-                   <select value={newForeshadowingId} onChange={e => setNewForeshadowingId(e.target.value)} className="w-full bg-stone-950/60 border border-white/5 rounded-2xl px-4 py-4 text-[11px] text-stone-300 appearance-none">
-                     <option value="">伏線を選択...</option>
-                     {bible.foreshadowing.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
-                   </select>
-                   <button onClick={handleAddForeshadowingLink} disabled={!newForeshadowingId} className="w-full py-4 bg-stone-800 hover:bg-orange-600 text-stone-200 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">リンクを追加</button>
+                   
+                   <div className="p-4 bg-stone-900/40 rounded-2xl space-y-3 border border-dashed border-stone-800">
+                      <div className="text-[8px] font-black text-stone-600 uppercase tracking-widest">Add Link</div>
+                      <select value={newForeshadowingId} onChange={e => setNewForeshadowingId(e.target.value)} className="w-full bg-stone-950 border border-white/10 rounded-xl px-3 py-3 text-[11px] text-stone-300 outline-none focus:border-orange-500/30 appearance-none">
+                        <option value="">対象の伏線を選択...</option>
+                        {bible.foreshadowing.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+                      </select>
+                      
+                      <div className="flex flex-wrap gap-2">
+                         <ActionBtn active={newForeshadowingAction === 'Plant'} onClick={() => setNewForeshadowingAction('Plant')} icon={<Flag size={12}/>} label="Plant" color="orange" />
+                         <ActionBtn active={newForeshadowingAction === 'Progress'} onClick={() => setNewForeshadowingAction('Progress')} icon={<TrendingUp size={12}/>} label="Prog" color="blue" />
+                         <ActionBtn active={newForeshadowingAction === 'Twist'} onClick={() => setNewForeshadowingAction('Twist')} icon={<Shuffle size={12}/>} label="Twist" color="purple" />
+                         <ActionBtn active={newForeshadowingAction === 'RedHerring'} onClick={() => setNewForeshadowingAction('RedHerring')} icon={<EyeOff size={12}/>} label="Fake" color="pink" />
+                         <ActionBtn active={newForeshadowingAction === 'Payoff'} onClick={() => setNewForeshadowingAction('Payoff')} icon={<CheckCircle2 size={12}/>} label="Done" color="emerald" />
+                      </div>
+
+                      <input value={newForeshadowingNote} onChange={e => setNewForeshadowingNote(e.target.value)} placeholder="備考 (任意)" className="w-full bg-stone-950 border border-white/10 rounded-xl px-3 py-2 text-[10px] text-stone-300 outline-none focus:border-orange-500/30" />
+
+                      <button onClick={handleAddForeshadowingLink} disabled={!newForeshadowingId} className="w-full py-3 bg-stone-800 hover:bg-orange-600 text-stone-200 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50">リンクを追加</button>
+                   </div>
                  </div>
                </section>
                <section className="mt-auto pt-8 pb-32">
@@ -433,5 +510,17 @@ const BeatItem = React.memo(({ beat, isCompleted, onToggle }: { beat: PlotBeat, 
     <div className="flex-1 min-w-0"><p className={`text-[11px] font-serif-bold leading-relaxed ${isCompleted ? 'line-through text-stone-600' : 'text-stone-300'}`}>{beat.text}</p></div>
   </button>
 ));
+
+const ActionBtn = ({ active, onClick, icon, label, color }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, color: 'orange'|'blue'|'emerald'|'purple'|'pink' }) => {
+  const bg = active ? `bg-${color}-600` : 'bg-stone-900';
+  const text = active ? 'text-white' : 'text-stone-500';
+  const border = active ? `border-${color}-500` : 'border-white/5';
+  return (
+    <button onClick={onClick} className={`flex-1 min-w-[3rem] flex flex-col items-center justify-center py-2 rounded-xl border ${bg} ${text} ${border} transition-all`}>
+      {icon}
+      <span className="text-[8px] font-black uppercase mt-1">{label}</span>
+    </button>
+  );
+};
 
 export default React.memo(WriterView);
