@@ -1,24 +1,24 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { BibleIssue, SystemLog, ViewMode, Foreshadowing, AssetMetadata, Citation } from '../types';
+import { BibleIssue, SystemLog, ViewMode, Foreshadowing, AssetMetadata, TokenUsageEntry } from '../types';
 import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
 import { 
-  useMetadata, useMetadataDispatch, useBible, useBibleDispatch, useManuscript, 
-  useNotificationDispatch, useNotifications, useUIDispatch 
+  useMetadata, useMetadataDispatch, useBibleDispatch, useManuscript, 
+  useNotificationDispatch, useNotifications, useUIDispatch,
+  useCharacters, useWorldFoundation, useGeography, usePlotPlan, useKnowledge, useBible
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
 import { 
   Activity, Terminal, Trash2, ShieldCheck, Loader2, Zap, 
-  ShieldAlert, RefreshCcw, MessageSquareShare, Database,
+  ShieldAlert, Database,
   BrainCircuit, Sparkles, Flag, TrendingUp, CheckCircle2,
-  HardDrive, Image as ImageIcon, X, Quote, ThumbsUp, ThumbsDown, ShieldOff, AlertTriangle, BarChart3,
-  Shuffle, EyeOff
+  HardDrive, Image as ImageIcon, Quote, ThumbsUp, ThumbsDown, ShieldOff, AlertTriangle, BarChart3,
+  Shuffle, EyeOff, MessageSquareShare, Info, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 import { getAllAssetMetadata, deletePortrait, getPortrait } from '../services/storageService';
 import { translateSafetyCategory } from '../services/gemini/utils';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
-  PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis
+  PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
 
 interface Props {
@@ -27,14 +27,20 @@ interface Props {
 
 const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const meta = useMetadata();
-  const { id: projectId, title, tokenUsage, preferences, violationCount, violationHistory } = meta;
+  const { id: projectId, tokenUsage, preferences, violationCount, violationHistory } = meta;
   const metaDispatch = useMetadataDispatch();
-  const bible = useBible();
   const bibleDispatch = useBibleDispatch();
   const chapters = useManuscript();
   const uiDispatch = useUIDispatch();
   const { logs } = useNotifications();
   const { addLog, dispatch: notifDispatch } = useNotificationDispatch();
+
+  // Use granular hooks
+  const characters = useCharacters();
+  const foundation = useWorldFoundation();
+  const plot = usePlotPlan();
+  const knowledge = useKnowledge();
+  const bible = useBible();
 
   const [isScanning, setIsScanning] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -43,6 +49,29 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   
   const totalTokens = useMemo(() => {
     return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.input) || 0) + (Number(entry.output) || 0), 0);
+  }, [tokenUsage]);
+
+  const totalInputTokens = useMemo(() => {
+    return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.input) || 0), 0);
+  }, [tokenUsage]);
+
+  const totalOutputTokens = useMemo(() => {
+    return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.output) || 0), 0);
+  }, [tokenUsage]);
+
+  // 機能別の使用量集計
+  const usageBySource = useMemo(() => {
+    const raw = (tokenUsage || []).reduce((acc, entry) => {
+      const src = entry.source || 'Unknown';
+      if (!acc[src]) acc[src] = { source: src, input: 0, output: 0, total: 0 };
+      acc[src].input += Number(entry.input) || 0;
+      acc[src].output += Number(entry.output) || 0;
+      acc[src].total += (Number(entry.input) || 0) + (Number(entry.output) || 0);
+      return acc;
+    }, {} as Record<string, { source: string; input: number; output: number; total: number }>);
+
+    // Explicitly cast Object.values to the expected type to avoid 'unknown' errors in sort
+    return (Object.values(raw) as Array<{ source: string; input: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
   }, [tokenUsage]);
 
   useEffect(() => {
@@ -70,20 +99,12 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   }, [chapters]);
 
   const roleDistribution = useMemo(() => {
-    const counts = bible.characters.reduce((acc, char) => {
-      acc[char.role] = (acc[char.role] || 0) + 1;
+    const counts = characters.reduce((acc, char) => {
+      acc[char.profile.role] = (acc[char.profile.role] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [bible.characters]);
-
-  const timelineIntensity = useMemo(() => {
-    return bible.timeline.map((t, i) => ({
-      x: i,
-      importance: t.importance === 'Climax' ? 100 : t.importance === 'Major' ? 60 : 30,
-      name: t.event
-    }));
-  }, [bible.timeline]);
+  }, [characters]);
 
   const handleDeleteAsset = async (assetId: string) => {
     uiDispatch(Actions.openDialog({
@@ -105,7 +126,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     const ensureEntry = (id: string, fallbackTitle = '未登録の伏線'): ForeshadowingTraceEntry => {
       const existing = entries.get(id);
       if (existing) return existing;
-      const foreshadowing = bible.foreshadowing.find((item) => item.id === id) ?? {
+      const foreshadowing = plot.foreshadowing.find((item) => item.id === id) ?? {
         id, title: fallbackTitle, description: '', status: 'Open', priority: 'Low'
       };
       const created = { foreshadowing, plant: [], progress: [], twist: [], redHerring: [], payoff: [] };
@@ -113,7 +134,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
       return created;
     };
 
-    bible.foreshadowing.forEach((item) => {
+    plot.foreshadowing.forEach((item) => {
       ensureEntry(item.id, item.title);
     });
 
@@ -137,7 +158,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     });
 
     return Array.from(entries.values());
-  }, [bible.foreshadowing, chapters]);
+  }, [plot.foreshadowing, chapters]);
 
   const unresolvedForeshadowing = useMemo(
     () => foreshadowingTrace.filter((entry) => entry.payoff.length === 0),
@@ -187,11 +208,11 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
       metaDispatch(Actions.updatePreferences({ 
         disabledLinterRules: Array.from(new Set([...currentDisabled, issue.ruleId])) 
       }));
-      const nextIssues = bible.integrityIssues.filter(i => i.ruleId !== issue.ruleId);
+      const nextIssues = knowledge.integrityIssues.filter(i => i.ruleId !== issue.ruleId);
       bibleDispatch(Actions.updateBible({ integrityIssues: nextIssues }));
       addLog('info', 'System', `判定ルール "${issue.ruleId}" を無効化しました。`);
     } else {
-      const nextIssues = bible.integrityIssues.map(i => i.id === issue.id ? { ...i, feedback } : i);
+      const nextIssues = knowledge.integrityIssues.map(i => i.id === issue.id ? { ...i, feedback } : i);
       bibleDispatch(Actions.updateBible({ integrityIssues: nextIssues }));
       if (feedback === 'FalsePositive') addLog('info', 'System', '誤検知を記録しました。');
     }
@@ -223,12 +244,83 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 px-1">
             <StatCard icon={<Activity size={20}/>} label="トークン累積" value={totalTokens.toLocaleString()} unit="T" color="text-emerald-400" />
-            <StatCard icon={<Zap size={20}/>} label="聖書Ver." value={(bible.version || 0).toString()} unit="V" color="text-orange-400" />
+            <StatCard icon={<Zap size={20}/>} label="聖書項目" value={(characters.length + foundation.laws.length + plot.timeline.length + knowledge.entries.length).toString()} unit="Item" color="text-orange-400" />
             <StatCard icon={<HardDrive size={20}/>} label="アセット容量" value={(totalAssetSize / 1024 / 1024).toFixed(1)} unit="MB" color="text-blue-400" />
             <StatCard icon={<Sparkles size={20}/>} label="執筆完了" value={chapters.filter(c => c.status === 'Polished').length.toString()} unit="C" color="text-purple-400" />
         </div>
 
-        {/* Analytic Charts Section */}
+        {/* トークン消費内訳セクション */}
+        <div className="glass rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-10 space-y-8 mx-1">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-xl md:text-2xl font-display font-black text-white italic tracking-tight flex items-center gap-3">
+                <Database size={20} className="text-emerald-400" /> リソース消費分析
+              </h3>
+              <p className="text-[11px] text-stone-500 font-serif">どの機能がどれだけのコンテキスト（トークン）を消費しているかを可視化します。</p>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex flex-col items-end">
+                <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft size={10} className="text-emerald-500"/> Total Input</span>
+                <span className="text-lg font-mono font-black text-emerald-400">{totalInputTokens.toLocaleString()}</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowUpRight size={10} className="text-orange-400"/> Total Output</span>
+                <span className="text-lg font-mono font-black text-orange-400">{totalOutputTokens.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* 棒グラフ: 機能別使用量 */}
+            <div className="lg:col-span-8 h-[300px] min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={usageBySource} layout="vertical" margin={{ left: 20, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" horizontal={true} vertical={false} />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="source" 
+                    type="category" 
+                    stroke="#57534e" 
+                    fontSize={10} 
+                    width={100} 
+                    tickLine={false} 
+                    axisLine={false} 
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                    contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                    itemStyle={{ fontSize: '11px' }}
+                  />
+                  <Bar dataKey="input" name="入力 (Context)" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} barSize={20} />
+                  <Bar dataKey="output" name="出力 (Generation)" stackId="a" fill="#d68a6d" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* 数値リスト: 詳細 */}
+            <div className="lg:col-span-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2">
+              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest border-b border-white/5 pb-2">機能別詳細内訳</div>
+              {usageBySource.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-stone-950/40 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                    <span className="text-[10px] font-black text-stone-300 uppercase truncate max-w-[120px]">{item.source}</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] font-mono text-stone-100">{item.total.toLocaleString()}</span>
+                    <span className="text-[7px] font-mono text-stone-600">IN: {item.input.toLocaleString()} / OUT: {item.output.toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+              {usageBySource.length === 0 && (
+                <div className="h-full flex items-center justify-center text-stone-700 italic font-serif text-xs py-10">
+                  使用データがまだありません。
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-1">
             <div className="lg:col-span-2 glass rounded-[2rem] p-6 md:p-10 space-y-6 h-[400px] flex flex-col">
               <div className="flex items-center justify-between">
@@ -237,7 +329,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                 </h3>
                 <span className="text-[9px] font-mono text-stone-700">Total: {chapters.reduce((a,c) => a+(c.wordCount||0),0).toLocaleString()} chars</span>
               </div>
-              <div className="flex-1 w-full min-h-0">
+              <div className="flex-1 w-full min-h-0 relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={progressData}>
                     <defs>
@@ -263,7 +355,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
               <h3 className="text-sm font-black text-stone-600 uppercase tracking-widest flex items-center gap-2">
                 <Activity size={16} className="text-indigo-400" /> 役割分布
               </h3>
-              <div className="flex-1 w-full flex items-center justify-center min-h-0">
+              <div className="flex-1 w-full flex items-center justify-center min-h-0 relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -296,7 +388,6 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
             </div>
         </div>
 
-        {/* Safety Policy Status Section */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
            <div className="lg:col-span-4 glass rounded-[1.5rem] md:rounded-[2.5rem] p-8 md:p-10 space-y-6 mx-1 border border-amber-500/10">
               <div className="flex items-center justify-between">
@@ -340,15 +431,14 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
            </div>
         </div>
 
-        {/* Linter Issues Section */}
-        {bible.integrityIssues && bible.integrityIssues.length > 0 && (
+        {knowledge.integrityIssues && knowledge.integrityIssues.length > 0 && (
           <div className="space-y-6">
             <div className="flex items-center gap-3 px-2">
               <ShieldAlert size={20} className="text-rose-500"/>
               <h3 className="text-xl font-display font-black text-white italic tracking-tight uppercase">Integrity Alerts</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 animate-fade-in px-1">
-              {bible.integrityIssues.filter(i => i.feedback !== 'FalsePositive').map(issue => (
+              {knowledge.integrityIssues.filter(i => i.feedback !== 'FalsePositive').map(issue => (
                 <div key={issue.id} className="p-6 md:p-8 glass rounded-[2rem] border border-rose-500/20 space-y-5 relative overflow-hidden group">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -361,23 +451,6 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                   
                   <p className="text-[13px] md:text-[14px] font-serif-bold text-stone-200 leading-relaxed italic">"{issue.description}"</p>
                   
-                  {issue.citations && issue.citations.length > 0 && (
-                    <div className="space-y-3">
-                       <div className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1.5"><Quote size={10}/> 判定の根拠</div>
-                       <div className="grid grid-cols-1 gap-2">
-                         {issue.citations.map((cite, i) => (
-                           <div key={i} className="p-3 bg-stone-950/40 rounded-xl border border-white/5 space-y-1 text-[10px]">
-                             <div className="flex justify-between font-black uppercase tracking-widest text-[7px] text-orange-500/70">
-                               <span>{cite.label}</span>
-                               <span className="text-stone-700">{cite.sourceType}</span>
-                             </div>
-                             <p className="text-stone-400 font-serif italic line-clamp-2">"{cite.textSnippet}"</p>
-                           </div>
-                         ))}
-                       </div>
-                    </div>
-                  )}
-
                   <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 space-y-1">
                      <div className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">解決への提案</div>
                      <p className="text-[11px] text-stone-400 font-serif leading-relaxed italic">{issue.suggestion}</p>
@@ -474,7 +547,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                 <div className="space-y-4 md:space-y-6">
                   <span className="text-[9px] md:text-[10px] font-black text-stone-600 uppercase tracking-widest">現在の要約バッファ</span>
                   <p className="text-[11px] md:text-xs text-stone-400 font-serif leading-relaxed italic line-clamp-[6] md:line-clamp-[15]">
-                    {bible.summaryBuffer || "記憶を整理してAIの推論を効率化してください。"}
+                    {foundation.summaryBuffer || "記憶を整理してAIの推論を効率化してください。"}
                   </p>
                 </div>
                 <div className="mt-6 pt-6 border-t border-white/5 shrink-0">

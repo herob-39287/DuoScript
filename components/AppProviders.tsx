@@ -3,7 +3,11 @@ import React, { useMemo } from 'react';
 import { 
   MetadataStateContext, 
   ManuscriptStateContext,
-  BibleStateContext, 
+  CharactersContext,
+  WorldFoundationContext,
+  GeographyContext,
+  PlotPlanContext,
+  KnowledgeContext,
   NeuralSyncStateContext, 
   ProjectDispatchContext,
   UIStateContext, UIDispatchContext,
@@ -35,11 +39,41 @@ interface AppProvidersProps {
 export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dispatchers }) => {
   // Memoize each context value to prevent unnecessary re-renders in specialized components
   const metaValue = useMemo(() => state.meta, [state.meta]);
-  const bibleValue = useMemo(() => state.bible, [state.bible]);
   const chaptersValue = useMemo(() => state.chapters, [state.chapters]);
   const syncValue = useMemo(() => state.sync, [state.sync]);
   const uiValue = useMemo(() => state.ui, [state.ui]);
   const notificationValue = useMemo(() => state.notification, [state.notification]);
+
+  // Granular Bible Sub-States (Suggestion 1 implementation)
+  const charactersValue = useMemo(() => state.bible.characters, [state.bible.characters]);
+  
+  const worldFoundationValue = useMemo(() => ({
+    setting: state.bible.setting,
+    laws: state.bible.laws,
+    tone: state.bible.tone,
+    summaryBuffer: state.bible.summaryBuffer,
+  }), [state.bible.setting, state.bible.laws, state.bible.tone, state.bible.summaryBuffer]);
+
+  const geographyValue = useMemo(() => ({
+    locations: state.bible.locations,
+    organizations: state.bible.organizations,
+  }), [state.bible.locations, state.bible.organizations]);
+
+  const plotPlanValue = useMemo(() => ({
+    grandArc: state.bible.grandArc,
+    storyStructure: state.bible.storyStructure,
+    timeline: state.bible.timeline,
+    foreshadowing: state.bible.foreshadowing,
+    storyThreads: state.bible.storyThreads,
+  }), [state.bible.grandArc, state.bible.storyStructure, state.bible.timeline, state.bible.foreshadowing, state.bible.storyThreads]);
+
+  const knowledgeValue = useMemo(() => ({
+    entries: state.bible.entries,
+    keyItems: state.bible.keyItems,
+    themes: state.bible.themes,
+    nexusBranches: state.bible.nexusBranches,
+    integrityIssues: state.bible.integrityIssues,
+  }), [state.bible.entries, state.bible.keyItems, state.bible.themes, state.bible.nexusBranches, state.bible.integrityIssues]);
 
   return (
     <NotificationStateContext.Provider value={notificationValue}>
@@ -49,11 +83,19 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
             <ProjectDispatchContext.Provider value={dispatchers.project}>
               <MetadataStateContext.Provider value={metaValue}>
                 <ManuscriptStateContext.Provider value={chaptersValue}>
-                  <BibleStateContext.Provider value={bibleValue}>
-                    <NeuralSyncStateContext.Provider value={syncValue}>
-                      {children}
-                    </NeuralSyncStateContext.Provider>
-                  </BibleStateContext.Provider>
+                  <CharactersContext.Provider value={charactersValue}>
+                    <WorldFoundationContext.Provider value={worldFoundationValue}>
+                      <GeographyContext.Provider value={geographyValue}>
+                        <PlotPlanContext.Provider value={plotPlanValue}>
+                          <KnowledgeContext.Provider value={knowledgeValue}>
+                            <NeuralSyncStateContext.Provider value={syncValue}>
+                              {children}
+                            </NeuralSyncStateContext.Provider>
+                          </KnowledgeContext.Provider>
+                        </PlotPlanContext.Provider>
+                      </GeographyContext.Provider>
+                    </WorldFoundationContext.Provider>
+                  </CharactersContext.Provider>
                 </ManuscriptStateContext.Provider>
               </MetadataStateContext.Provider>
             </ProjectDispatchContext.Provider>

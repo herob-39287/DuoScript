@@ -1,5 +1,8 @@
 
-import { SyncOperation, HistoryEntry, WorldBible, ChapterLog, Character } from '../../types';
+import { 
+  SyncOperation, HistoryEntry, WorldBible, ChapterLog, Character,
+  SyncPath
+} from '../../types';
 import { ensureScalar, findItemIdx } from './utils';
 
 export interface SyncContext {
@@ -26,7 +29,8 @@ export class ScalarStrategy implements SyncStrategy {
   apply(ctx: SyncContext, op: SyncOperation) {
     const nextBible = { ...ctx.bible };
     const oldVal = (nextBible as any)[op.path];
-    const newVal = ensureScalar(op.value, op.field);
+    // op.value is a string for setting/tone/grandArc as per Discriminated Union
+    const newVal = typeof op.value === 'string' ? op.value : ensureScalar(op.value, op.field);
     
     (nextBible as any)[op.path] = newVal;
     
@@ -46,12 +50,11 @@ export class ScalarStrategy implements SyncStrategy {
 }
 
 export class CharacterStrategy implements SyncStrategy {
-  // Fields mapped to state
   private stateFields = ['location', 'health', 'currentGoal', 'socialStanding', 'internalState'];
-  // Fields mapped to profile
   private profileFields = ['name', 'aliases', 'role', 'description', 'appearance', 'personality', 'background', 'traits', 'motivation', 'flaw', 'arc'];
 
   apply(ctx: SyncContext, op: SyncOperation) {
+    if (op.path !== 'characters') throw new Error("Invalid path for CharacterStrategy");
     const nextBible = { ...ctx.bible };
     const characters = [...(nextBible.characters || [])];
     
@@ -60,27 +63,13 @@ export class CharacterStrategy implements SyncStrategy {
     let newVal: any = null;
 
     const idx = findItemIdx(characters, op.targetId, op.targetName);
-    const incoming = (typeof op.value === 'object' && op.value !== null) ? op.value : { content: op.value };
+    const incoming = op.value;
 
-    // Helper to merge nested objects from incoming to character structure
-    const mergeCharacterData = (char: Character, data: any) => {
-        // Profile Merge
+    const mergeCharacterData = (char: Character, data: Partial<Character>) => {
         if (data.profile) Object.assign(char.profile, data.profile);
-        this.profileFields.forEach(k => {
-            if (data[k] !== undefined) (char.profile as any)[k] = data[k];
-        });
-        if (data.voice) char.profile.voice = data.voice;
-        
-        // State Merge
         if (data.state) Object.assign(char.state, data.state);
-        this.stateFields.forEach(k => {
-            if (data[k] !== undefined) (char.state as any)[k] = data[k];
-        });
-
-        // Relationship Merge (Simplistic replace/append for now)
         if (Array.isArray(data.relationships)) {
-            // Merge logic: update existing relationships by targetId, add new ones
-            data.relationships.forEach((rel: any) => {
+            data.relationships.forEach((rel) => {
                 const existingIdx = char.relationships.findIndex(r => r.targetId === rel.targetId);
                 if (existingIdx !== -1) {
                     char.relationships[existingIdx] = { ...char.relationships[existingIdx], ...rel };
@@ -98,31 +87,30 @@ export class CharacterStrategy implements SyncStrategy {
     };
 
     if (idx === -1 && op.op !== 'delete') {
-      // Create New
       const newChar: Character = {
         id: crypto.randomUUID(),
         profile: {
-            name: ensureScalar(incoming.name || incoming.profile?.name || op.targetName),
-            aliases: incoming.aliases || [],
-            role: incoming.role || 'Supporting',
-            description: incoming.description || '',
-            appearance: incoming.appearance || '',
-            personality: incoming.personality || '',
-            background: incoming.background || '',
-            voice: incoming.voice || { 
+            name: ensureScalar(incoming.profile?.name || op.targetName),
+            aliases: incoming.profile?.aliases || [],
+            role: incoming.profile?.role || 'Supporting',
+            description: incoming.profile?.description || '',
+            appearance: incoming.profile?.appearance || '',
+            personality: incoming.profile?.personality || '',
+            background: incoming.profile?.background || '',
+            voice: incoming.profile?.voice || { 
                 firstPerson: '私', secondPerson: 'あなた', speechStyle: 'Casual', catchphrases: [], forbiddenWords: [] 
             },
-            traits: incoming.traits || [],
-            motivation: incoming.motivation || '',
-            flaw: incoming.flaw || '',
-            arc: incoming.arc || ''
+            traits: incoming.profile?.traits || [],
+            motivation: incoming.profile?.motivation || '',
+            flaw: incoming.profile?.flaw || '',
+            arc: incoming.profile?.arc || ''
         },
         state: {
-            location: incoming.location || incoming.state?.location || '不明',
-            health: incoming.health || '良好',
-            currentGoal: incoming.currentGoal || '',
-            socialStanding: incoming.socialStanding || '',
-            internalState: incoming.internalState || incoming.state?.internalState || '平常'
+            location: incoming.state?.location || '不明',
+            health: incoming.state?.health || '良好',
+            currentGoal: incoming.state?.currentGoal || '',
+            socialStanding: incoming.state?.socialStanding || '',
+            internalState: incoming.state?.internalState || '平常'
         },
         relationships: incoming.relationships || [],
         history: [],
@@ -132,7 +120,7 @@ export class CharacterStrategy implements SyncStrategy {
       targetName = newChar.profile.name;
       newVal = newChar;
     } else if (idx !== -1) {
-      const current = { ...characters[idx], profile: { ...characters[idx].profile }, state: { ...characters[idx].state }, relationships: [...characters[idx].relationships] };
+      const current = JSON.parse(JSON.stringify(characters[idx])) as Character;
       targetName = current.profile.name;
 
       if (op.op === 'delete') {
@@ -140,32 +128,12 @@ export class CharacterStrategy implements SyncStrategy {
         characters.splice(idx, 1);
         newVal = "DELETED";
       } else {
-        oldVal = JSON.parse(JSON.stringify(current)); // Deep copy for history
-        
-        if (op.field) {
-          // Specific field update
-          const val = ensureScalar(op.value, op.field);
-          if (this.stateFields.includes(op.field)) {
-             (current.state as any)[op.field] = val;
-          } else if (this.profileFields.includes(op.field)) {
-             (current.profile as any)[op.field] = val;
-          } else if (op.field === 'voice') {
-             current.profile.voice = { ...current.profile.voice, ...op.value };
-          } else if (op.field === 'relationships') {
-             // If specifically setting relationships array
-             current.relationships = Array.isArray(op.value) ? op.value : current.relationships;
-          }
-        } else {
-          // Merge update
-          mergeCharacterData(current, incoming);
-        }
-        
-        // Add History Event
+        oldVal = JSON.parse(JSON.stringify(characters[idx]));
+        mergeCharacterData(current, incoming);
         current.history.push({
             timestamp: Date.now(),
             diff: op.rationale || "Updated via NeuralSync"
         });
-
         newVal = current;
         characters[idx] = newVal;
       }
@@ -178,7 +146,6 @@ export class CharacterStrategy implements SyncStrategy {
   revert(ctx: SyncContext, history: HistoryEntry) {
     const nextBible = { ...ctx.bible };
     const characters = [...(nextBible.characters || [])];
-    
     if (history.opType === 'delete') {
       characters.push(history.oldValue);
     } else if (history.oldValue === null || history.opType === 'add') {
@@ -210,18 +177,15 @@ export class CollectionStrategy implements SyncStrategy {
     let newVal: any = null;
 
     const idx = findItemIdx(collection, op.targetId, op.targetName);
-    const incomingValue = (typeof op.value === 'object' && op.value !== null) ? op.value : { content: op.value };
+    const incomingValue = op.value as any;
 
     if (idx === -1 && op.op !== 'delete') {
       const newItem: any = { id: crypto.randomUUID(), updatedAt: Date.now() };
-      Object.keys(incomingValue).forEach(k => {
-        newItem[k] = incomingValue[k];
-      });
-
+      Object.assign(newItem, incomingValue);
       if (!newItem.title && !newItem.event && !newItem.name && !newItem.concept && op.targetName) {
-        if (op.path === 'timeline') newItem.event = ensureScalar(op.targetName);
-        else if (op.path === 'themes') newItem.concept = ensureScalar(op.targetName);
-        else newItem.title = ensureScalar(op.targetName);
+        if (op.path === 'timeline') newItem.event = op.targetName;
+        else if (op.path === 'themes') newItem.concept = op.targetName;
+        else newItem.title = op.targetName;
       }
       collection.push(newItem);
       targetName = newItem.title || newItem.event || newItem.name || newItem.concept || targetName;
@@ -236,14 +200,7 @@ export class CollectionStrategy implements SyncStrategy {
         newVal = "DELETED";
       } else {
         oldVal = { ...current };
-        if (op.field) {
-          current[op.field] = incomingValue[op.field] !== undefined ? incomingValue[op.field] : incomingValue;
-        } else {
-          if (Array.isArray(incomingValue.aliases)) {
-             incomingValue.aliases = Array.from(new Set([...(current.aliases || []), ...incomingValue.aliases]));
-          }
-          Object.assign(current, incomingValue);
-        }
+        Object.assign(current, incomingValue);
         current.updatedAt = Date.now();
         newVal = current;
         collection[idx] = newVal;
@@ -262,10 +219,7 @@ export class CollectionStrategy implements SyncStrategy {
     const isBiblePath = history.path !== 'chapters';
     const nextBible = { ...ctx.bible };
     const nextChapters = [...ctx.chapters];
-    
-    const collection = isBiblePath 
-      ? [...((nextBible as any)[history.path] || [])]
-      : nextChapters;
+    const collection = isBiblePath ? [...((nextBible as any)[history.path] || [])] : nextChapters;
     
     if (history.opType === 'delete') {
       collection.push(history.oldValue);
@@ -274,21 +228,15 @@ export class CollectionStrategy implements SyncStrategy {
       if (idx !== -1) collection.splice(idx, 1);
     } else {
       const idx = collection.findIndex((i: any) => (i.title || i.event || i.name || i.concept) === history.targetName);
-      if (idx !== -1) {
-        collection[idx] = history.oldValue;
-      }
+      if (idx !== -1) collection[idx] = history.oldValue;
     }
-
-    if (isBiblePath) {
-      (nextBible as any)[history.path] = collection;
-    } else {
-      return { nextBible, nextChapters: collection };
-    }
+    if (isBiblePath) (nextBible as any)[history.path] = collection;
+    else return { nextBible, nextChapters: collection };
     return { nextBible, nextChapters: ctx.chapters };
   }
 }
 
-export const STRATEGY_MAP: Record<string, SyncStrategy> = {
+export const STRATEGY_MAP: Record<SyncPath, SyncStrategy> = {
   setting: new ScalarStrategy(),
   tone: new ScalarStrategy(),
   grandArc: new ScalarStrategy(),
@@ -306,7 +254,7 @@ export const STRATEGY_MAP: Record<string, SyncStrategy> = {
   timeline: new CollectionStrategy(),
   foreshadowing: new CollectionStrategy(),
   entries: new CollectionStrategy(),
-  nexusBranches: new CollectionStrategy(),
   volumes: new CollectionStrategy(),
-  chapters: new CollectionStrategy()
+  chapters: new CollectionStrategy(),
+  nexusBranches: new CollectionStrategy()
 };

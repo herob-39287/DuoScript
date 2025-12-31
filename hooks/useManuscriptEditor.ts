@@ -5,7 +5,7 @@ import {
   useManuscriptDispatch, useMetadataDispatch, useNotificationDispatch, useNeuralSync 
 } from '../contexts/StoryContext';
 import { loadChapterContent, saveChapterContent } from '../services/storageService';
-import { getArchitectWhisper } from '../services/geminiService';
+import { getArchitectWhisper, identifyRelevantEntities } from '../services/geminiService';
 import { WhisperAdvice } from '../types';
 
 export const useManuscriptEditor = (initialChapterId: string, isProcessing: boolean = false) => {
@@ -25,6 +25,7 @@ export const useManuscriptEditor = (initialChapterId: string, isProcessing: bool
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const syncTimeoutRef = useRef<number | null>(null);
+  const librarianTimeoutRef = useRef<number | null>(null);
   const lastWhisperTimeRef = useRef<number>(0);
   const draftVersionRef = useRef(0);
 
@@ -63,6 +64,26 @@ export const useManuscriptEditor = (initialChapterId: string, isProcessing: bool
     };
     fetchContent();
   }, [activeChapterId, projectDispatch, addLog, meta.id, meta.headRev]);
+
+  /**
+   * Librarian (司書) の呼び出し: 文脈から関連設定を抽出
+   */
+  const triggerLibrarian = useCallback(async (text: string) => {
+    if (!activeChapterId) return;
+    try {
+      const ids = await identifyRelevantEntities(
+        text, 
+        { meta, bible, chapters, sync } as any, 
+        (u) => metaDispatch({ type: 'TRACK_USAGE', payload: u }), 
+        () => {}
+      );
+      if (ids.length > 0) {
+        projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapterId, updates: { relevantEntityIds: ids } });
+      }
+    } catch (e) {
+      console.error("Librarian failed", e);
+    }
+  }, [activeChapterId, bible, meta, chapters, sync, projectDispatch, metaDispatch]);
 
   const triggerWhisper = useCallback(async () => {
     const text = textareaRef.current?.value || "";
@@ -110,12 +131,20 @@ export const useManuscriptEditor = (initialChapterId: string, isProcessing: bool
     draftVersionRef.current += 1;
     const currentVersion = draftVersionRef.current;
 
+    // 自動保存
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = window.setTimeout(() => {
       projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapterId, updates: { content: currentVal, draftVersion: currentVersion } });
       saveChapterContent(meta.id, activeChapterId, meta.headRev || 1, currentVal);
     }, 1000);
-  }, [activeChapterId, projectDispatch, meta.id, meta.headRev]);
+
+    // 司書(Librarian)のバックグラウンド実行 (5秒おきに最新化)
+    if (librarianTimeoutRef.current) window.clearTimeout(librarianTimeoutRef.current);
+    librarianTimeoutRef.current = window.setTimeout(() => {
+      triggerLibrarian(currentVal);
+    }, 5000);
+
+  }, [activeChapterId, projectDispatch, meta.id, meta.headRev, triggerLibrarian]);
 
   return {
     activeChapter,

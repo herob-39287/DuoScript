@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode, Component } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
 interface Props {
@@ -15,23 +15,28 @@ interface State {
  * ErrorBoundary provides a fallback UI when a component tree crashes.
  * It catches JavaScript errors anywhere in their child component tree.
  */
+// Fix: Use the named Component import directly to ensure properties like props and setState are correctly inherited and recognized by TypeScript.
 class ErrorBoundary extends Component<Props, State> {
+  // Fix: Explicitly initialize the state property at the class level.
+  public state: State = {
+    hasError: false,
+    error: null
+  };
+
   constructor(props: Props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
   }
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
+  // Fix: Standard React lifecycle method properly accessing this.props and this.state.
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`Error in ${this.props.viewName}:`, error, errorInfo);
   }
 
+  // Fix: Use instance property with arrow function to bind 'this' correctly for event handlers.
   handleReset = () => {
     this.setState({ hasError: false, error: null });
   };
@@ -40,8 +45,12 @@ class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  // Fix: Standard render method accessing props and state via 'this'.
   render() {
-    if (this.state.hasError) {
+    const { hasError, error } = this.state;
+    const { viewName, children } = this.props;
+
+    if (hasError) {
       return (
         <div className="h-full w-full flex items-center justify-center p-12 bg-stone-950 animate-fade-in">
           <div className="max-w-md w-full glass p-10 rounded-[3rem] border border-rose-500/20 shadow-3xl text-center space-y-6">
@@ -53,13 +62,13 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-2xl font-display font-black text-white italic">回路の不具合</h2>
               <p className="text-sm text-stone-500 font-serif leading-relaxed">
-                {this.props.viewName}の読み込み中に予期せぬエラーが発生しました。設計士の推論またはデータの整合性に一時的な問題がある可能性があります。
+                {viewName}の読み込み中に予期せぬエラーが発生しました。設計士の推論またはデータの整合性に一時的な問題がある可能性があります。
               </p>
             </div>
             
             <div className="p-4 bg-stone-900/50 rounded-2xl border border-white/5 text-left">
               <p className="text-[10px] font-mono text-rose-400/70 break-words overflow-hidden">
-                {this.state.error?.message}
+                {error?.message}
               </p>
             </div>
 
@@ -82,7 +91,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children || null;
+    return children || null;
   }
 }
 

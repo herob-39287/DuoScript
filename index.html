@@ -45,11 +45,18 @@
 
       .prose-literary {
         font-family: var(--font-serif);
-        line-height: 2.5;
-        letter-spacing: 0.1em;
+        line-height: 2.2;
+        letter-spacing: 0.05em;
         font-weight: 400;
         color: #e7e5e4;
         transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+      }
+
+      @media (min-width: 768px) {
+        .prose-literary {
+           line-height: 2.5;
+           letter-spacing: 0.1em;
+        }
       }
 
       /* 縦書きモードの基本定義 */
@@ -57,18 +64,18 @@
         writing-mode: vertical-rl;
         -webkit-writing-mode: vertical-rl;
         text-orientation: upright;
-        height: 80vh;
-        max-height: 1000px;
+        height: 85vh;
+        max-height: 1200px;
         margin: auto;
-        padding: 2rem;
+        padding: 2rem 1rem;
         line-height: 2.8;
       }
 
       @media (max-width: 768px) {
         .writing-vertical {
-          height: calc(100vh - 200px);
+          height: calc(100vh - 180px);
           padding: 1rem 0.5rem;
-          line-height: 2.4;
+          line-height: 2.2;
         }
       }
 
@@ -79,7 +86,7 @@
       }
 
       .glass {
-        background: rgba(28, 25, 23, 0.85);
+        background: rgba(28, 25, 23, 0.9);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -110,6 +117,9 @@
       @media (max-width: 640px) {
         button, a {
           min-height: 44px;
+        }
+        input, textarea, select {
+          font-size: 16px !important; /* iOSのズーム防止 */
         }
       }
     </style>

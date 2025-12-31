@@ -1,5 +1,5 @@
 {
   "name": "DuoScript - 物語のアトリエ",
-  "description": "設計士と執筆者の2つのAIエージェントと共に、長編小説の構想・執筆・分析を行う高度な執筆環境。",
+  "description": "設計士と執筆者の2つのAIエージェントと共に、長編小説の構想・執筆・分析を行う高度な執筆環境。Gemini 3 Proの高度な推論による設定管理と、Gemini 3 Flashによる高速な執筆支援を実現。",
   "requestFramePermissions": []
 }

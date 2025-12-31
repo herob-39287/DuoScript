@@ -1,5 +1,4 @@
 
-
 import { StoryProject, AiModel, UsageCallback, LogCallback, TaskComplexity, ModelRequestConfig, TransmissionScope, SafetyPreset, Character, ContextFocus } from "../../types";
 import { GenerateContentResponse, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
@@ -14,6 +13,14 @@ export class DuoScriptError extends Error {
     super(message);
     this.name = 'DuoScriptError';
   }
+}
+
+/**
+ * 簡易的なトークン数推定 (文字数ベース)
+ */
+export function estimateTokenCount(text: string): number {
+  if (!text) return 0;
+  return Math.ceil(text.length * 1.1);
 }
 
 export function generateDeterministicSeed(input: string): number {
@@ -56,7 +63,6 @@ export function repairTruncatedJson(text: string): { repairedText: string, repai
     steps.push("Markdown code block removed");
   }
 
-  // 簡易的な閉じ括弧補完
   const openBraces = (repaired.match(/\{/g) || []).length;
   const closeBraces = (repaired.match(/\}/g) || []).length;
   const openBrackets = (repaired.match(/\[/g) || []).length;
@@ -80,7 +86,6 @@ export function safeJsonParse<T>(text: string, source: string): { value: T | nul
     return { value: JSON.parse(cleanText) as T };
   } catch (e) {
     try {
-      // 修復を試みる
       const { repairedText } = repairTruncatedJson(text);
       return { value: JSON.parse(repairedText) as T };
     } catch (e2) {
@@ -113,20 +118,18 @@ export async function withRetry<T>(
   maxRetries = 3
 ): Promise<T> {
   let lastError: any;
-  
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await operation();
     } catch (error: any) {
       lastError = error;
       if (error.status === 429 || error.message.includes("429")) {
-        // Exponential backoff
         const delay = Math.pow(2, i) * 1000 + Math.random() * 500;
         await new Promise(resolve => setTimeout(resolve, delay));
         if (i === 1) logCallback('info', source as any, "混雑のためリトライしています...");
         continue;
       }
-      throw error; // 他のエラーは即座にスロー
+      throw error; 
     }
   }
   throw lastError;
@@ -156,281 +159,110 @@ export function getSafetySettings() {
   ];
 }
 
-export function resolveModelConfig(
-  baseModel: string, 
-  complexity: TaskComplexity, 
-  userParams?: ModelRequestConfig
-) {
-  return {
-    model: baseModel,
-    ...userParams
-  };
-}
-
 /**
- * フォーマットヘルパー: キャラクター情報を詳細レベルに応じて整形
- */
-function formatCharacter(c: Character, bible: any, level: 'DETAILED' | 'SUMMARY'): string {
-  const p = c.profile;
-  const s = c.state;
-  
-  const base = `### ${p.name} [${p.role}]`;
-
-  if (level === 'DETAILED') {
-    const voice = `Voice: {1st:"${p.voice.firstPerson}", 2nd:"${p.voice.secondPerson}", Tone:"${p.voice.speechStyle}"}`;
-    const locationName = bible.locations.find((l:any) => l.id === s.location)?.name || s.location;
-    
-    // Inventory
-    const inventory = bible.keyItems
-        .filter((i:any) => i.currentOwnerId === c.id)
-        .map((i:any) => i.name);
-    const invStr = inventory.length > 0 ? `Inventory: [${inventory.join(', ')}]` : "Inventory: (None)";
-
-    // Relationships
-    const rels = c.relationships.map(r => {
-        const targetName = bible.characters.find((tc:any) => tc.id === r.targetId)?.profile.name || "Unknown";
-        return `${targetName}(${r.type}, ${r.strength > 0 ? '+' : ''}${r.strength})`;
-    }).join(', ');
-
-    return `${base}
-- [STATIC] Profile: ${p.description}
-  Appearance: ${p.appearance}
-  Personality: ${p.personality}
-  Traits: ${p.traits.join(', ')} | Motivation: ${p.motivation} | Flaw: ${p.flaw}
-  ${voice}
-- [DYNAMIC] State:
-  Current Location: ${locationName}
-  Internal State: ${s.internalState}
-  Current Goal: ${s.currentGoal}
-  Health: ${s.health}
-  ${invStr}
-  Relationships: {${rels}}`;
-  } else {
-    return `* ${p.name} [${p.role}]: ${p.description.slice(0, 100)}... (At: ${s.location}, Mood: ${s.internalState})`;
-  }
-}
-
-/**
- * テキスト内に対象のキーワードが含まれているか判定
- */
-function isMentioned(text: string, keywords: string[]): boolean {
-  if (!text) return false;
-  const normalizedText = text.toLowerCase();
-  return keywords.some(k => k && normalizedText.includes(k.toLowerCase()));
-}
-
-/**
- * Tier 1: Global Context (Always included)
- */
-function getGlobalContext(project: StoryProject): string {
-  const { bible } = project;
-  const laws = bible.laws.map(l => `- [LAW: ${l.name}] (${l.type}/${l.importance}): ${l.description}`).join('\n');
-  const tone = bible.tone ? `Tone: ${bible.tone}` : "";
-  
-  return [
-    `Title: ${project.meta.title}`,
-    `Genre: ${project.meta.genre}`,
-    tone,
-    `Setting: ${bible.setting}`,
-    `Grand Arc: ${bible.grandArc}`,
-    `=== CANON LAWS (ABSOLUTE PHYSICS/RULES) ===\n${laws}`
-  ].filter(Boolean).join('\n');
-}
-
-/**
- * Tier 2: Task-Specific Context Builders
- */
-function getCharactersContext(project: StoryProject, activeChapterId?: string, revealSecrets: boolean = false): string {
-  const { bible, chapters } = project;
-  const activeChapter = activeChapterId ? chapters.find(c => c.id === activeChapterId) : null;
-  const chapterTextContext = activeChapter ? (activeChapter.title + " " + activeChapter.summary) : "";
-
-  // 全キャラクターを詳細モードで出力
-  const chars = bible.characters
-    .filter(c => revealSecrets || !c.isPrivate || (activeChapter?.involvedCharacterIds?.includes(c.id) || false))
-    .map(c => formatCharacter(c, bible, 'DETAILED'))
-    .join('\n\n');
-
-  return `=== ENTITIES: FULL CHARACTER PROFILES ===\n${chars}`;
-}
-
-function getWorldContext(project: StoryProject, revealSecrets: boolean = false): string {
-  const { bible } = project;
-  
-  const entries = bible.entries
-    .filter(e => revealSecrets || !e.isSecret)
-    .map(e => `- ${e.isSecret ? '[SECRET] ' : ''}${e.title} (${e.category}): ${e.definition}`)
-    .join('\n');
-
-  const locations = bible.locations.map(l => {
-     const conns = (l.connections || []).map(c => {
-       const tName = bible.locations.find(tl => tl.id === c.targetLocationId)?.name || 'Unknown';
-       return `${tName}(${c.method}, ${c.travelTime})`;
-     }).join(', ');
-     return `- [Location] ${l.name}: ${l.description} [Connects: ${conns}]`;
-  }).join('\n');
-
-  const orgs = bible.organizations.map(o => `- [Org] ${o.name} (${o.type}): ${o.description}`).join('\n');
-  
-  const items = bible.keyItems.map(i => {
-    const owner = bible.characters.find(c => c.id === i.currentOwnerId)?.profile.name || "None";
-    return `- [Artifact] ${i.name}: ${i.description} (Owner: ${owner})`;
-  }).join('\n');
-
-  return [
-    "=== WORLD ENTITIES: LORE & GEOGRAPHY ===",
-    locations,
-    orgs,
-    items,
-    "=== ENCYCLOPEDIA ===",
-    entries
-  ].join('\n\n');
-}
-
-function getPlotContext(project: StoryProject): string {
-  const { bible } = project;
-  
-  const structure = bible.storyStructure.map(s => `[${s.name}: ${s.summary}]`).join(' -> ');
-  const threads = bible.storyThreads.map(t => `- Thread[${t.title}] (${t.status})`).join('\n');
-  
-  const timeline = bible.timeline.map(t => {
-     return `[${t.timeLabel}] ${t.event} (${t.status})`;
-  }).join('\n');
-
-  const foreshadowing = bible.foreshadowing.map(f => {
-     return `- [Foreshadowing] ${f.title} (${f.status}): ${f.description}`;
-  }).join('\n');
-
-  return [
-    "=== NARRATIVE STRUCTURE ===",
-    structure,
-    threads,
-    "=== TIMELINE & FORESHADOWING ===",
-    timeline,
-    foreshadowing
-  ].join('\n\n');
-}
-
-/**
- * AUTO Mode (Heuristic Selection) - Existing Logic Optimized
- */
-function getAutoContext(project: StoryProject, activeChapterId?: string, revealSecrets: boolean = false): string {
-  const { bible, chapters } = project;
-  const activeChapter = activeChapterId ? chapters.find(c => c.id === activeChapterId) : null;
-  const chapterTextContext = activeChapter 
-    ? (activeChapter.title + " " + activeChapter.summary + " " + activeChapter.beats.map(b => b.text).join(" ")) 
-    : "";
-
-  // Trajectory
-  const structure = bible.storyStructure.map(s => `[${s.name}]`).join(' -> ');
-  const threads = bible.storyThreads
-    .filter(t => t.status !== 'Resolved' || isMentioned(chapterTextContext, [t.title]))
-    .slice(0, 5)
-    .map(t => `- Thread[${t.title}] (${t.status})`)
-    .join('\n');
-
-  // Entities Scoring
-  const getEntityScore = (id: string, names: string[], role: string = '', isExplicitlyInvolved: boolean = false) => {
-    let score = 0;
-    if (isExplicitlyInvolved) score += 100;
-    if (isMentioned(chapterTextContext, names)) score += 50;
-    if (role === 'Protagonist') score += 30;
-    if (role === 'Antagonist') score += 20;
-    if (role === 'Supporting') score += 10;
-    return score;
-  };
-
-  const scoredChars = bible.characters
-    .filter(c => revealSecrets || !c.isPrivate || (activeChapter?.involvedCharacterIds?.includes(c.id) || false))
-    .map(c => ({
-      char: c,
-      score: getEntityScore(c.id, [c.profile.name, ...(c.profile.aliases || [])], c.profile.role, activeChapter?.involvedCharacterIds?.includes(c.id) || false)
-    }))
-    .sort((a, b) => b.score - a.score);
-
-  const detailedChars = scoredChars.filter(i => i.score >= 30).slice(0, 6);
-  const summaryChars = scoredChars.filter(i => i.score < 30 && i.score >= 10).slice(0, 10);
-
-  const activeCharsText = detailedChars.map(i => formatCharacter(i.char, bible, 'DETAILED')).join('\n\n');
-  const backgroundCharsText = summaryChars.map(i => formatCharacter(i.char, bible, 'SUMMARY')).join('\n');
-
-  const scoredEntries = bible.entries
-    .filter(e => revealSecrets || !e.isSecret)
-    .map(e => ({
-      entry: e,
-      score: getEntityScore(e.id, [e.title, ...(e.aliases || [])])
-    }))
-    .filter(i => i.score > 0 || revealSecrets)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, revealSecrets ? 20 : 8);
-
-  const entriesText = scoredEntries.map(i => `- ${i.entry.isSecret ? '[SECRET] ' : ''}${i.entry.title} (${i.entry.category}): ${i.entry.definition}`).join('\n');
-
-  return [
-    `=== TRAJECTORY ===\nStructure: ${structure}\nActive Threads:\n${threads}`,
-    "=== ACTIVE CAST (Detailed) ===",
-    activeCharsText,
-    "=== SUPPORTING CAST (Summary) ===",
-    backgroundCharsText,
-    "=== RELEVANT CONTEXT ===",
-    entriesText
-  ].join('\n\n');
-}
-
-/**
- * 2.5: コンテキスト圧縮・最適化ロジック (Refined with Tiering)
+ * 階層化コンテキストの構築
  * 
- * Tier 1: Global Context (Always)
- * Tier 2: Task-Specific Context (Based on focus)
- * Tier 3: Local Context (Active Chapter)
+ * @param project プロジェクトデータ
+ * @param activeChapterId (Writer用) 現在の章ID
+ * @param extraRelevantIds (Architect用) 会話から抽出された関連ID
  */
 export function getCompressedContext(
   project: StoryProject, 
   activeChapterId?: string, 
-  revealSecrets: boolean = false, 
+  extraRelevantIds: string[] = [],
   focus: ContextFocus = 'AUTO'
 ): string {
-  // Tier 1
-  const global = getGlobalContext(project);
+  const { bible, chapters } = project;
+  const activeChapter = activeChapterId ? chapters.find(c => c.id === activeChapterId) : null;
+  
+  // マージされた関連IDリスト (章のキャッシュ + 動的抽出分)
+  const combinedRelevantIds = Array.from(new Set([
+    ...(activeChapter?.relevantEntityIds || []),
+    ...extraRelevantIds
+  ]));
 
-  // Tier 2
-  let tier2 = "";
-  switch (focus) {
-    case 'CHARACTERS':
-      tier2 = getCharactersContext(project, activeChapterId, revealSecrets);
-      break;
-    case 'WORLD':
-      tier2 = getWorldContext(project, revealSecrets);
-      break;
-    case 'PLOT':
-      tier2 = getPlotContext(project);
-      break;
-    case 'AUTO':
-    default:
-      tier2 = getAutoContext(project, activeChapterId, revealSecrets);
-      break;
-  }
+  // Tier 0: Anchor (20%) - 常にフルデータ
+  const anchor = `
+=== [Tier 0] CORE FOUNDATION ===
+Title: ${project.meta.title}
+Genre: ${project.meta.genre}
+World Setting: ${bible.setting.slice(0, 800)}...
+Laws: ${bible.laws.map(l => l.name + ": " + (l.shortSummary || l.description.slice(0, 150))).join("\n - ")}
+Grand Arc: ${bible.grandArc.slice(0, 800)}...
+Tone: ${bible.tone}
+`.trim();
 
-  // Tier 3
-  let local = "";
-  const activeChapter = activeChapterId ? project.chapters.find(c => c.id === activeChapterId) : null;
+  // Tier 1: Explicitly Active (40%) - 章に関与している人物
+  let tier1 = "=== [Tier 1] ACTIVE ENTITIES (In-Focus) ===\n";
   if (activeChapter) {
-    const beats = activeChapter.beats.map((b, i) => `${i+1}. ${b.text}`).join('\n');
-    local = `
-=== CURRENT CHAPTER FOCUS ===
-Title: ${activeChapter.title}
-Summary: ${activeChapter.summary}
-Plot Beats:
-${beats}
-Strategy: Pacing=${activeChapter.strategy.pacing}, Arc=${activeChapter.strategy.characterArcProgress}
-`.trim();
+    const activeChars = bible.characters.filter(c => activeChapter.involvedCharacterIds.includes(c.id));
+    activeChars.forEach(c => {
+      tier1 += formatEntityDetailed(c, bible);
+    });
+  } else if (focus !== 'AUTO') {
+     // 設計パートでフォーカスが指定されている場合
+     if (focus === 'CHARACTERS') {
+       bible.characters.slice(0, 5).forEach(c => tier1 += formatEntityDetailed(c, bible));
+     }
   }
 
-  return `
-${global}
+  // Tier 2: Semantically Relevant (30%) - 司書が選んだ関連項目
+  let tier2 = "=== [Tier 2] RELEVANT CONTEXT (Semantic Recall) ===\n";
+  combinedRelevantIds.forEach(id => {
+    // すでにTier1で出ている場合はスキップ
+    if (activeChapter?.involvedCharacterIds.includes(id)) return;
 
-${tier2}
+    const char = bible.characters.find(c => c.id === id);
+    const entry = bible.entries.find(e => e.id === id);
+    const item = bible.keyItems.find(k => k.id === id);
+    const loc = bible.locations.find(l => l.id === id);
+    
+    if (char) tier2 += formatEntitySummary(char);
+    else if (entry) tier2 += `- [Term] ${entry.title}: ${entry.definition.slice(0, 300)}\n`;
+    else if (item) tier2 += `- [Item] ${item.name}: ${item.description.slice(0, 300)}\n`;
+    else if (loc) tier2 += `- [Loc] ${loc.name}: ${loc.description.slice(0, 300)}\n`;
+  });
 
-${local}
-`.trim();
+  // Tier 3: All Others (10%) - スナップショット(1行)
+  let tier3 = "=== [Tier 3] WORLD SNAPSHOTS (Background Memory) ===\n";
+  
+  // 未出現の用語をスナップショット化
+  bible.entries.forEach(e => {
+    if (!combinedRelevantIds.includes(e.id)) {
+      tier3 += `[Term: ${e.title}: ${e.shortSummary || e.definition.slice(0, 60)}...] `;
+    }
+  });
+
+  // 未出現の他キャラクター
+  bible.characters.forEach(c => {
+    if (!combinedRelevantIds.includes(c.id) && !activeChapter?.involvedCharacterIds.includes(c.id)) {
+      tier3 += `[Char: ${c.profile.name}: ${c.profile.shortSummary || c.profile.role}] `;
+    }
+  });
+
+  return `${anchor}\n\n${tier1}\n\n${tier2}\n\n${tier3}`;
+}
+
+function formatEntityDetailed(c: Character, bible: any): string {
+  const p = c.profile;
+  const s = c.state;
+  return `### Character: ${p.name} [${p.role}]
+- Profile: ${p.description}
+- Personality: ${p.personality}
+- Motivation: ${p.motivation}
+- Traits: ${p.traits.join(", ")}
+- Voice Style: ${p.voice.speechStyle} (1st: ${p.voice.firstPerson}, 2nd: ${p.voice.secondPerson})
+- Current State: ${s.internalState} at ${s.location} (Goal: ${s.currentGoal})
+- Relationships: ${c.relationships.map(r => {
+    const target = bible.characters.find((tc:any) => tc.id === r.targetId);
+    return (target?.profile.name || "Unknown") + " (" + r.type + ": " + r.description + ")";
+  }).join(", ")}
+\n`;
+}
+
+function formatEntitySummary(entity: any): string {
+  if (entity.profile) {
+    return `- [Char] ${entity.profile.name} (${entity.profile.role}): ${entity.profile.shortSummary || entity.profile.description.slice(0, 150)}\n`;
+  }
+  return `- ${entity.title || entity.name}: ${entity.shortSummary || entity.definition?.slice(0, 150) || entity.description?.slice(0, 150)}\n`;
 }
