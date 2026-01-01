@@ -16,6 +16,12 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 const syncChannel = new BroadcastChannel('duoscript_sync_channel');
 
+/**
+ * Unique ID for this specific tab instance to identify self-generated messages
+ * on the BroadcastChannel.
+ */
+export const tabId = crypto.randomUUID();
+
 export const initDB = (): Promise<IDBDatabase> => {
   if (dbPromise) return dbPromise;
   
@@ -67,7 +73,7 @@ export const saveProjectRevision = async (project: StoryProject, expectedRev?: n
     
     transaction.oncomplete = () => {
       garbageCollectRevisions(projectId, nextRev).catch(console.error);
-      syncChannel.postMessage({ type: 'REVISION_SAVED', projectId, rev: nextRev });
+      syncChannel.postMessage({ type: 'REVISION_SAVED', projectId, rev: nextRev, sender: tabId });
       resolve(nextRev);
     };
     transaction.onerror = () => reject(transaction.error);

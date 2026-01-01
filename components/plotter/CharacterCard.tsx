@@ -18,14 +18,23 @@ export const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isG
   const uiDispatch = useUIDispatch();
   const { addLog } = useNotificationDispatch();
 
+  // Guard clause for missing data
+  if (!c || !c.profile || !c.state) {
+    return (
+      <div className="p-6 glass-bright rounded-2xl border border-rose-500/20 flex items-center justify-center gap-2 text-rose-400/50">
+        <Activity size={16} /> <span className="text-xs font-mono">Corrupted Data</span>
+      </div>
+    );
+  }
+
   const [imgData, setImgData] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
   // Local edit states
-  const [editName, setEditName] = useState(c.profile.name);
-  const [editDesc, setEditDesc] = useState(c.profile.description);
+  const [editName, setEditName] = useState(c.profile.name || "");
+  const [editDesc, setEditDesc] = useState(c.profile.description || "");
 
   const inventory = bible.keyItems
     .filter(i => i.currentOwnerId === c.id)
@@ -157,8 +166,8 @@ export const CharacterCard = React.memo(({ character: c, onGeneratePortrait, isG
         {isExpanded && (
           <div className="pt-6 border-t border-white/5 space-y-6 animate-fade-in">
              <div className="grid grid-cols-2 gap-4">
-                <StatusItem icon={<MapPin size={12}/>} label="Location" value={c.state.location} />
-                <StatusItem icon={<Heart size={12}/>} label="Health" value={c.state.health} />
+                <StatusItem icon={<MapPin size={12}/>} label="Location" value={c.state.location || "不明"} />
+                <StatusItem icon={<Heart size={12}/>} label="Health" value={c.state.health || "良好"} />
              </div>
              <div className="space-y-3">
                 <div className="flex items-center gap-2 text-[8px] font-black text-stone-600 uppercase tracking-widest"><Package size={12}/> Key Items</div>

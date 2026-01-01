@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BibleIssue, SystemLog, ViewMode, Foreshadowing, AssetMetadata, TokenUsageEntry } from '../types';
 import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
@@ -12,7 +13,7 @@ import {
   ShieldAlert, Database,
   BrainCircuit, Sparkles, Flag, TrendingUp, CheckCircle2,
   HardDrive, Image as ImageIcon, Quote, ThumbsUp, ThumbsDown, ShieldOff, AlertTriangle, BarChart3,
-  Shuffle, EyeOff, MessageSquareShare, Info, ArrowUpRight, ArrowDownLeft
+  Shuffle, EyeOff, MessageSquareShare, Info, ArrowUpRight, ArrowDownLeft, Cpu
 } from 'lucide-react';
 import { getAllAssetMetadata, deletePortrait, getPortrait } from '../services/storageService';
 import { translateSafetyCategory } from '../services/gemini/utils';
@@ -46,6 +47,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [logLimit, setLogLimit] = useState(30);
   const [assets, setAssets] = useState<AssetMetadata[]>([]);
+  const [usageViewMode, setUsageViewMode] = useState<'source' | 'model'>('source');
   
   const totalTokens = useMemo(() => {
     return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.input) || 0) + (Number(entry.output) || 0), 0);
@@ -63,16 +65,36 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const usageBySource = useMemo(() => {
     const raw = (tokenUsage || []).reduce((acc, entry) => {
       const src = entry.source || 'Unknown';
-      if (!acc[src]) acc[src] = { source: src, input: 0, output: 0, total: 0 };
+      if (!acc[src]) acc[src] = { label: src, input: 0, output: 0, total: 0 };
       acc[src].input += Number(entry.input) || 0;
       acc[src].output += Number(entry.output) || 0;
       acc[src].total += (Number(entry.input) || 0) + (Number(entry.output) || 0);
       return acc;
-    }, {} as Record<string, { source: string; input: number; output: number; total: number }>);
+    }, {} as Record<string, { label: string; input: number; output: number; total: number }>);
 
-    // Explicitly cast Object.values to the expected type to avoid 'unknown' errors in sort
-    return (Object.values(raw) as Array<{ source: string; input: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
+    return (Object.values(raw) as Array<{ label: string; input: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
   }, [tokenUsage]);
+
+  // モデル別の使用量集計
+  const usageByModel = useMemo(() => {
+    const raw = (tokenUsage || []).reduce((acc, entry) => {
+      let modelLabel = entry.model || 'Unknown';
+      if (modelLabel.includes('pro')) modelLabel = 'Gemini Pro';
+      else if (modelLabel.includes('flash') && !modelLabel.includes('image')) modelLabel = 'Gemini Flash';
+      else if (modelLabel.includes('image')) modelLabel = 'Image Gen';
+      else if (modelLabel.includes('tts')) modelLabel = 'Voice (TTS)';
+
+      if (!acc[modelLabel]) acc[modelLabel] = { label: modelLabel, input: 0, output: 0, total: 0 };
+      acc[modelLabel].input += Number(entry.input) || 0;
+      acc[modelLabel].output += Number(entry.output) || 0;
+      acc[modelLabel].total += (Number(entry.input) || 0) + (Number(entry.output) || 0);
+      return acc;
+    }, {} as Record<string, { label: string; input: number; output: number; total: number }>);
+
+    return (Object.values(raw) as Array<{ label: string; input: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
+  }, [tokenUsage]);
+
+  const activeUsageData = usageViewMode === 'source' ? usageBySource : usageByModel;
 
   useEffect(() => {
     const fetchAssets = async () => {
@@ -221,6 +243,13 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const visibleLogs = useMemo(() => logs.slice(0, logLimit), [logs, logLimit]);
 
   const COLORS = ['#d68a6d', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
+  const MODEL_COLORS: Record<string, string> = {
+    'Gemini Pro': '#d68a6d',
+    'Gemini Flash': '#10b981',
+    'Image Gen': '#6366f1',
+    'Voice (TTS)': '#f59e0b',
+    'Unknown': '#57534e'
+  };
 
   return (
     <div className="p-4 md:p-12 h-full overflow-y-auto custom-scrollbar bg-stone-900/20 pb-32 md:pb-12 pt-safe">
@@ -251,34 +280,53 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
         {/* トークン消費内訳セクション */}
         <div className="glass rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-10 space-y-8 mx-1">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1">
               <h3 className="text-xl md:text-2xl font-display font-black text-white italic tracking-tight flex items-center gap-3">
                 <Database size={20} className="text-emerald-400" /> リソース消費分析
               </h3>
-              <p className="text-[11px] text-stone-500 font-serif">どの機能がどれだけのコンテキスト（トークン）を消費しているかを可視化します。</p>
+              <p className="text-[11px] text-stone-500 font-serif">どの機能やAIモデルがどれだけのコンテキストを消費しているか可視化します。</p>
             </div>
-            <div className="flex gap-4">
-              <div className="flex flex-col items-end">
-                <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft size={10} className="text-emerald-500"/> Total Input</span>
-                <span className="text-lg font-mono font-black text-emerald-400">{totalInputTokens.toLocaleString()}</span>
+            
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              {/* 切り替えトグル */}
+              <div className="p-1.5 bg-stone-950/60 rounded-xl border border-white/5 flex gap-1">
+                <button 
+                  onClick={() => setUsageViewMode('source')}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${usageViewMode === 'source' ? 'bg-stone-800 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  <Database size={12}/> 機能別
+                </button>
+                <button 
+                  onClick={() => setUsageViewMode('model')}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${usageViewMode === 'model' ? 'bg-orange-600 text-white shadow-lg' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  <Cpu size={12}/> モデル別
+                </button>
               </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowUpRight size={10} className="text-orange-400"/> Total Output</span>
-                <span className="text-lg font-mono font-black text-orange-400">{totalOutputTokens.toLocaleString()}</span>
+
+              <div className="flex gap-4">
+                <div className="flex flex-col items-end">
+                  <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft size={10} className="text-emerald-500"/> Total Input</span>
+                  <span className="text-lg font-mono font-black text-emerald-400">{totalInputTokens.toLocaleString()}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowUpRight size={10} className="text-orange-400"/> Total Output</span>
+                  <span className="text-lg font-mono font-black text-orange-400">{totalOutputTokens.toLocaleString()}</span>
+                </div>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* 棒グラフ: 機能別使用量 */}
+            {/* 棒グラフ: 使用量 */}
             <div className="lg:col-span-8 h-[300px] min-h-0">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={usageBySource} layout="vertical" margin={{ left: 20, right: 20 }}>
+                <BarChart data={activeUsageData} layout="vertical" margin={{ left: 20, right: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" horizontal={true} vertical={false} />
                   <XAxis type="number" hide />
                   <YAxis 
-                    dataKey="source" 
+                    dataKey="label" 
                     type="category" 
                     stroke="#57534e" 
                     fontSize={10} 
@@ -299,12 +347,14 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
             {/* 数値リスト: 詳細 */}
             <div className="lg:col-span-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-2">
-              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest border-b border-white/5 pb-2">機能別詳細内訳</div>
-              {usageBySource.map((item, idx) => (
+              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest border-b border-white/5 pb-2">
+                {usageViewMode === 'source' ? '機能別' : 'AIモデル別'}詳細内訳
+              </div>
+              {activeUsageData.map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3 bg-stone-950/40 rounded-xl border border-white/5">
                   <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                    <span className="text-[10px] font-black text-stone-300 uppercase truncate max-w-[120px]">{item.source}</span>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: usageViewMode === 'model' ? (MODEL_COLORS[item.label] || COLORS[idx % COLORS.length]) : COLORS[idx % COLORS.length] }} />
+                    <span className="text-[10px] font-black text-stone-300 uppercase truncate max-w-[120px]">{item.label}</span>
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-[10px] font-mono text-stone-100">{item.total.toLocaleString()}</span>
@@ -312,7 +362,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                   </div>
                 </div>
               ))}
-              {usageBySource.length === 0 && (
+              {activeUsageData.length === 0 && (
                 <div className="h-full flex items-center justify-center text-stone-700 italic font-serif text-xs py-10">
                   使用データがまだありません。
                 </div>

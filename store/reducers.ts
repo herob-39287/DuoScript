@@ -1,5 +1,4 @@
 
-
 import { produce } from 'immer';
 import { 
   StoryProjectMetadata, WorldBible, ChapterLog, SyncState, UIState,
@@ -14,7 +13,7 @@ export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): St
   return produce(state, draft => {
     switch (action.type) {
       case 'LOAD_META':
-        return action.payload; // Replace state entirely
+        return action.payload;
       case 'UPDATE_META':
         Object.assign(draft, action.payload);
         draft.updatedAt = Date.now();
@@ -29,17 +28,30 @@ export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): St
         if (draft.tokenUsage.length > 500) draft.tokenUsage.length = 500;
         draft.updatedAt = Date.now();
         break;
-      case 'RECORD_VIOLATION':
+      case 'RECORD_VIOLATION': {
+        // セーフティ違反の記録
         draft.violationCount = (draft.violationCount || 0) + 1;
         if (!draft.violationHistory) draft.violationHistory = [];
         draft.violationHistory.unshift(action.payload);
         if (draft.violationHistory.length > 50) draft.violationHistory.length = 50;
         draft.updatedAt = Date.now();
         break;
+      }
       case 'RESET_VIOLATIONS':
         draft.violationCount = 0;
         draft.updatedAt = Date.now();
         break;
+    }
+
+    // 自然回復ロジック (Reducer内で直接時間を扱うのは純粋関数に反するが、利便性のため許容)
+    // 本来はMiddlewareかpersistenceで行うべきだが、ここでは簡易化
+    if (draft.violationCount > 0 && draft.violationHistory && draft.violationHistory.length > 0) {
+      const lastViolation = draft.violationHistory[0].timestamp;
+      const hoursSinceLast = (Date.now() - lastViolation) / (1000 * 60 * 60);
+      if (hoursSinceLast > 12 && draft.violationCount > 0) {
+        // 12時間経過でカウント減少（ロック解除の救済措置）
+        draft.violationCount = Math.max(0, draft.violationCount - 1);
+      }
     }
   });
 };
@@ -121,12 +133,9 @@ export const syncReducer = (state: SyncState, action: SyncAction): SyncState => 
         break;
       case 'CONSOLIDATE_CHAT': {
         const { newMemory, archivedCount } = action.payload;
-        // Move old messages to archivedChat
         const toArchive = draft.chatHistory.slice(0, archivedCount);
         draft.archivedChat = [...(draft.archivedChat || []), ...toArchive];
-        // Keep only recent messages
         draft.chatHistory = draft.chatHistory.slice(archivedCount);
-        // Update long-term memory
         draft.conversationMemory = newMemory;
         break;
       }
@@ -234,7 +243,6 @@ export const notificationReducer = (
           'Safety': 'warning'
         };
 
-        // type or source check
         const isNotifyTarget = (['error', 'success', 'usage', 'Safety'] as const).some(t => t === log.type || t === log.source);
         
         if (isNotifyTarget) {
@@ -258,7 +266,6 @@ export const notificationReducer = (
 
 /**
  * Root Project Reducer
- * Note: Sub-reducers are now wrapped with produce, returning new state instances.
  */
 export const projectReducer = (state: StoryProject, action: ProjectAction): StoryProject => {
   if (action.type === 'LOAD_PROJECT') {

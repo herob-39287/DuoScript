@@ -1,10 +1,10 @@
-
 import React, { createContext, useContext, useMemo } from 'react';
 import { 
   StoryProjectMetadata, ChapterLog, WorldBible, SyncState, SystemLog, AppNotification,
   ProjectAction, MetaAction, BibleAction, ChapterAction, SyncAction, NotificationAction, UIState, UIAction,
   Character, WorldLaw, Location, Organization, Theme, KeyItem, StoryThread, StoryPhase,
-  TimelineEvent, Foreshadowing, WorldEntry, NexusBranch, BibleIssue
+  TimelineEvent, Foreshadowing, WorldEntry, NexusBranch, BibleIssue,
+  StoryVolume, Race, Bestiary, Ability
 } from '../types';
 import * as Actions from '../store/actions';
 
@@ -15,13 +15,20 @@ export const MetadataStateContext = createContext<StoryProjectMetadata | undefin
 export const ManuscriptStateContext = createContext<ChapterLog[] | undefined>(undefined);
 export const NeuralSyncStateContext = createContext<SyncState | undefined>(undefined);
 
-// Bible Sub-Contexts (Implementation of Suggestion 1: Granular State)
+// Bible Contexts
+// raw WorldBible object from reducer
+export const BibleStateContext = createContext<WorldBible | undefined>(undefined);
+
+// Granular Contexts (Keep these for specific component optimizations)
 export const CharactersContext = createContext<Character[] | undefined>(undefined);
 export const WorldFoundationContext = createContext<{
+  version: number;
   setting: string;
   laws: WorldLaw[];
+  grandArc: string;
   tone: string;
   summaryBuffer: string;
+  lastSummaryUpdate: number;
 } | undefined>(undefined);
 
 export const GeographyContext = createContext<{
@@ -30,11 +37,11 @@ export const GeographyContext = createContext<{
 } | undefined>(undefined);
 
 export const PlotPlanContext = createContext<{
-  grandArc: string;
   storyStructure: StoryPhase[];
   timeline: TimelineEvent[];
   foreshadowing: Foreshadowing[];
   storyThreads: StoryThread[];
+  volumes: StoryVolume[];
 } | undefined>(undefined);
 
 export const KnowledgeContext = createContext<{
@@ -43,6 +50,9 @@ export const KnowledgeContext = createContext<{
   themes: Theme[];
   nexusBranches: NexusBranch[];
   integrityIssues: BibleIssue[];
+  races: Race[];
+  bestiary: Bestiary[];
+  abilities: Ability[];
 } | undefined>(undefined);
 
 // Unified Project Dispatch
@@ -122,22 +132,12 @@ export const useKnowledge = () => {
   return context;
 };
 
-// Legacy Bible Hook for backward compatibility where needed
+// Primary Bible Hook
+// Now returns the authoritative state object directly instead of reconstructing it.
 export const useBible = () => {
-  const chars = useCharacters();
-  const found = useWorldFoundation();
-  const geo = useGeography();
-  const plot = usePlotPlan();
-  const knw = useKnowledge();
-  
-  return useMemo(() => ({
-    version: 0, // version can be added to foundation if needed for triggering saves
-    characters: chars,
-    ...found,
-    ...geo,
-    ...plot,
-    ...knw
-  } as WorldBible), [chars, found, geo, plot, knw]);
+  const context = useContext(BibleStateContext);
+  if (!context) throw new Error('useBible must be used within a BibleStateContext.Provider');
+  return context;
 };
 
 export const useBibleDispatch = () => {

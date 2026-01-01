@@ -171,7 +171,6 @@ export interface IntegrityScanResponse {
 }
 
 export interface NexusSimulationResponse {
-  hypothesis: string;
   impactOnCanon: string;
   impactOnState: string;
   alternateTimeline: string[];

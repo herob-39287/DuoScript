@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { 
   StoryProject, ProjectAction, UIAction, ViewMode 
 } from '../types';
-import { loadLatestProject, saveProjectRevision, getPortrait, getLastOpenedProjectId, getSyncChannel, loadFullSnapshot } from '../services/storageService';
+import { loadLatestProject, saveProjectRevision, getPortrait, getLastOpenedProjectId, getSyncChannel, loadFullSnapshot, tabId } from '../services/storageService';
 import { normalizeProject } from '../services/bibleManager';
 
 export const usePersistence = (
@@ -113,7 +113,12 @@ export const usePersistence = (
   useEffect(() => {
     const channel = getSyncChannel();
     const onMessage = async (event: MessageEvent) => {
-      const { type, projectId, rev } = event.data;
+      const { type, projectId, rev, sender } = event.data;
+      
+      // Filter out messages from the current tab instance to avoid false conflict detections
+      // during the race window between IndexedDB update and React state update.
+      if (sender === tabId) return;
+
       if (type === 'REVISION_SAVED' && projectId === project.meta.id) {
         if ((project.meta.headRev || 0) < rev) {
           // 自タブがDirty（未保存の変更がある）か判定
