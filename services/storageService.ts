@@ -1,5 +1,6 @@
 
-import { AssetMetadata, StoryProject } from "../types";
+import { AssetMetadata, StoryProject, VectorEntry } from "../types";
+import { Artifact } from "../types/sync";
 
 const DB_NAME = 'DuoScriptDB_V2';
 const STORE_HEADS = 'ProjectHeads';
@@ -7,7 +8,9 @@ const STORE_REVISIONS = 'ProjectRevisions';
 const STORE_CHAPTER_DATA = 'ChapterRevisions';
 const STORE_PORTRAITS = 'Portraits';
 const STORE_APP_STATE = 'AppState';
-const DB_VERSION = 1;
+const STORE_VECTORS = 'VectorIndex';
+const STORE_ARTIFACTS = 'ArtifactsStore'; // New Store
+const DB_VERSION = 3; // Bumped version for Artifacts
 const SCHEMA_VERSION = 1;
 
 const KEEP_REVISIONS = 10;
@@ -16,10 +19,6 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 const syncChannel = new BroadcastChannel('duoscript_sync_channel');
 
-/**
- * Unique ID for this specific tab instance to identify self-generated messages
- * on the BroadcastChannel.
- */
 export const tabId = crypto.randomUUID();
 
 export const initDB = (): Promise<IDBDatabase> => {
@@ -35,6 +34,18 @@ export const initDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORE_CHAPTER_DATA)) db.createObjectStore(STORE_CHAPTER_DATA, { keyPath: ['projectId', 'chapterId', 'rev'] });
       if (!db.objectStoreNames.contains(STORE_PORTRAITS)) db.createObjectStore(STORE_PORTRAITS, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(STORE_APP_STATE)) db.createObjectStore(STORE_APP_STATE);
+      
+      // New Vector Store
+      if (!db.objectStoreNames.contains(STORE_VECTORS)) {
+        const vectorStore = db.createObjectStore(STORE_VECTORS, { keyPath: 'id' });
+        vectorStore.createIndex('projectId', 'projectId', { unique: false });
+      }
+
+      // New Artifact Store
+      if (!db.objectStoreNames.contains(STORE_ARTIFACTS)) {
+        const artifactStore = db.createObjectStore(STORE_ARTIFACTS, { keyPath: 'id' });
+        artifactStore.createIndex('projectId', 'projectId', { unique: false });
+      }
     };
     
     request.onsuccess = () => resolve(request.result);
@@ -46,6 +57,82 @@ export const initDB = (): Promise<IDBDatabase> => {
   
   return dbPromise;
 };
+
+// --- Artifact Operations ---
+
+export const saveArtifact = async (artifact: Artifact): Promise<void> => {
+  const db = await initDB();
+  const tx = db.transaction(STORE_ARTIFACTS, 'readwrite');
+  const store = tx.objectStore(STORE_ARTIFACTS);
+  store.put(artifact);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const getArtifact = async (id: string): Promise<Artifact | null> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ARTIFACTS, 'readonly');
+    const store = tx.objectStore(STORE_ARTIFACTS);
+    const request = store.get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const getProjectArtifacts = async (projectId: string): Promise<Artifact[]> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ARTIFACTS, 'readonly');
+    const store = tx.objectStore(STORE_ARTIFACTS);
+    const index = store.index('projectId');
+    const request = index.getAll(projectId);
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// --- Vector Operations ---
+
+export const saveVectors = async (entries: VectorEntry[]): Promise<void> => {
+  if (entries.length === 0) return;
+  const db = await initDB();
+  const tx = db.transaction(STORE_VECTORS, 'readwrite');
+  const store = tx.objectStore(STORE_VECTORS);
+  entries.forEach(entry => store.put(entry));
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const getProjectVectors = async (projectId: string): Promise<VectorEntry[]> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_VECTORS, 'readonly');
+    const store = tx.objectStore(STORE_VECTORS);
+    const index = store.index('projectId');
+    const request = index.getAll(projectId);
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const deleteVectors = async (ids: string[]): Promise<void> => {
+  if (ids.length === 0) return;
+  const db = await initDB();
+  const tx = db.transaction(STORE_VECTORS, 'readwrite');
+  const store = tx.objectStore(STORE_VECTORS);
+  ids.forEach(id => store.delete(id));
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+// --- Existing Operations ---
 
 export const getHeadRev = async (projectId: string): Promise<number> => {
   const db = await initDB();
@@ -60,46 +147,63 @@ export const getHeadRev = async (projectId: string): Promise<number> => {
 export const saveProjectRevision = async (project: StoryProject, expectedRev?: number): Promise<number> => {
   const db = await initDB();
   const projectId = project.meta.id;
-  const currentRev = await getHeadRev(projectId);
-
-  if (expectedRev !== undefined && currentRev !== expectedRev) {
-     throw new Error('SAVE_CONFLICT');
-  }
-
-  const nextRev = currentRev + 1;
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_HEADS, STORE_REVISIONS, STORE_CHAPTER_DATA, STORE_APP_STATE], 'readwrite');
+    let nextRev = 0;
     
     transaction.oncomplete = () => {
-      garbageCollectRevisions(projectId, nextRev).catch(console.error);
-      syncChannel.postMessage({ type: 'REVISION_SAVED', projectId, rev: nextRev, sender: tabId });
-      resolve(nextRev);
+      if (nextRev > 0) {
+        garbageCollectRevisions(projectId, nextRev).catch(console.error);
+        syncChannel.postMessage({ type: 'REVISION_SAVED', projectId, rev: nextRev, sender: tabId });
+        resolve(nextRev);
+      }
     };
+    
     transaction.onerror = () => reject(transaction.error);
+    
+    transaction.onabort = () => {
+    };
 
+    const headStore = transaction.objectStore(STORE_HEADS);
     const revStore = transaction.objectStore(STORE_REVISIONS);
     const chapterStore = transaction.objectStore(STORE_CHAPTER_DATA);
-    const headStore = transaction.objectStore(STORE_HEADS);
 
-    const chapterHeaders = project.chapters.map((ch: any) => {
-      const { content, ...header } = ch;
-      chapterStore.put({ projectId, chapterId: ch.id, rev: nextRev, content: content || "" });
-      return header;
-    });
+    const headReq = headStore.get(projectId);
 
-    revStore.put({
-      projectId,
-      rev: nextRev,
-      schemaVersion: SCHEMA_VERSION,
-      meta: { ...project.meta, headRev: nextRev, schemaVersion: SCHEMA_VERSION },
-      bible: project.bible,
-      sync: project.sync,
-      chapterHeaders,
-      timestamp: Date.now()
-    });
+    headReq.onsuccess = () => {
+      const currentRev = headReq.result?.headRev || 0;
 
-    headStore.put({ projectId, headRev: nextRev }, projectId);
+      if (expectedRev !== undefined && currentRev !== expectedRev) {
+         reject(new Error('SAVE_CONFLICT'));
+         transaction.abort();
+         return;
+      }
+
+      nextRev = currentRev + 1;
+
+      const chapterHeaders = project.chapters.map((ch: any) => {
+        const { content, ...header } = ch;
+        chapterStore.put({ projectId, chapterId: ch.id, rev: nextRev, content: content || "" });
+        return header;
+      });
+
+      revStore.put({
+        projectId,
+        rev: nextRev,
+        schemaVersion: SCHEMA_VERSION,
+        meta: { ...project.meta, headRev: nextRev, schemaVersion: SCHEMA_VERSION },
+        bible: project.bible,
+        sync: project.sync,
+        chapterHeaders,
+        timestamp: Date.now()
+      });
+
+      headStore.put({ projectId, headRev: nextRev }, projectId);
+    };
+    
+    headReq.onerror = () => {
+    };
   });
 };
 

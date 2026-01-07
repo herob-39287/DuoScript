@@ -83,10 +83,10 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
                 {/* Mobile Sub-tabs */}
                 <div className="flex md:hidden border-b border-stone-800 shrink-0 h-12">
                   <button onClick={() => setMobileTab('preview')} className={`flex-1 text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === 'preview' ? 'text-orange-400 bg-orange-400/5' : 'text-stone-600'}`}>
-                    <div className="flex items-center justify-center gap-2"><Eye size={14}/> Preview</div>
+                    <div className="flex items-center justify-center gap-2"><Eye size={14}/> プレビュー</div>
                   </button>
                   <button onClick={() => setMobileTab('settings')} className={`flex-1 text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === 'settings' ? 'text-orange-400 bg-orange-400/5' : 'text-stone-600'}`}>
-                    <div className="flex items-center justify-center gap-2"><Settings2 size={14}/> Settings</div>
+                    <div className="flex items-center justify-center gap-2"><Settings2 size={14}/> 設定</div>
                   </button>
                 </div>
                 

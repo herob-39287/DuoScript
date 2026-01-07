@@ -16,14 +16,7 @@ export interface SystemLog {
   details?: string;
 }
 
-/**
- * Callback for tracking model token usage.
- */
 export type UsageCallback = (usage: UsagePayload) => void;
-
-/**
- * Callback for logging system events.
- */
 export type LogCallback = (type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => void;
 
 export interface AppNotification {
@@ -59,6 +52,7 @@ export interface UIState {
   showHelpModal: boolean;
   saveStatus: 'idle' | 'saving' | 'saved';
   isConflict: boolean;
+  isContextActive: boolean; // 追加: 設定を参照するかどうかのフラグ
 }
 
 import { 
@@ -114,7 +108,8 @@ export type UIAction =
   | { type: 'SET_PUB_MODAL'; payload: boolean }
   | { type: 'SET_HELP_MODAL'; payload: boolean }
   | { type: 'SET_SAVE_STATUS'; payload: 'idle' | 'saving' | 'saved' }
-  | { type: 'SET_CONFLICT'; payload: boolean };
+  | { type: 'SET_CONFLICT'; payload: boolean }
+  | { type: 'TOGGLE_CONTEXT_ACTIVE'; payload: boolean }; // 追加: トグルアクション
 
 export type ProjectAction = 
   | MetaAction

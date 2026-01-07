@@ -1,6 +1,6 @@
 
-import { ChevronDown, ChevronUp, X, ArrowRight, AlertCircle, Search, User, Globe, Check, Plus, Beaker } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { ChevronDown, ChevronUp, X, ArrowRight, AlertCircle, Search, User, Globe, Check, Plus, Beaker, Target, AlertTriangle } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { SyncOperation, WorldBible, ChapterLog } from '../../types';
 import { VisualDiff } from './VisualDiff';
 import { getCurrentValueForDiff } from '../../services/bibleManager';
@@ -17,6 +17,31 @@ interface ProposalItemProps {
   onReject: () => void;
 }
 
+const translatePath = (path: string) => {
+  const map: Record<string, string> = {
+    characters: '登場人物',
+    laws: '世界の理',
+    entries: '用語・設定',
+    timeline: '年表',
+    foreshadowing: '伏線',
+    locations: '場所',
+    organizations: '組織',
+    themes: 'テーマ',
+    keyItems: '重要アイテム',
+    storyThreads: '物語スレッド',
+    chapters: '章構成',
+    grandArc: 'グランドアーク',
+    setting: '舞台設定',
+    tone: 'トーン',
+    volumes: '巻構成',
+    races: '種族',
+    bestiary: '魔物・生物',
+    abilities: '能力・魔法',
+    nexusBranches: 'Nexus分岐'
+  };
+  return map[path] || path;
+};
+
 export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onToggle, onAccept, onReject }: ProposalItemProps) => {
   const syncDispatch = useNeuralSyncDispatch();
   const [isSearching, setIsSearching] = useState(false);
@@ -26,6 +51,15 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
   const isSemanticInvalid = op.status === 'needs_resolution';
   const isHypothetical = !!op.isHypothetical;
   
+  // 伏線アクションの判定
+  const isForeshadowingAction = op.path === 'foreshadowing';
+  let foreshadowingActionType: 'plant' | 'progress' | 'payoff' | 'misc' = 'misc';
+  if (isForeshadowingAction) {
+    if (op.op === 'add') foreshadowingActionType = 'plant';
+    else if ((op.value as any)?.status === 'Resolved') foreshadowingActionType = 'payoff';
+    else if ((op.value as any)?.clues?.length > 0 || (op.value as any)?.redHerrings?.length > 0) foreshadowingActionType = 'progress';
+  }
+
   // マッピング対象の全候補リスト（検索用）
   const allPossibleTargets = useMemo(() => {
     const list = op.path === 'chapters' ? chapters : (bible as any)[op.path];
@@ -41,6 +75,21 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
     if (!searchQuery.trim()) return allPossibleTargets.slice(0, 5);
     return allPossibleTargets.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
   }, [allPossibleTargets, searchQuery]);
+
+  const resolveId = useCallback((id: string) => {
+    if (!id) return undefined;
+    const char = bible.characters.find(c => c.id === id);
+    if (char) return char.profile.name;
+    const item = bible.keyItems.find(i => i.id === id);
+    if (item) return item.name;
+    const loc = bible.locations.find(l => l.id === id);
+    if (loc) return loc.name;
+    const org = bible.organizations.find(o => o.id === id);
+    if (org) return org.name;
+    const entry = bible.entries.find(e => e.id === id);
+    if (entry) return entry.title;
+    return undefined;
+  }, [bible]);
 
   const handleSelectCandidate = (candId: string, candName: string) => {
     syncDispatch(Actions.updatePendingOp(op.id, {
@@ -74,11 +123,18 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
         <div className="flex-1 min-w-0 pr-4">
           <div className="flex items-center gap-2 mb-1">
             <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase ${isHypothetical ? 'bg-indigo-500/20 text-indigo-400' : (isSemanticInvalid ? 'bg-rose-500/10 text-rose-400' : 'bg-orange-400/10 text-orange-400')}`}>
-              {op.path} {isHypothetical && '(Nexus)'}
+              {translatePath(op.path)} {isHypothetical && '(Nexus)'}
             </span>
             <span className="text-[7px] font-black text-stone-500 uppercase">{op.op}</span>
             {isSemanticInvalid && <AlertCircle size={10} className="text-rose-400 animate-pulse" />}
             {isHypothetical && <Beaker size={10} className="text-indigo-400" />}
+            {isForeshadowingAction && (
+              <>
+                {foreshadowingActionType === 'plant' && <span className="text-[7px] font-black bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded uppercase">Plant 🌱</span>}
+                {foreshadowingActionType === 'payoff' && <span className="text-[7px] font-black bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded uppercase">Payoff 💥</span>}
+                {foreshadowingActionType === 'progress' && <span className="text-[7px] font-black bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase">Clue 🔍</span>}
+              </>
+            )}
           </div>
           <div className={`text-[11px] font-bold truncate ${isHypothetical ? 'text-indigo-200' : (isSemanticInvalid ? 'text-rose-200' : 'text-stone-100')}`}>
             {renderTargetName()} {op.field && <span className="text-stone-600 ml-1">({op.field})</span>}
@@ -156,7 +212,7 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
 
           <div className="space-y-3">
              <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest">変更のプレビュー (Diff)</span>
-             <VisualDiff oldVal={currentValue} newVal={op.value} />
+             <VisualDiff oldVal={currentValue} newVal={op.value} resolver={resolveId} />
           </div>
 
           <div className="p-3 bg-stone-950/40 rounded-xl space-y-2">

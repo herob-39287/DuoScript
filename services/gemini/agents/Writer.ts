@@ -2,7 +2,7 @@
 import { AiModel, StoryProject, ChapterLog, UsageCallback, LogCallback, ExtractionResult, ChapterPackageResponse } from "../../../types";
 import { runGeminiRequest, getClient } from "../core";
 import { PromptBuilder } from "../promptBuilder";
-import { withRetry, safeJsonParse, getSafetySettings } from "../utils";
+import { withRetry, safeJsonParse, getSafetySettings, trackUsage } from "../utils";
 import * as Prompts from "../prompts";
 import * as Schemas from "../schemas";
 import { Type } from "@google/genai";
@@ -10,11 +10,11 @@ import { Type } from "@google/genai";
 export class WriterAgent {
   constructor(private onUsage?: UsageCallback, private logCallback: LogCallback = () => {}) {}
 
-  async* streamDraft(chapter: ChapterLog, tone: string, usePro: boolean, project: StoryProject) {
+  async* streamDraft(chapter: ChapterLog, tone: string, usePro: boolean, project: StoryProject, isContextActive: boolean = true) {
     const ai = getClient();
     
     const systemInstruction = Prompts.WRITER_MTP.replace('{{TONE}}', tone);
-    const storyData = PromptBuilder.buildStructuredStoryData(project, chapter.id);
+    const storyData = isContextActive ? PromptBuilder.buildStructuredStoryData(project, chapter.id) : "ユーザーが設定参照を無効化しています。";
     
     const userPrompt = `
 【STORY_DATA (JSON)】
@@ -22,6 +22,8 @@ ${storyData}
 
 ${Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats)}
 `.trim();
+
+    const label = usePro ? 'Writer/Drafting:Reasoning' : 'Writer/Drafting:Fast';
 
     const result = await withRetry(async () => {
       return await ai.models.generateContentStream({
@@ -32,13 +34,14 @@ ${Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats)}
     }, 'Writer', this.logCallback);
 
     for await (const chunk of result) {
+      trackUsage(chunk, usePro ? AiModel.REASONING : AiModel.FAST, label, this.onUsage);
       if (chunk.candidates?.[0]?.finishReason === 'SAFETY') throw new Error("SAFETY_BLOCK");
       yield chunk;
     }
   }
 
-  async suggest(content: string, project: StoryProject, activeChapterId: string): Promise<string[]> {
-    const storyData = PromptBuilder.buildStructuredStoryData(project, activeChapterId);
+  async suggest(content: string, project: StoryProject, activeChapterId: string, isContextActive: boolean = true): Promise<string[]> {
+    const storyData = isContextActive ? PromptBuilder.buildStructuredStoryData(project, activeChapterId) : "設定参照なし";
     const userPrompt = `
 【STORY_DATA (JSON)】
 ${storyData}
@@ -54,7 +57,7 @@ ${Prompts.NEXT_SENTENCE_PROMPT(content)}
         responseMimeType: "application/json", 
         responseSchema: Schemas.suggestionsSchema 
       },
-      usageLabel: 'Writer/Copilot',
+      usageLabel: 'Writer/CopilotSuggestions',
       onUsage: this.onUsage,
       logCallback: this.logCallback,
       mapper: (res) => safeJsonParse<string[]>(res.text, 'Copilot').value || Schemas.DEFAULT_RESPONSES.SUGGESTIONS
@@ -71,14 +74,14 @@ ${Prompts.DRAFT_SCAN_PROMPT(draft)}
 `.trim();
 
     return runGeminiRequest({
-      model: AiModel.REASONING,
+      model: AiModel.FAST,
       contents: userPrompt,
       config: {
         systemInstruction: `${Prompts.SYNC_EXTRACTOR_SOUL}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json",
         responseSchema: { type: Type.ARRAY, items: Schemas.syncOperationSchema }
       },
-      usageLabel: 'NeuralSync/DraftScanner',
+      usageLabel: 'Writer/DraftConsistencyScanner',
       onUsage: this.onUsage,
       logCallback: this.logCallback,
       mapper: (res) => processOps(res.text)
@@ -102,7 +105,7 @@ ${Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary)}
         responseMimeType: "application/json", 
         responseSchema: Schemas.chapterPackageSchema 
       },
-      usageLabel: 'Writer/Package',
+      usageLabel: 'Writer/PlotPackageGeneration',
       onUsage: this.onUsage,
       logCallback: this.logCallback,
       mapper: (res) => safeJsonParse<ChapterPackageResponse>(res.text, 'Writer').value || Schemas.DEFAULT_RESPONSES.CHAPTER_PACKAGE

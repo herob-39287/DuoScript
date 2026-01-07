@@ -22,7 +22,7 @@ const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
             <ShieldCheck size={32} className="md:w-8 md:h-8 w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl md:text-3xl font-black text-white italic tracking-tighter uppercase">Studio Entry Protocol</h2>
+            <h2 className="text-xl md:text-3xl font-black text-white italic tracking-tighter uppercase">アトリエ入室プロトコル</h2>
             <p className="text-stone-500 font-medium text-xs md:text-sm">データ管理とプライバシー設定</p>
           </div>
         </div>

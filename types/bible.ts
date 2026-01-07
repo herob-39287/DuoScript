@@ -226,8 +226,24 @@ export interface Foreshadowing {
   shortSummary?: string;
   status: 'Open' | 'Resolved' | 'Stale';
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  clues: string[];
+  redHerrings: string[];
   relatedThreadId?: string; 
   relatedThemeId?: string; 
+  relatedEntityIds: string[];
+}
+
+/**
+ * RAG Vector Entry
+ */
+export interface VectorEntry {
+  id: string;
+  projectId: string;
+  type: 'character' | 'location' | 'organization' | 'entry' | 'item' | 'law';
+  name: string;
+  textChunk: string; // The text used to generate the embedding
+  embedding: number[]; // Float32Array serialized as number array
+  updatedAt: number; // To check against entity's updatedAt for re-indexing
 }
 
 import { NexusBranch } from './sync';

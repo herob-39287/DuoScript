@@ -16,6 +16,9 @@ export const usePersistence = (
   const pendingSaveRef = useRef<StoryProject | null>(null);
   const hasConflict = useRef(false);
   
+  // Track the authoritative headRev for this tab instance to avoid queue-induced conflicts
+  const currentHeadRevRef = useRef<number>(project.meta.headRev || 0);
+  
   // 保存に成功した直近のステート（Transient属性を除外して比較用）
   const lastKnownStableStateRef = useRef<string>("");
 
@@ -36,8 +39,12 @@ export const usePersistence = (
     uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
     
     try {
-      const expectedRev = proj.meta.headRev || 0;
+      // Use the ref value instead of the potentially stale state value
+      const expectedRev = currentHeadRevRef.current;
       const nextRev = await saveProjectRevision(proj, expectedRev);
+      
+      // Update our authoritative headRev ref
+      currentHeadRevRef.current = nextRev;
       
       projectDispatch({ type: 'UPDATE_META', payload: { headRev: nextRev } });
       localStorage.setItem('duoscript_active_id', proj.meta.id);
@@ -59,7 +66,7 @@ export const usePersistence = (
     } finally {
       isSaving.current = false;
       if (pendingSaveRef.current && !hasConflict.current) {
-        const next = pendingSaveRef.current;
+        const next = { ...pendingSaveRef.current };
         pendingSaveRef.current = null;
         performSave(next);
       }
@@ -93,6 +100,7 @@ export const usePersistence = (
               });
             }
             
+            currentHeadRevRef.current = norm.meta.headRev || 0;
             lastKnownStableStateRef.current = getComparableState(norm);
             projectDispatch({ type: 'LOAD_PROJECT', payload: norm });
             uiDispatch({ type: 'SET_VIEW', payload: ViewMode.DASHBOARD });
@@ -115,12 +123,11 @@ export const usePersistence = (
     const onMessage = async (event: MessageEvent) => {
       const { type, projectId, rev, sender } = event.data;
       
-      // Filter out messages from the current tab instance to avoid false conflict detections
-      // during the race window between IndexedDB update and React state update.
+      // Filter out messages from the current tab instance
       if (sender === tabId) return;
 
       if (type === 'REVISION_SAVED' && projectId === project.meta.id) {
-        if ((project.meta.headRev || 0) < rev) {
+        if (currentHeadRevRef.current < rev) {
           // 自タブがDirty（未保存の変更がある）か判定
           const isDirty = lastKnownStableStateRef.current !== getComparableState(project);
           
@@ -132,6 +139,7 @@ export const usePersistence = (
             const updatedProject = await loadFullSnapshot(projectId, rev);
             if (updatedProject) {
               const norm = normalizeProject(updatedProject);
+              currentHeadRevRef.current = norm.meta.headRev || 0;
               lastKnownStableStateRef.current = getComparableState(norm);
               projectDispatch({ type: 'LOAD_PROJECT', payload: norm });
             }

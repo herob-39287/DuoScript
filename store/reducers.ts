@@ -6,9 +6,6 @@ import {
   NotificationAction, SystemLog, AppNotification, StoryProject, ProjectAction
 } from '../types';
 
-/**
- * Metadata Reducer (Immer)
- */
 export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): StoryProjectMetadata => {
   return produce(state, draft => {
     switch (action.type) {
@@ -29,7 +26,6 @@ export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): St
         draft.updatedAt = Date.now();
         break;
       case 'RECORD_VIOLATION': {
-        // セーフティ違反の記録
         draft.violationCount = (draft.violationCount || 0) + 1;
         if (!draft.violationHistory) draft.violationHistory = [];
         draft.violationHistory.unshift(action.payload);
@@ -43,22 +39,16 @@ export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): St
         break;
     }
 
-    // 自然回復ロジック (Reducer内で直接時間を扱うのは純粋関数に反するが、利便性のため許容)
-    // 本来はMiddlewareかpersistenceで行うべきだが、ここでは簡易化
     if (draft.violationCount > 0 && draft.violationHistory && draft.violationHistory.length > 0) {
       const lastViolation = draft.violationHistory[0].timestamp;
       const hoursSinceLast = (Date.now() - lastViolation) / (1000 * 60 * 60);
       if (hoursSinceLast > 12 && draft.violationCount > 0) {
-        // 12時間経過でカウント減少（ロック解除の救済措置）
         draft.violationCount = Math.max(0, draft.violationCount - 1);
       }
     }
   });
 };
 
-/**
- * Bible Reducer (Immer)
- */
 export const bibleReducer = (state: WorldBible, action: BibleAction): WorldBible => {
   return produce(state, draft => {
     switch (action.type) {
@@ -74,9 +64,6 @@ export const bibleReducer = (state: WorldBible, action: BibleAction): WorldBible
   });
 };
 
-/**
- * Chapters Reducer (Immer)
- */
 export const chaptersReducer = (state: ChapterLog[], action: ChapterAction | BibleAction): ChapterLog[] => {
   return produce(state, draft => {
     switch (action.type) {
@@ -120,9 +107,6 @@ export const chaptersReducer = (state: ChapterLog[], action: ChapterAction | Bib
   });
 };
 
-/**
- * Sync Reducer (Immer)
- */
 export const syncReducer = (state: SyncState, action: SyncAction): SyncState => {
   return produce(state, draft => {
     switch (action.type) {
@@ -182,9 +166,6 @@ export const syncReducer = (state: SyncState, action: SyncAction): SyncState => 
   });
 };
 
-/**
- * UI Reducer (Immer)
- */
 export const uiReducer = (state: UIState, action: UIAction): UIState => {
   return produce(state, draft => {
     switch (action.type) {
@@ -218,13 +199,13 @@ export const uiReducer = (state: UIState, action: UIAction): UIState => {
       case 'SET_CONFLICT':
         draft.isConflict = action.payload;
         break;
+      case 'TOGGLE_CONTEXT_ACTIVE':
+        draft.isContextActive = action.payload;
+        break;
     }
   });
 };
 
-/**
- * Notification Reducer (Immer)
- */
 export const notificationReducer = (
   state: { logs: SystemLog[], notifications: AppNotification[] }, 
   action: NotificationAction
@@ -264,9 +245,6 @@ export const notificationReducer = (
   });
 };
 
-/**
- * Root Project Reducer
- */
 export const projectReducer = (state: StoryProject, action: ProjectAction): StoryProject => {
   if (action.type === 'LOAD_PROJECT') {
     return action.payload;

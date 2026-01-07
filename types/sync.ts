@@ -6,10 +6,34 @@ import {
 } from './bible';
 import { ChapterLog, StoryVolume } from './project';
 
+/**
+ * Message Kinds for handling context window efficiency
+ */
+export type MessageKind = 'dialogue' | 'artifact_ref' | 'tool_result' | 'system_note';
+
+/**
+ * Structured summary for Artifacts to be included in the context window.
+ */
+export interface CollapsedContent {
+  docId: string; // Artifact ID
+  title: string;
+  type: string;
+  decisions_made: string[]; // Key decisions extracted from the content
+  entities_used: string[]; // IDs of entities referenced
+  open_threads?: string[]; // Unresolved issues
+  retrieval_hint?: string; // Hint for Librarian
+}
+
+/**
+ * ChatMessage definition updated for Artifact support.
+ */
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
-  content: string;
+  kind?: MessageKind; // Defaults to 'dialogue' if undefined
+  content: string; // For UI display (short summary for artifacts)
+  collapsedContent?: CollapsedContent; // For LLM Context (JSON structure)
+  artifactId?: string; // Reference to the full content in ArtifactsStore
   timestamp: number;
   requestId?: string;
   sources?: { title: string; uri: string }[];
@@ -146,6 +170,21 @@ export interface NexusBranch {
   alternateTimeline: string[];
   timestamp: number;
   color?: string;
+}
+
+/**
+ * Stored Artifact in IndexedDB (Not in Redux state)
+ */
+export interface Artifact {
+  id: string;
+  projectId: string;
+  type: 'plot' | 'draft' | 'beats' | 'analysis' | 'general';
+  title: string;
+  content: string; // Full text
+  summary: CollapsedContent;
+  createdAt: number;
+  sourceAgent: string;
+  relatedChapterId?: string;
 }
 
 export interface SyncState {

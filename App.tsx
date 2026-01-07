@@ -26,7 +26,8 @@ const App: React.FC = () => {
     showPubModal: false,
     showHelpModal: false,
     saveStatus: 'idle',
-    isConflict: false
+    isConflict: false,
+    isContextActive: true // Story context activation flag
   };
   const [ui, uiDispatch] = useReducer(uiReducer, initialUIState);
   

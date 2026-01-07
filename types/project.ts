@@ -25,8 +25,9 @@ export interface TokenUsageEntry {
   timestamp: number;
   model: string;
   source: string;
-  input: number;
+  input: number;  // Total prompt tokens (Net Input + Cached)
   output: number;
+  cached?: number; // Cached tokens (Included in input)
 }
 
 /**
@@ -36,7 +37,8 @@ export type UsagePayload = {
   model: string; 
   source: string; 
   input: number; 
-  output: number 
+  output: number;
+  cached?: number;
 };
 
 export interface SafetyViolation {

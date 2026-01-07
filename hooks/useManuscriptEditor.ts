@@ -6,6 +6,7 @@ import {
 } from '../contexts/StoryContext';
 import { loadChapterContent, saveChapterContent } from '../services/storageService';
 import { getArchitectWhisper, identifyRelevantEntities } from '../services/geminiService';
+import { ragService } from '../services/ragService';
 import { WhisperAdvice } from '../types';
 
 export const useManuscriptEditor = (initialChapterId: string, isProcessing: boolean = false) => {
@@ -26,6 +27,7 @@ export const useManuscriptEditor = (initialChapterId: string, isProcessing: bool
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const syncTimeoutRef = useRef<number | null>(null);
   const librarianTimeoutRef = useRef<number | null>(null);
+  const indexMaintenanceRef = useRef<number | null>(null);
   const lastWhisperTimeRef = useRef<number>(0);
   const draftVersionRef = useRef(0);
 
@@ -64,6 +66,13 @@ export const useManuscriptEditor = (initialChapterId: string, isProcessing: bool
     };
     fetchContent();
   }, [activeChapterId, projectDispatch, addLog, meta.id, meta.headRev]);
+
+  // Initial Index Maintenance on load
+  useEffect(() => {
+    if (meta.id) {
+       ragService.maintainIndex({ meta, bible, chapters, sync } as any, (msg) => console.log(`[RAG] ${msg}`));
+    }
+  }, [meta.id]); // Run once on project load ideally, or when meta.id changes
 
   /**
    * Librarian (司書) の呼び出し: 文脈から関連設定を抽出
@@ -138,13 +147,15 @@ export const useManuscriptEditor = (initialChapterId: string, isProcessing: bool
       saveChapterContent(meta.id, activeChapterId, meta.headRev || 1, currentVal);
     }, 1000);
 
-    // 司書(Librarian)のバックグラウンド実行 (5秒おきに最新化)
+    // 司書(Librarian)のバックグラウンド実行 (10秒おきに変更) & インデックス維持
     if (librarianTimeoutRef.current) window.clearTimeout(librarianTimeoutRef.current);
     librarianTimeoutRef.current = window.setTimeout(() => {
+      // インデックスを更新してから検索（非同期で待たない）
+      ragService.maintainIndex({ meta, bible, chapters, sync } as any).catch(console.error);
       triggerLibrarian(currentVal);
-    }, 5000);
+    }, 10000); // 頻度を落として負荷軽減
 
-  }, [activeChapterId, projectDispatch, meta.id, meta.headRev, triggerLibrarian]);
+  }, [activeChapterId, projectDispatch, meta.id, meta.headRev, triggerLibrarian, bible, sync, chapters, meta]);
 
   return {
     activeChapter,

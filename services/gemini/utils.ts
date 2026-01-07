@@ -42,8 +42,9 @@ export function repairTruncatedJson(text: string): { repairedText: string, repai
   let repaired = text.trim();
   const steps: string[] = [];
 
-  // 1. Markdownコードブロックの除去 (```json ... ```)
-  const jsonMatch = repaired.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  // 1. Markdownコードブロックの除去
+  // Regex without backticks to prevent syntax errors in some environments
+  const jsonMatch = repaired.match(new RegExp("```(?:json)?\\s*([\\s\\S]*?)\\s*```"));
   if (jsonMatch) {
     repaired = jsonMatch[1].trim();
     steps.push("Extracted from Markdown block");
@@ -174,11 +175,18 @@ export function trackUsage(
   callback?: UsageCallback
 ) {
   if (!response.usageMetadata || !callback) return;
+  
+  // promptTokenCount is generally the total input tokens (including cached).
+  const totalPrompt = response.usageMetadata.promptTokenCount || 0;
+  const cached = response.usageMetadata.cachedContentTokenCount || 0;
+  const output = response.usageMetadata.candidatesTokenCount || 0;
+
   callback({
     model,
     source,
-    input: response.usageMetadata.promptTokenCount || 0,
-    output: response.usageMetadata.candidatesTokenCount || 0
+    input: totalPrompt,
+    output: output,
+    cached: cached
   });
 }
 

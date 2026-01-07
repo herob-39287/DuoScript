@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Upload, Loader2, ChevronRight, Rocket, Coffee, Feather, Book, BookOpen, FileJson, X } from 'lucide-react';
+import { Sparkles, Loader2, ChevronRight, Rocket, Coffee, Feather, BookOpen, FileJson } from 'lucide-react';
 import { generateRandomProject } from '../services/geminiService';
 import { StoryProject } from '../types';
 import { normalizeProject } from '../services/bibleManager';
 import { getAllProjects } from '../services/storageService';
+import { Button, Card, SectionHeader } from './ui/DesignSystem';
 
 interface Props {
   onStart: (projectData: StoryProject) => void;
@@ -12,7 +14,7 @@ interface Props {
   showConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
 
-const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showConfirm }) => {
+const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [title, setTitle] = useState('');
   const [idea, setIdea] = useState('');
@@ -80,7 +82,7 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
   };
 
   return (
-    <div className="fixed inset-0 bg-stone-900 flex flex-col items-center p-4 md:p-12 overflow-y-auto no-scrollbar pb- safe">
+    <div className="fixed inset-0 bg-stone-900 flex flex-col items-center p-4 md:p-12 overflow-y-auto no-scrollbar pb-safe">
       <div className="w-full max-w-4xl space-y-8 md:space-y-16 animate-fade-in py-6 md:py-12">
         <header className="text-center space-y-4 md:space-y-6">
           <div className="flex justify-center mb-2 md:mb-4">
@@ -95,51 +97,57 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
         </header>
 
         <div className="space-y-4">
-          <div className="text-[9px] md:text-[10px] font-black uppercase text-stone-700 tracking-[0.4em] mb-2 text-center">続行または読み込み</div>
+          <SectionHeader title="続行または読み込み" className="justify-center" />
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             {isLoadingProjects ? (
-              <div className="col-span-1 md:col-span-2 p-10 flex items-center justify-center text-stone-700 gap-3">
+              <Card variant="panel" padding="lg" className="col-span-1 md:col-span-2 flex items-center justify-center text-stone-700 gap-3">
                 <Loader2 size={16} className="animate-spin" />
                 <span className="text-[10px] uppercase font-black tracking-widest">書庫を確認中...</span>
-              </div>
+              </Card>
             ) : projects.length > 0 ? (
               projects.map(project => (
-                <button key={project.meta.id} onClick={() => onStart(project)} className="p-4 md:p-6 bg-stone-800/40 border border-stone-700/50 rounded-2xl md:rounded-[1.5rem] flex items-center justify-between hover:bg-stone-800 transition-all shadow-xl group text-left">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-700 flex items-center justify-center text-orange-400 shrink-0">
-                      <BookOpen size={18}/>
+                <Card key={project.meta.id} variant="panel" padding="md" className="group cursor-pointer hover:bg-stone-800" onClick={() => onStart(project)}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-700 flex items-center justify-center text-orange-400 shrink-0">
+                        <BookOpen size={18}/>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display font-black text-sm md:text-lg text-stone-200 italic truncate">{project.meta.title}</div>
+                        <div className="text-[8px] md:text-[9px] font-black text-stone-600 uppercase tracking-widest mt-0.5 truncate">V{project.bible.version} / {new Date(project.meta.updatedAt).toLocaleDateString()}</div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <div className="font-display font-black text-sm md:text-lg text-stone-200 italic truncate">{project.meta.title}</div>
-                      <div className="text-[8px] md:text-[9px] font-black text-stone-600 uppercase tracking-widest mt-0.5 truncate">V{project.bible.version} / {new Date(project.meta.updatedAt).toLocaleDateString()}</div>
-                    </div>
+                    <ChevronRight size={18} className="text-stone-600 group-hover:text-orange-400 transition-colors shrink-0"/>
                   </div>
-                  <ChevronRight size={18} className="text-stone-600 group-hover:text-orange-400 transition-colors shrink-0"/>
-                </button>
+                </Card>
               ))
             ) : (
-              <div className="p-8 border border-dashed border-stone-800 rounded-2xl md:rounded-[1.5rem] flex items-center justify-center text-stone-700 italic text-[10px] font-serif">
+              <Card variant="outline" padding="lg" className="col-span-1 md:col-span-2 flex items-center justify-center text-stone-700 italic text-[10px] font-serif">
                 アーカイブされた物語はありません
-              </div>
+              </Card>
             )}
 
-            <label className="p-4 md:p-6 bg-stone-800/20 border border-stone-800 hover:border-orange-500/30 rounded-2xl md:rounded-[1.5rem] flex items-center gap-4 cursor-pointer hover:bg-stone-800/40 transition-all group">
-              <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-900 flex items-center justify-center text-stone-500 group-hover:text-orange-400">
-                <FileJson size={18}/>
-              </div>
-              <div className="text-left">
-                <div className="text-[10px] md:text-[11px] font-black text-stone-400 uppercase tracking-widest">バックアップを復元</div>
-                <div className="text-[8px] md:text-[9px] text-stone-700 mt-0.5 truncate">JSONをロード</div>
-              </div>
-              <input type="file" accept=".json" className="hidden" onChange={handleFileUpload}/>
+            <label className="block">
+               <Card variant="panel" padding="md" className="h-full flex items-center gap-4 cursor-pointer hover:bg-stone-800/40 hover:border-orange-500/30 group">
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-900 flex items-center justify-center text-stone-500 group-hover:text-orange-400">
+                  <FileJson size={18}/>
+                </div>
+                <div className="text-left">
+                  <div className="text-[10px] md:text-[11px] font-black text-stone-400 uppercase tracking-widest">バックアップを復元</div>
+                  <div className="text-[8px] md:text-[9px] text-stone-700 mt-0.5 truncate">JSONをロード</div>
+                </div>
+                <input type="file" accept=".json" className="hidden" onChange={handleFileUpload}/>
+              </Card>
             </label>
           </div>
         </div>
 
         <div className="space-y-6 md:space-y-8">
-          <div className="text-[9px] md:text-[10px] font-black uppercase text-stone-700 tracking-[0.4em] text-center">新しく物語を始める</div>
+          <SectionHeader title="新しく物語を始める" className="justify-center" />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 pb-10">
-             <div className="p-6 md:p-10 glass-bright rounded-[2rem] md:rounded-[2.5rem] space-y-6 md:space-y-8 flex flex-col shadow-2xl">
+             <Card variant="glass-bright" padding="lg" className="flex flex-col gap-6 shadow-2xl">
                 <div className="flex items-center gap-3 md:gap-4">
                   <div className="p-2 md:p-3 bg-orange-400/20 rounded-2xl text-orange-400"><Coffee size={18} className="md:w-6 md:h-6"/></div>
                   <h3 className="text-xl md:text-2xl font-display font-black text-white italic">自由な構想</h3>
@@ -148,10 +156,10 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
                   <input value={title} onChange={e => setTitle(e.target.value)} placeholder="物語の題名" className="w-full bg-stone-900/50 border border-stone-700 rounded-xl md:rounded-2xl p-4 md:p-5 text-sm text-white outline-none focus:border-orange-400/50 transition-all"/>
                   <textarea value={idea} onChange={e => setIdea(e.target.value)} placeholder="始まりのアイデア..." className="w-full bg-stone-900/50 border border-stone-700 rounded-xl md:rounded-2xl p-4 md:p-5 text-sm text-white h-24 md:h-36 outline-none resize-none focus:border-orange-400/50 transition-all font-serif"/>
                 </div>
-                <button onClick={handleLaunchManual} className="w-full py-4 md:py-5 bg-orange-500 hover:bg-orange-400 text-stone-950 font-black rounded-xl md:rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-[10px] md:text-xs">アトリエに入る</button>
-             </div>
+                <Button variant="primary" onClick={handleLaunchManual} className="w-full uppercase tracking-widest text-[10px] md:text-xs py-4 md:py-5">アトリエに入る</Button>
+             </Card>
              
-             <div className="p-6 md:p-10 glass-bright rounded-[2rem] md:rounded-[2.5rem] space-y-6 md:space-y-8 flex flex-col shadow-2xl border-orange-400/10">
+             <Card variant="glass-bright" padding="lg" className="flex flex-col gap-6 shadow-2xl border-orange-400/10">
                 <div className="flex items-center gap-3 md:gap-4">
                   <div className="p-2 md:p-3 bg-stone-700/50 rounded-2xl text-orange-300"><Rocket size={18} className="md:w-6 md:h-6"/></div>
                   <h3 className="text-xl md:text-2xl font-display font-black text-white italic">AI ミューズ</h3>
@@ -160,17 +168,17 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert, showCo
                   <p className="text-[11px] md:text-sm text-stone-500 font-serif italic leading-relaxed">テーマを入力するだけで、AIがインスピレーションを形にし、初期設定を自動生成します。</p>
                   <input value={autoTheme} onChange={e => setAutoTheme(e.target.value)} placeholder="テーマ (例: 記憶を売る喫茶店)" className="w-full bg-stone-900/50 border border-stone-700 rounded-xl md:rounded-2xl p-4 md:p-5 text-sm text-white outline-none focus:border-orange-400/50 transition-all"/>
                 </div>
-                <button onClick={handleLaunchAuto} disabled={isProcessing} className="w-full py-4 md:py-5 bg-stone-100 hover:bg-white text-stone-900 font-black rounded-xl md:rounded-2xl shadow-xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest text-[10px] md:text-xs">
-                  {isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} インスピレーションを得る
-                </button>
-             </div>
+                <Button variant="secondary" onClick={handleLaunchAuto} isLoading={isProcessing} icon={<Sparkles size={16}/>} className="w-full bg-stone-100 hover:bg-white text-stone-900 uppercase tracking-widest text-[10px] md:text-xs py-4 md:py-5">
+                   インスピレーションを得る
+                </Button>
+             </Card>
           </div>
         </div>
 
         <div className="text-center opacity-30 pb-20">
-           <button onClick={onOpenHelp} className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-stone-500 hover:text-white transition-all">
+           <Button variant="ghost" onClick={onOpenHelp} size="xs" className="text-[9px] md:text-[10px]">
              アトリエガイドを表示
-           </button>
+           </Button>
         </div>
       </div>
     </div>

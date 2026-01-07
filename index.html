@@ -35,8 +35,20 @@
         -webkit-font-smoothing: antialiased;
         overflow: hidden;
         height: 100dvh;
+        /* モバイルでの不要な選択を防止しつつ、原稿部分は許可する */
         user-select: none;
+        -webkit-user-select: none;
         -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+
+      /* 原稿やチャット、ログなどは選択可能にする */
+      .prose-literary, 
+      textarea, 
+      input, 
+      .selectable-text { 
+        user-select: text !important; 
+        -webkit-user-select: text !important; 
       }
 
       .font-serif { font-family: var(--font-serif); font-weight: 300; }
@@ -73,7 +85,7 @@
 
       @media (max-width: 768px) {
         .writing-vertical {
-          height: calc(100vh - 180px);
+          height: calc(100vh - 240px);
           padding: 1rem 0.5rem;
           line-height: 2.2;
         }

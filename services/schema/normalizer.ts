@@ -1,5 +1,4 @@
 
-
 import { StoryProject, TransmissionScope, SafetyPreset, StoryProjectMetadata, WorldBible, ChapterLog, SyncState, Theme } from '../../types';
 
 export const normalizeProject = (data: any): StoryProject => {
@@ -132,6 +131,7 @@ export const normalizeProject = (data: any): StoryProject => {
              aliases: Array.isArray(c.aliases) ? c.aliases : [],
              role: c.role || 'Supporting',
              description: c.description || '',
+             shortSummary: c.shortSummary || c.summary || '',
              appearance: '', // New field
              personality: c.personality || '',
              background: c.description || '', // Fallback
@@ -173,7 +173,10 @@ export const normalizeProject = (data: any): StoryProject => {
       ...f,
       id: f.id || crypto.randomUUID(),
       relatedThreadId: f.relatedThreadId,
-      relatedThemeId: f.relatedThemeId
+      relatedThemeId: f.relatedThemeId,
+      relatedEntityIds: Array.isArray(f.relatedEntityIds) ? f.relatedEntityIds : [],
+      clues: Array.isArray(f.clues) ? f.clues : [],
+      redHerrings: Array.isArray(f.redHerrings) ? f.redHerrings : []
     })),
     entries: (Array.isArray(data?.bible?.entries) ? data.bible.entries : []).map((e: any) => ({
       ...e,
@@ -230,7 +233,7 @@ export const normalizeProject = (data: any): StoryProject => {
         beats: [], 
         status: 'Idea', 
         wordCount: 0, 
-        draftVersion: 0,
+        draftVersion: 0, 
         stateDeltas: [],
         involvedCharacterIds: [],
         foreshadowingLinks: [],

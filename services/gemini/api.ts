@@ -28,6 +28,10 @@ export const identifyRelevantEntities = (text: string, project: StoryProject, on
 export const chatWithArchitect = (history: GeminiContent[], input: string, project: StoryProject, memory: string, allowSearch: boolean, focus: any, onUsage: UsageCallback, logCb: LogCallback) =>
   getAgents(onUsage, logCb).architect.chat(history, input, project, memory, allowSearch);
 
+// Updated chatWithArchitectStream to accept 8 arguments (adding isContextActive)
+export const chatWithArchitectStream = (history: GeminiContent[], input: string, project: StoryProject, memory: string, allowSearch: boolean, onUsage: UsageCallback, logCb: LogCallback, isContextActive: boolean = true) =>
+  getAgents(onUsage, logCb).architect.chatStream(history, input, project, memory, allowSearch, isContextActive);
+
 export const summarizeConversation = (memory: string, messages: GeminiContent[], onUsage: UsageCallback, logCb: LogCallback) =>
   getAgents(onUsage, logCb).architect.summarize(memory, messages);
 
@@ -69,8 +73,11 @@ export const simulateBranch = (hyp: string, project: StoryProject, onUsage: Usag
 export const generateRandomProject = (theme: string, logCb: LogCallback) =>
   getAgents(undefined, logCb).analysis.generateProject(theme);
 
+/**
+ * FIXED: Passed logCb as the required third argument to getSafetyAlternatives
+ */
 export const getSafetyAlternatives = (input: string, category: string, logCb: LogCallback) =>
-  getAgents(undefined, logCb).analysis.getSafetyAlternatives(input, category);
+  getAgents(undefined, logCb).analysis.getSafetyAlternatives(input, category, logCb);
 
 export const maintainSummaryBuffer = (project: { bible: any }, onUsage: UsageCallback, logCb: LogCallback) =>
   getAgents(onUsage, logCb).analysis.simulateNexus("要約バッファを維持せよ", project as any).then(res => res.impactOnCanon);

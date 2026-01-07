@@ -13,7 +13,9 @@ export const calculateSyncResult = (
   op: SyncOperation,
   history: HistoryEntry[] = []
 ): { nextBible: WorldBible; nextChapters: ChapterLog[]; historyEntry: HistoryEntry } => {
-  if (history.find(h => h.operationId === op.id || (op.requestId && h.requestId === op.requestId))) {
+  // requestId ではなく operationId (個別の操作ID) のみで重複を確認する
+  // requestId は一連の抽出バッチで共通なため、ここでのチェックに含めるとバッチ内の2件目以降が拒否される原因になる
+  if (history.find(h => h.operationId === op.id)) {
     throw new Error(`Operation ${op.id} was already committed.`);
   }
 

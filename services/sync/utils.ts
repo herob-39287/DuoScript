@@ -77,24 +77,34 @@ export const ensureScalar = (value: any, preferredField?: string): any => {
   if (typeof value !== 'object') return value;
   if (Array.isArray(value)) return value;
 
-  if (preferredField && value[preferredField] !== undefined && typeof value[preferredField] !== 'object') {
-    return value[preferredField];
+  // Modified: Check if preferred field exists and is scalar OR array
+  if (preferredField && value[preferredField] !== undefined) {
+    const target = value[preferredField];
+    if (typeof target !== 'object' || Array.isArray(target)) {
+      return target;
+    }
   }
 
   // Handle nested profile/state fields for Characters
   if (value.profile && value.profile.name) return value.profile.name;
   if (value.state && value.state.internalState) return value.state.internalState;
 
-  const commonFields = ['text', 'content', 'value', 'description', 'summary', 'name', 'event', 'motivation', 'personality', 'concept', 'title'];
+  // Added array fields like traits, motifs, etc.
+  const commonFields = ['text', 'content', 'value', 'description', 'summary', 'name', 'event', 'motivation', 'personality', 'concept', 'title', 'traits', 'motifs', 'connections', 'relations', 'memberIds'];
   for (const f of commonFields) {
-    if (value[f] !== undefined && typeof value[f] !== 'object') {
-      return value[f];
+    if (value[f] !== undefined) {
+        const val = value[f];
+        if (typeof val !== 'object' || Array.isArray(val)) return val;
     }
   }
 
   try {
     const keys = Object.keys(value);
-    if (keys.length === 1 && typeof value[keys[0]] !== 'object') return String(value[keys[0]]);
+    // Modified: Unwrap single key if scalar or array
+    if (keys.length === 1) {
+        const val = value[keys[0]];
+        if (typeof val !== 'object' || Array.isArray(val)) return val;
+    }
     return JSON.stringify(value);
   } catch (e) {
     return "[Object]";

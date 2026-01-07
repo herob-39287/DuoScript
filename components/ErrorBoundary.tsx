@@ -1,4 +1,4 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -15,14 +15,11 @@ interface State {
  * ErrorBoundary provides a fallback UI when a component tree crashes.
  * It catches JavaScript errors anywhere in their child component tree.
  */
-class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
-  }
+class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+    error: null
+  };
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -32,15 +29,15 @@ class ErrorBoundary extends React.Component<Props, State> {
     console.error(`Error in ${this.props.viewName}:`, error, errorInfo);
   }
 
-  handleReset = () => {
+  private handleReset = () => {
     this.setState({ hasError: false, error: null });
   };
 
-  handleReload = () => {
+  private handleReload = () => {
     window.location.reload();
   };
 
-  handleEmergencyReset = () => {
+  private handleEmergencyReset = () => {
     if (window.confirm("現在開いているプロジェクトの表示設定をリセットしてトップに戻りますか？データ自体は削除されません。")) {
       localStorage.removeItem('duoscript_active_id');
       window.location.reload();
