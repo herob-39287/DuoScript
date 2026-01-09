@@ -44,6 +44,9 @@ export const extractSettingsFromChat = (history: GeminiContent[], project: Story
 export const getArchitectWhisper = (chunk: string, project: StoryProject, activeChapterId: string, onUsage: UsageCallback, logCb: LogCallback) =>
   getAgents(onUsage, logCb).architect.whisper(chunk, project, activeChapterId);
 
+export const genesisFill = (project: StoryProject, currentProfile: any, fieldLabel: string, onUsage: UsageCallback, logCb: LogCallback) =>
+  getAgents(onUsage, logCb).architect.genesisFill(project, currentProfile, fieldLabel);
+
 // --- Writer ---
 export const generateDraftStream = (chapter: ChapterLog, tone: string, usePro: boolean, project: StoryProject, logCb: LogCallback) =>
   getAgents(undefined, logCb).writer.streamDraft(chapter, tone, usePro, project);

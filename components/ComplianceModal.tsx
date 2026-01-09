@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { ShieldCheck, AlertTriangle, Scale, Eye, FileText, Database, Send, Lock, Zap } from 'lucide-react';
-import { AppPreferences, TransmissionScope, SafetyPreset } from '../types';
+import { ShieldCheck, FileText, Database, Send, Lock, Zap, Globe, Sparkles, UserCheck } from 'lucide-react';
+import { AppPreferences, TransmissionScope, SafetyPreset, AiPersona } from '../types';
+import { t } from '../utils/i18n';
 
 interface Props {
   onAccept: (prefs: AppPreferences) => void;
@@ -9,10 +10,16 @@ interface Props {
 
 const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
   const [prefs, setPrefs] = useState<AppPreferences>({
+    uiLanguage: 'ja',
     transmissionScope: TransmissionScope.FULL,
     safetyPreset: SafetyPreset.MATURE,
-    allowSearch: true
+    aiPersona: AiPersona.STANDARD,
+    allowSearch: true,
+    whisperSensitivity: 50,
+    disabledLinterRules: []
   });
+
+  const lang = prefs.uiLanguage;
 
   return (
     <div className="fixed inset-0 z-[500] bg-stone-950/95 backdrop-blur-3xl flex items-center justify-center p-4 md:p-6 animate-fade-in overflow-y-auto">
@@ -22,68 +29,83 @@ const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
             <ShieldCheck size={32} className="md:w-8 md:h-8 w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl md:text-3xl font-black text-white italic tracking-tighter uppercase">アトリエ入室プロトコル</h2>
-            <p className="text-stone-500 font-medium text-xs md:text-sm">データ管理とプライバシー設定</p>
+            <h2 className="text-xl md:text-3xl font-black text-white italic tracking-tighter uppercase">{t('comp.title', lang)}</h2>
+            <p className="text-stone-500 font-medium text-xs md:text-sm">{t('comp.subtitle', lang)}</p>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 md:space-y-10 custom-scrollbar">
-          {/* Data Transparency Section */}
+          {/* Language Settings */}
           <section className="space-y-4">
             <h3 className="text-[10px] md:text-xs font-black text-orange-400 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Database size={14} /> データの保存と送信について
+              <Globe size={14} /> {t('comp.ui_lang', lang)}
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div className="p-5 bg-stone-950/50 border border-white/5 rounded-2xl space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-400">
-                    <Lock size={14}/>
-                    <span className="text-[10px] font-black uppercase tracking-widest">保存（ローカル）</span>
-                  </div>
-                  <p className="text-[11px] text-stone-400 leading-relaxed font-serif">
-                    プロジェクトデータ、キャラクター設定、執筆中の原稿は、お使いの端末（IndexedDB）にのみ保存されます。アプリ運営側がこれらを収集・保存することはありません。
-                  </p>
-               </div>
-               <div className="p-5 bg-stone-950/50 border border-white/5 rounded-2xl space-y-2">
-                  <div className="flex items-center gap-2 text-orange-400">
-                    <Send size={14}/>
-                    <span className="text-[10px] font-black uppercase tracking-widest">送信（Gemini API）</span>
-                  </div>
-                  <p className="text-[11px] text-stone-400 leading-relaxed font-serif">
-                    推論、執筆、画像生成のため、必要なテキストデータがGoogle Gemini APIへ送信されます。送信される範囲は以下の設定で制御可能です。
-                  </p>
-               </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setPrefs({ ...prefs, uiLanguage: 'ja' })}
+                className={`flex-1 p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${prefs.uiLanguage === 'ja' ? 'bg-orange-600/10 border-orange-500/40 text-orange-400' : 'bg-stone-950/40 border-white/5 text-stone-500'}`}
+              >
+                日本語
+              </button>
+              <button 
+                onClick={() => setPrefs({ ...prefs, uiLanguage: 'en' })}
+                className={`flex-1 p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${prefs.uiLanguage === 'en' ? 'bg-orange-600/10 border-orange-500/40 text-orange-400' : 'bg-stone-950/40 border-white/5 text-stone-500'}`}
+              >
+                English
+              </button>
+            </div>
+          </section>
+
+          {/* AI Persona Section */}
+          <section className="space-y-4">
+            <h3 className="text-[10px] md:text-xs font-black text-orange-400 uppercase tracking-[0.2em] flex items-center gap-2">
+              <UserCheck size={14} /> AI Partner Personality
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <PersonaCard 
+                active={prefs.aiPersona === AiPersona.STANDARD}
+                onClick={() => setPrefs({...prefs, aiPersona: AiPersona.STANDARD})}
+                label="Standard (標準)"
+                desc={lang === 'ja' ? "バランスの取れた伴走者。設定を遵守し、適度に提案します。" : "Balanced companion. Adheres to settings and proposes moderately."}
+              />
+              <PersonaCard 
+                active={prefs.aiPersona === AiPersona.STRICT}
+                onClick={() => setPrefs({...prefs, aiPersona: AiPersona.STRICT})}
+                label="Strict Editor (鬼編集)"
+                desc={lang === 'ja' ? "論理的矛盾を厳しく指摘。品質重視のストイックなパートナー。" : "Strictly points out logical contradictions. Quality-focused."}
+              />
+              <PersonaCard 
+                active={prefs.aiPersona === AiPersona.GENTLE}
+                onClick={() => setPrefs({...prefs, aiPersona: AiPersona.GENTLE})}
+                label="Gentle Muse (全肯定)"
+                desc={lang === 'ja' ? "あなたのアイデアを全て肯定し、優しくモチベーションを支えます。" : "Affirms all your ideas and gently supports motivation."}
+              />
+              <PersonaCard 
+                active={prefs.aiPersona === AiPersona.CREATIVE}
+                onClick={() => setPrefs({...prefs, aiPersona: AiPersona.CREATIVE})}
+                label="Wild Ideas (拡散思考)"
+                desc={lang === 'ja' ? "整合性より面白さ優先。突飛で斬新なアイデアを提案します。" : "Prioritizes fun over consistency. Proposes wild ideas."}
+              />
             </div>
           </section>
 
           {/* Transmission Scope Section */}
           <section className="space-y-4">
             <h3 className="text-[10px] md:text-xs font-black text-orange-400 uppercase tracking-[0.2em] flex items-center gap-2">
-              <FileText size={14} /> AIへの送信範囲
+              <FileText size={14} /> {t('comp.scope_section', lang)}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <ScopeCard 
                 active={prefs.transmissionScope === TransmissionScope.FULL}
                 onClick={() => setPrefs({...prefs, transmissionScope: TransmissionScope.FULL})}
                 label="Full Context"
-                desc="全てのプロットと設定をAIに共有し、最高の整合性を維持します。"
+                desc={lang === 'ja' ? "全てのプロットと設定をAIに共有し、最高の整合性を維持します。" : "Shares all plots and settings with AI to maintain maximum consistency."}
               />
               <ScopeCard 
                 active={prefs.transmissionScope === TransmissionScope.SUMMARY}
                 onClick={() => setPrefs({...prefs, transmissionScope: TransmissionScope.SUMMARY})}
                 label="Summary Only"
-                desc="要約と最小限のキャラクター情報のみ共有し、プライバシーを保護します。"
-              />
-              <ScopeCard 
-                active={prefs.transmissionScope === TransmissionScope.CHAPTER}
-                onClick={() => setPrefs({...prefs, transmissionScope: TransmissionScope.CHAPTER})}
-                label="Active Chapter"
-                desc="現在執筆中の章のテキストのみを共有します。"
-              />
-              <ScopeCard 
-                active={prefs.transmissionScope === TransmissionScope.MINIMAL}
-                onClick={() => setPrefs({...prefs, transmissionScope: TransmissionScope.MINIMAL})}
-                label="Instruction Only"
-                desc="指示文以外のコンテキスト送信を遮断します（推論精度は低下します）。"
+                desc={lang === 'ja' ? "要約と最小限のキャラクター情報のみ共有し、プライバシーを保護します。" : "Shares only summaries and minimal character info to protect privacy."}
               />
             </div>
           </section>
@@ -91,32 +113,31 @@ const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
           {/* Safety Presets Section */}
           <section className="space-y-4">
             <h3 className="text-[10px] md:text-xs font-black text-orange-400 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Zap size={14} /> 創作セーフティ・プリセット
+              <Zap size={14} /> {t('comp.safety_section', lang)}
             </h3>
             <div className="flex flex-col md:flex-row gap-3">
               <PresetBtn 
                 active={prefs.safetyPreset === SafetyPreset.STRICT}
                 onClick={() => setPrefs({...prefs, safetyPreset: SafetyPreset.STRICT})}
                 label="Strict"
-                sub="一般向け"
-                desc="安全性最優先"
+                sub={lang === 'ja' ? "一般向け" : "General"}
+                desc={lang === 'ja' ? "安全性最優先" : "Safety First"}
               />
               <PresetBtn 
                 active={prefs.safetyPreset === SafetyPreset.MATURE}
                 onClick={() => setPrefs({...prefs, safetyPreset: SafetyPreset.MATURE})}
                 label="Mature"
-                sub="文学・創作"
-                desc="ドラマ性を許容"
+                sub={lang === 'ja' ? "文学・創作" : "Literature"}
+                desc={lang === 'ja' ? "ドラマ性を許容" : "Allow Drama"}
               />
               <PresetBtn 
                 active={prefs.safetyPreset === SafetyPreset.CREATIVE}
                 onClick={() => setPrefs({...prefs, safetyPreset: SafetyPreset.CREATIVE})}
                 label="Creative"
-                sub="無制限"
-                desc="表現の自由を重視"
+                sub={lang === 'ja' ? "無制限" : "Unrestricted"}
+                desc={lang === 'ja' ? "表現の自由を重視" : "Freedom"}
               />
             </div>
-            <p className="text-[10px] text-stone-600 font-serif italic text-center">※ AIモデル側の安全フィルター設定に反映されますが、完全に回避できるわけではありません。</p>
           </section>
         </div>
 
@@ -125,13 +146,13 @@ const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
             <div className="w-5 h-5 rounded bg-orange-600 flex items-center justify-center text-white">
               <ShieldCheck size={12} />
             </div>
-            <p className="text-[10px] text-stone-500 font-black uppercase tracking-widest">私はデータの取り扱いと設定内容を理解し、同意します</p>
+            <p className="text-[10px] text-stone-500 font-black uppercase tracking-widest">{t('comp.agree', lang)}</p>
           </div>
           <button 
             onClick={() => onAccept(prefs)}
             className="w-full py-5 bg-orange-600 text-white font-black rounded-2xl shadow-2xl shadow-orange-900/40 hover:bg-orange-500 transition-all active:scale-[0.98] text-xs uppercase tracking-[0.2em]"
           >
-            設定を保存してアトリエに入る
+            {t('comp.enter', lang)}
           </button>
         </div>
       </div>
@@ -145,6 +166,19 @@ const ScopeCard = ({ active, onClick, label, desc }: { active: boolean, onClick:
     className={`p-5 text-left rounded-2xl border transition-all space-y-2 ${active ? 'bg-orange-600/10 border-orange-500/40' : 'bg-stone-950/40 border-white/5 hover:border-white/10'}`}
   >
     <div className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-orange-400' : 'text-stone-500'}`}>{label}</div>
+    <p className="text-[10px] text-stone-400 leading-relaxed font-serif">{desc}</p>
+  </button>
+);
+
+const PersonaCard = ({ active, onClick, label, desc }: { active: boolean, onClick: () => void, label: string, desc: string }) => (
+  <button 
+    onClick={onClick}
+    className={`p-4 text-left rounded-2xl border transition-all space-y-2 ${active ? 'bg-indigo-600/10 border-indigo-500/40' : 'bg-stone-950/40 border-white/5 hover:border-white/10'}`}
+  >
+    <div className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${active ? 'text-indigo-400' : 'text-stone-500'}`}>
+      <Sparkles size={12} />
+      {label}
+    </div>
     <p className="text-[10px] text-stone-400 leading-relaxed font-serif">{desc}</p>
   </button>
 );

@@ -1,5 +1,4 @@
 
-
 import { 
   StoryProject, StoryProjectMetadata, WorldBible, ChapterLog, 
   SyncOperation, HistoryEntry, ChatMessage, ViewMode, 
@@ -66,12 +65,13 @@ export const setPlotterTab = (tab: string): UIAction => ({ type: 'SET_PLOTTER_TA
 export const setPendingMsg = (msg: string | null): UIAction => ({ type: 'SET_PENDING_MSG', payload: msg });
 export const openDialog = (dialog: DialogState): UIAction => ({ type: 'OPEN_DIALOG', payload: dialog });
 export const closeDialog = (): UIAction => ({ type: 'CLOSE_DIALOG' });
-// Added missing setSafetyIntervention action creator
 export const setSafetyIntervention = (payload: Partial<SafetyIntervention>): UIAction => ({ type: 'SET_SAFETY_INTERVENTION', payload });
 export const setPubModal = (show: boolean): UIAction => ({ type: 'SET_PUB_MODAL', payload: show });
 export const setHelpModal = (show: boolean): UIAction => ({ type: 'SET_HELP_MODAL', payload: show });
 export const setSaveStatus = (status: 'idle' | 'saving' | 'saved'): UIAction => ({ type: 'SET_SAVE_STATUS', payload: status });
 export const setConflict = (isConflict: boolean): UIAction => ({ type: 'SET_CONFLICT', payload: isConflict });
+export const setForceSaveRequested = (requested: boolean): UIAction => ({ type: 'SET_FORCE_SAVE_REQUESTED', payload: requested });
+export const setThinkingPhase = (phase: string | null): UIAction => ({ type: 'SET_THINKING_PHASE', payload: phase });
 
 /**
  * Notification Actions

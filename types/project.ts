@@ -12,9 +12,20 @@ export enum SafetyPreset {
   CREATIVE = 'CREATIVE',   
 }
 
+export enum AiPersona {
+  STANDARD = 'STANDARD', // 標準・バランス
+  STRICT = 'STRICT',     // 厳格・論理的 (編集者)
+  GENTLE = 'GENTLE',     // 肯定的・受容的 (ミューズ)
+  CREATIVE = 'CREATIVE', // 創造的・拡散的 (アイデアマン)
+}
+
+export type AppLanguage = 'ja' | 'en';
+
 export interface AppPreferences {
+  uiLanguage: AppLanguage; // New: UI Display Language
   transmissionScope: TransmissionScope;
   safetyPreset: SafetyPreset;
+  aiPersona: AiPersona; // New: AI Personality
   allowSearch: boolean;
   whisperSensitivity: number; 
   disabledLinterRules: string[];
@@ -55,7 +66,7 @@ export interface StoryProjectMetadata {
   createdAt: number;
   updatedAt: number;
   schemaVersion: number; 
-  language: 'ja';
+  language: AppLanguage; // Story Content Language
   tokenUsage: TokenUsageEntry[];
   violationCount: number;
   violationHistory: SafetyViolation[];

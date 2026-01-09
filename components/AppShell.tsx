@@ -2,7 +2,7 @@
 import React, { Suspense, lazy } from 'react';
 import { 
   LayoutDashboard, PenTool, GitBranch, Share2, Home, 
-  HelpCircle, Loader2, CloudCheck, AlertTriangle, RefreshCw
+  HelpCircle, Loader2, CloudCheck, AlertTriangle, RefreshCw, GitMerge
 } from 'lucide-react';
 import { useUI, useUIDispatch, useMetadata } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
@@ -61,7 +61,7 @@ const AppShell: React.FC<AppShellProps> = ({ onLoadProject }) => {
       {/* 競合アラートオーバーレイ */}
       {ui.isConflict && (
         <div className="fixed inset-0 z-[1000] bg-stone-950/95 backdrop-blur-xl flex items-center justify-center p-6 animate-fade-in">
-          <div className="max-w-md w-full glass p-10 rounded-[3rem] border border-rose-500/30 shadow-3xl text-center space-y-8">
+          <div className="max-w-lg w-full glass p-8 rounded-[3rem] border border-rose-500/30 shadow-3xl text-center space-y-8">
             <div className="flex justify-center">
               <div className="p-5 bg-rose-600/20 text-rose-500 rounded-2xl animate-pulse">
                 <AlertTriangle size={48} />
@@ -70,19 +70,31 @@ const AppShell: React.FC<AppShellProps> = ({ onLoadProject }) => {
             <div className="space-y-4">
               <h2 className="text-2xl md:text-3xl font-display font-black text-white italic tracking-tight">保存の競合が発生しました</h2>
               <p className="text-sm text-stone-400 font-serif leading-relaxed">
-                別のタブ、または別のデバイスで物語が更新されています。データの不整合を防ぐため、自動保存を一時停止しました。
+                別のタブ、または別のデバイスで物語が更新されています。<br/>
+                現在の作業内容をどう処理しますか？
               </p>
-              <div className="p-4 bg-stone-900/60 rounded-2xl border border-white/5 text-[11px] text-stone-500 font-medium italic">
-                ※ 編集中の内容はクリップボードにコピーしてバックアップすることをお勧めします。
-              </div>
             </div>
             
-            <button 
-              onClick={() => window.location.reload()}
-              className="w-full py-5 bg-orange-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-orange-500 transition-all shadow-2xl shadow-orange-950/40 active:scale-95"
-            >
-              <RefreshCw size={18} /> 最新の状態を読み込む
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button 
+                onClick={() => window.location.reload()}
+                className="w-full py-5 bg-stone-800 text-stone-400 rounded-2xl text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-2 hover:bg-stone-700 hover:text-white transition-all group border border-white/5 hover:border-white/10"
+              >
+                <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" /> 
+                <span>最新の状態を読み込む<br/><span className="text-[8px] opacity-70 normal-case">(現在の変更を破棄)</span></span>
+              </button>
+
+              <button 
+                onClick={() => uiDispatch(Actions.setForceSaveRequested(true))}
+                className="w-full py-5 bg-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-2 hover:bg-orange-500 transition-all shadow-xl shadow-orange-900/30 active:scale-95"
+              >
+                <GitMerge size={18} /> 
+                <span>強制保存する<br/><span className="text-[8px] opacity-70 normal-case">(現在の内容を優先)</span></span>
+              </button>
+            </div>
+            <p className="text-[9px] text-stone-600 font-serif italic">
+              ※ 強制保存を選択すると、現在の作業内容が最新版として上書き保存されます。
+            </p>
           </div>
         </div>
       )}

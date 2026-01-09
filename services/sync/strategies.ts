@@ -323,6 +323,17 @@ export class CollectionStrategy implements SyncStrategy {
     }
   }
 
+  private getContentField(path: string): string {
+    switch (path) {
+      case 'storyStructure':
+      case 'volumes':
+      case 'chapters': return 'summary';
+      case 'storyThreads': return 'shortSummary';
+      case 'entries': return 'definition';
+      default: return 'description';
+    }
+  }
+
   apply(ctx: SyncContext, op: SyncOperation) {
     const isBiblePath = op.path !== 'chapters';
     const nextBible = { ...ctx.bible };
@@ -333,13 +344,22 @@ export class CollectionStrategy implements SyncStrategy {
       : nextChapters;
 
     const namingField = this.getNamingField(op.path);
+    const contentField = this.getContentField(op.path);
     let targetName = ensureScalar(op.targetName) || "対象項目";
     let oldVal: any = null;
     let newVal: any = null;
 
+    // Safe handling of string/malformed op.value
+    let incomingValue: any = {};
+    if (typeof op.value === 'string') {
+      // If value is just a string, assign it to the primary naming field AND the appropriate content field
+      incomingValue = { [namingField]: op.value, [contentField]: op.value, description: op.value };
+    } else if (op.value && typeof op.value === 'object' && !Array.isArray(op.value)) {
+      incomingValue = op.value;
+    }
+
     // op.op が 'add' の場合は検索をスキップして新規追加ルートへ。これにより同名でも別IDで作成される
     const idx = op.op === 'add' ? -1 : findItemIdx(collection, op.targetId, op.targetName);
-    const incomingValue = (op.value as any) || {};
 
     if (idx === -1 && op.op !== 'delete') {
       const newItem: any = { id: crypto.randomUUID(), updatedAt: Date.now() };

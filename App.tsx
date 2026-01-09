@@ -27,7 +27,9 @@ const App: React.FC = () => {
     showHelpModal: false,
     saveStatus: 'idle',
     isConflict: false,
-    isContextActive: true // Story context activation flag
+    forceSaveRequested: false, // Initialize forceSave flag
+    isContextActive: true, // Story context activation flag
+    thinkingPhase: null // AIの思考プロセスを表示するための状態
   };
   const [ui, uiDispatch] = useReducer(uiReducer, initialUIState);
   
@@ -37,7 +39,7 @@ const App: React.FC = () => {
 
   const [hasAgreed, setHasAgreed] = useState(localStorage.getItem('duoscript_agreed_v2') === 'true');
 
-  usePersistence(project, projectDispatch, uiDispatch);
+  usePersistence(project, ui, projectDispatch, uiDispatch);
 
   const addLog = useCallback((type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
     notifDispatch({ type: 'ADD_LOG', payload: { id: crypto.randomUUID(), timestamp: Date.now(), type, source, message, details } });

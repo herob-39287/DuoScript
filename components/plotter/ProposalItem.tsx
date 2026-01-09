@@ -1,5 +1,5 @@
 
-import { ChevronDown, ChevronUp, X, ArrowRight, AlertCircle, Search, User, Globe, Check, Plus, Beaker, Target, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, ArrowRight, AlertCircle, Search, User, Globe, Check, Plus, Beaker, Target, AlertTriangle, Loader2 } from 'lucide-react';
 import React, { useState, useMemo, useCallback } from 'react';
 import { SyncOperation, WorldBible, ChapterLog } from '../../types';
 import { VisualDiff } from './VisualDiff';
@@ -13,7 +13,7 @@ interface ProposalItemProps {
   chapters: ChapterLog[];
   isExpanded: boolean;
   onToggle: () => void;
-  onAccept: () => void;
+  onAccept: () => void | Promise<void>;
   onReject: () => void;
 }
 
@@ -46,6 +46,7 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
   const syncDispatch = useNeuralSyncDispatch();
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isApplying, setIsApplying] = useState(false);
 
   const currentValue = getCurrentValueForDiff(bible, chapters, op.path, op.targetName, op.field);
   const isSemanticInvalid = op.status === 'needs_resolution';
@@ -108,6 +109,18 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
       resolutionHint: undefined
     }));
     setIsSearching(false);
+  };
+
+  const handleAccept = async () => {
+    if (isApplying) return;
+    setIsApplying(true);
+    try {
+      await onAccept();
+    } finally {
+      // If component unmounts (removed from list), this state update might be on unmounted component but React handles it.
+      // However, usually we want to stop loading.
+      setIsApplying(false);
+    }
   };
 
   const renderTargetName = () => {
@@ -223,11 +236,11 @@ export const ProposalItem = React.memo(({ op, bible, chapters, isExpanded, onTog
           <div className="flex gap-2 pt-2">
             <button onClick={onReject} className="flex-1 py-3 bg-stone-800 text-stone-400 hover:text-white rounded-xl text-[9px] font-black uppercase transition-colors"><X size={14}/></button>
             <button 
-              onClick={onAccept} 
-              disabled={isSemanticInvalid}
-              className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${isSemanticInvalid ? 'bg-stone-800 text-stone-600 cursor-not-allowed' : (isHypothetical ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/40' : 'bg-orange-600 text-white hover:bg-orange-500 shadow-orange-950/20')}`}
+              onClick={handleAccept} 
+              disabled={isSemanticInvalid || isApplying}
+              className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${isSemanticInvalid || isApplying ? 'bg-stone-800 text-stone-600 cursor-not-allowed' : (isHypothetical ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/40' : 'bg-orange-600 text-white hover:bg-orange-500 shadow-orange-950/20')}`}
             >
-              {isHypothetical ? '正史へ定着させる' : '適用する'} <ArrowRight size={14}/>
+              {isApplying ? <Loader2 size={14} className="animate-spin" /> : <>{isHypothetical ? '正史へ定着させる' : '適用する'} <ArrowRight size={14}/></>}
             </button>
           </div>
         </div>

@@ -1,10 +1,12 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { BrainCircuit, Network, Loader2, Feather, Globe, Send, FileText, ChevronDown, ChevronUp, Check, Maximize2, Activity, Info, HelpCircle, X, Book } from 'lucide-react';
+import { BrainCircuit, Network, Loader2, Feather, Globe, Send, FileText, Check, Activity, Info, HelpCircle, X, Book, UserCheck } from 'lucide-react';
 import { ChatMessage, Artifact } from '../../types/sync';
+import { AiPersona } from '../../types/project';
 import { getArtifact } from '../../services/storageService';
 import { Badge, Card, Button } from '../ui/DesignSystem';
-import { useNeuralSync, useUI, useUIDispatch } from '../../contexts/StoryContext';
+import { useNeuralSync, useUI, useUIDispatch, useMetadata, useMetadataDispatch } from '../../contexts/StoryContext';
+import * as Actions from '../../store/actions';
 
 interface ArchitectChatProps {
   mobileMode: 'chat' | 'bible';
@@ -16,68 +18,98 @@ interface ArchitectChatProps {
   onSendMessage: () => void;
 }
 
-const ArtifactCard: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [fullArtifact, setFullArtifact] = useState<Artifact | null>(null);
+const MessageBubble: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
+  const [loadedArtifact, setLoadedArtifact] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleLoad = async () => {
-    if (isExpanded) {
-      setIsExpanded(false);
-      return;
+  useEffect(() => {
+    if (msg.kind === 'artifact_ref' && msg.artifactId) {
+      setLoading(true);
+      getArtifact(msg.artifactId)
+        .then(art => {
+          if (art) setLoadedArtifact(art.content);
+        })
+        .catch(e => {
+          console.error("Failed to load artifact", e);
+          setLoadedArtifact("Error loading content.");
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoadedArtifact(null);
     }
-    if (fullArtifact) {
-      setIsExpanded(true);
-      return;
-    }
-    if (!msg.artifactId) return;
+  }, [msg.kind, msg.artifactId]);
 
-    setLoading(true);
-    try {
-      const art = await getArtifact(msg.artifactId);
-      if (art) {
-        setFullArtifact(art);
-        setIsExpanded(true);
-      }
-    } finally {
-      setLoading(false);
+  const textToDisplay = loadedArtifact !== null ? loadedArtifact : msg.content;
+
+  return (
+    <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-fade-in w-full`}>
+      <div className={`max-w-[85%] p-4 rounded-2xl text-[12px] md:text-[13px] leading-relaxed font-serif whitespace-pre-wrap shadow-lg ${msg.role === 'user' ? 'bg-stone-800 text-stone-200 rounded-br-none' : 'glass-bright text-stone-100 rounded-bl-none border border-white/5'}`}>
+        {loading ? (
+          <div className="flex items-center gap-2 text-stone-500">
+            <Loader2 size={12} className="animate-spin"/>
+            <span className="text-[10px]">Loading content...</span>
+          </div>
+        ) : textToDisplay}
+      </div>
+      {msg.sources && msg.sources.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 w-[85%]">
+          {msg.sources.map((s, i) => (
+            <a key={i} href={s.uri} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 bg-stone-950/60 rounded-xl border border-white/5 hover:border-orange-500/30 transition-all group">
+              <div className="p-1.5 bg-stone-800 rounded text-orange-400"><Globe size={12}/></div>
+              <div className="min-w-0">
+                <div className="text-[9px] font-black text-stone-300 truncate uppercase tracking-widest">{s.title}</div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PersonaSelector: React.FC = () => {
+  const meta = useMetadata();
+  const metaDispatch = useMetadataDispatch();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const currentPersona = meta.preferences.aiPersona || AiPersona.STANDARD;
+
+  const handleSelect = (p: AiPersona) => {
+    metaDispatch(Actions.updatePreferences({ aiPersona: p }));
+    setIsOpen(false);
+  };
+
+  const getLabel = (p: AiPersona) => {
+    switch (p) {
+      case AiPersona.STRICT: return "厳格";
+      case AiPersona.GENTLE: return "肯定";
+      case AiPersona.CREATIVE: return "拡散";
+      default: return "標準";
     }
   };
 
-  const summary = msg.collapsedContent;
-
   return (
-    <div className="w-[90%] md:w-[85%] self-start animate-fade-in">
-      <div className={`rounded-2xl border border-orange-500/20 bg-stone-900/40 overflow-hidden ${isExpanded ? 'ring-1 ring-orange-500/30' : ''}`}>
-        <div className="p-3 border-b border-white/5 bg-stone-900/80 flex items-center justify-between">
-           <div className="flex items-center gap-2">
-             <div className="p-1.5 bg-orange-900/30 rounded text-orange-400"><FileText size={14}/></div>
-             <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest">{summary?.type || 'Artifact'}</span>
-           </div>
-           <span className="text-[9px] text-stone-600 font-mono">ID: {summary?.docId?.slice(0, 6)}</span>
+    <div className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="flex items-center gap-1.5 text-[8px] font-black text-stone-500 hover:text-indigo-400 uppercase tracking-[0.2em] transition-colors"
+        title="AI人格の変更"
+      >
+        <UserCheck size={10} /> {getLabel(currentPersona)}
+      </button>
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-2 bg-stone-900 border border-white/10 rounded-xl p-1 z-50 shadow-xl flex flex-col gap-1 w-32 animate-fade-in">
+          {Object.values(AiPersona).map((p) => (
+            <button 
+              key={p} 
+              onClick={() => handleSelect(p)}
+              className={`text-left px-3 py-2 text-[9px] font-bold rounded-lg transition-colors ${currentPersona === p ? 'bg-indigo-500/20 text-indigo-400' : 'text-stone-400 hover:bg-stone-800 hover:text-white'}`}
+            >
+              {getLabel(p)} Mode
+            </button>
+          ))}
         </div>
-        
-        <div className="p-4 space-y-3">
-           <p className="text-[12px] font-bold text-stone-200">{summary?.title || "生成成果物"}</p>
-           {summary?.decisions_made && summary.decisions_made.length > 0 && (
-             <div className="space-y-1">
-               <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><Check size={10} className="text-emerald-500"/> 決定事項</span>
-               <ul className="text-[10px] text-stone-400 font-serif list-disc list-inside space-y-0.5 pl-1">
-                 {summary.decisions_made.slice(0, 3).map((d, i) => <li key={i}>{d}</li>)}
-               </ul>
-             </div>
-           )}
-           <button onClick={handleLoad} className="w-full py-2 bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2">
-             {loading ? <Loader2 size={12} className="animate-spin"/> : (isExpanded ? <ChevronUp size={12}/> : <Maximize2 size={12}/>)}
-             {isExpanded ? "閉じる" : "全文を表示"}
-           </button>
-        </div>
-        {isExpanded && fullArtifact && (
-          <div className="p-4 border-t border-white/10 bg-black/20 max-h-96 overflow-y-auto custom-scrollbar">
-            <pre className="text-[11px] text-stone-300 font-serif leading-relaxed whitespace-pre-wrap">{fullArtifact.content}</pre>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };
@@ -111,16 +143,22 @@ export const ArchitectChat: React.FC<ArchitectChatProps> = ({
     }
   }, [displayHistory.length, isTyping, mobileMode]);
 
+  const lastMsg = displayHistory[displayHistory.length - 1];
+  const hasActiveResponse = lastMsg?.role === 'model' && (lastMsg.content.length > 0 || lastMsg.kind === 'artifact_ref');
+
   return (
     <div className={`${mobileMode === 'chat' ? 'flex' : 'hidden md:flex'} w-full md:w-[400px] lg:w-[480px] flex-col border-r border-white/5 bg-stone-900/40 relative z-10 shrink-0 h-full`}>
-      <div className="p-4 border-b border-white/5 flex items-center justify-between bg-stone-900/60 backdrop-blur-md">
+      <div className="p-4 border-b border-white/5 flex items-center justify-between bg-stone-900/60 backdrop-blur-md relative z-20">
          <div className="flex items-center gap-3">
            <div className="p-2 bg-stone-800 rounded-lg text-orange-400"><BrainCircuit size={20}/></div>
            <div className="min-w-0">
              <h2 className="text-sm font-black text-stone-200 uppercase tracking-widest truncate">物語の設計士</h2>
-             <button onClick={() => setShowMemoryMonitor(true)} className="flex items-center gap-1.5 text-[8px] font-black text-stone-500 hover:text-orange-400 uppercase tracking-[0.2em] transition-colors">
-               <Activity size={10} /> Memory Optimized
-             </button>
+             <div className="flex gap-3">
+               <button onClick={() => setShowMemoryMonitor(true)} className="flex items-center gap-1.5 text-[8px] font-black text-stone-500 hover:text-orange-400 uppercase tracking-[0.2em] transition-colors">
+                 <Activity size={10} /> Memory
+               </button>
+               <PersonaSelector />
+             </div>
            </div>
          </div>
          <div className="flex items-center gap-2">
@@ -140,28 +178,12 @@ export const ArchitectChat: React.FC<ArchitectChatProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar scroll-smooth" ref={scrollRef}>
-         {displayHistory.map((msg) => (
-             msg.kind === 'artifact_ref' ? <ArtifactCard key={msg.id} msg={msg} /> : (
-               <div key={msg.id} className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-fade-in`}>
-                 <div className={`max-w-[85%] p-4 rounded-2xl text-[12px] md:text-[13px] leading-relaxed font-serif whitespace-pre-wrap shadow-lg ${msg.role === 'user' ? 'bg-stone-800 text-stone-200 rounded-br-none' : 'glass-bright text-stone-100 rounded-bl-none border border-white/5'}`}>
-                   {msg.content}
-                 </div>
-                 {msg.sources && msg.sources.length > 0 && (
-                   <div className="grid grid-cols-1 gap-2 w-[85%]">
-                     {msg.sources.map((s, i) => (
-                       <a key={i} href={s.uri} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 bg-stone-950/60 rounded-xl border border-white/5 hover:border-orange-500/30 transition-all group">
-                         <div className="p-1.5 bg-stone-800 rounded text-orange-400"><Globe size={12}/></div>
-                         <div className="min-w-0">
-                           <div className="text-[9px] font-black text-stone-300 truncate uppercase tracking-widest">{s.title}</div>
-                         </div>
-                       </a>
-                     ))}
-                   </div>
-                 )}
-               </div>
-             )
-         ))}
-         {isTyping && (
+         {displayHistory.map((msg) => {
+             if (msg.role === 'model' && !msg.content && msg.kind !== 'artifact_ref') return null;
+             return <MessageBubble key={msg.id} msg={msg} />;
+         })}
+         
+         {isTyping && !hasActiveResponse && (
            <div className="flex items-start gap-2 animate-pulse opacity-50">
              <div className="p-4 glass-bright rounded-2xl rounded-bl-none">
                <div className="flex gap-1"><div className="w-1.5 h-1.5 bg-stone-500 rounded-full"/><div className="w-1.5 h-1.5 bg-stone-500 rounded-full"/><div className="w-1.5 h-1.5 bg-stone-500 rounded-full"/></div>

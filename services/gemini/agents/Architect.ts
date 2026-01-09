@@ -27,29 +27,27 @@ export class ArchitectAgent {
     
     let cacheName: string | undefined = undefined;
     let systemInstruction = "";
+    const lang = project.meta.language || 'ja';
 
-    // キャッシュ利用判定
     if (isContextActive) {
       try {
         cacheName = await cacheManager.getArchitectCache(project, this.logCallback);
-        // キャッシュ有効時: 動的部分のみをInstructionにする
-        systemInstruction = PromptBuilder.buildDynamicArchitectContext(memory, relevantIds, true);
+        systemInstruction = PromptBuilder.buildDynamicArchitectContext(memory, relevantIds, true, lang);
       } catch (e) {
-        // キャッシュ作成失敗時はフォールバック (全結合プロンプト)
         console.warn("Cache failed, falling back to full context injection.");
         systemInstruction = PromptBuilder.buildArchitectMTP(project, memory, relevantIds, true);
       }
     } else {
-      // コンテキスト無効時: 通常のプロンプト
       systemInstruction = PromptBuilder.buildArchitectMTP(project, memory, relevantIds, false);
     }
 
     const dynamicSystemInstruction = `
 ${systemInstruction}
 
-# 応答のルール:
-- 自然な日本語で、作家の創造性を刺激する対話を行ってください。
-- ユーザーが「設定を確定」させたい様子であれば、Neural Sync（設定抽出）を促してください。
+# Response Rules:
+- Communicate in natural ${lang === 'ja' ? 'Japanese' : 'English'}.
+- Stimulate the writer's creativity.
+- If the user seems to want to "finalize settings", encourage Neural Sync.
 `.trim();
 
     return runGeminiRequest({
@@ -57,7 +55,7 @@ ${systemInstruction}
       contents: [...history, { role: 'user', parts: [{ text: input }] }],
       config: {
         systemInstruction: dynamicSystemInstruction,
-        cachedContent: cacheName, // キャッシュがある場合はここで指定
+        cachedContent: cacheName,
         tools: allowSearch ? [{ googleSearch: {} }] : [],
         safetySettings: getSafetySettings(),
         thinkingConfig: { thinkingBudget: 4000 }, 
@@ -82,12 +80,12 @@ ${systemInstruction}
     
     let cacheName: string | undefined = undefined;
     let systemInstruction = "";
+    const lang = project.meta.language || 'ja';
 
-    // キャッシュ利用判定
     if (isContextActive) {
       try {
         cacheName = await cacheManager.getArchitectCache(project, this.logCallback);
-        systemInstruction = PromptBuilder.buildDynamicArchitectContext(memory, relevantIds, true);
+        systemInstruction = PromptBuilder.buildDynamicArchitectContext(memory, relevantIds, true, lang);
       } catch (e) {
         console.warn("Cache failed, falling back.");
         systemInstruction = PromptBuilder.buildArchitectMTP(project, memory, relevantIds, true);
@@ -99,9 +97,10 @@ ${systemInstruction}
     const dynamicSystemInstruction = `
 ${systemInstruction}
 
-# 応答のルール:
-- 自然な日本語で、作家の創造性を刺激する対話を行ってください。
-- ユーザーが「設定を確定」させたい様子であれば、Neural Sync（設定抽出）を促してください。
+# Response Rules:
+- Communicate in natural ${lang === 'ja' ? 'Japanese' : 'English'}.
+- Stimulate the writer's creativity.
+- If the user seems to want to "finalize settings", encourage Neural Sync.
 `.trim();
 
     const ai = getClient();
@@ -110,7 +109,7 @@ ${systemInstruction}
     try {
       const config = {
         systemInstruction: dynamicSystemInstruction,
-        cachedContent: cacheName, // キャッシュ適用
+        cachedContent: cacheName, 
         tools: allowSearch ? [{ googleSearch: {} }] : [],
         safetySettings: getSafetySettings(),
         thinkingConfig: { thinkingBudget: 4000 }, 
@@ -134,9 +133,8 @@ ${systemInstruction}
         };
       }
     } catch (e: any) {
-      // 検索エラーなどの場合のフォールバック（キャッシュはそのまま維持して再試行）
       if (allowSearch) {
-        this.logCallback('info', 'Architect', '検索をオフにして再試行します...');
+        this.logCallback('info', 'Architect', 'Retrying without search...');
         const fallbackConfig = {
           systemInstruction: dynamicSystemInstruction,
           cachedContent: cacheName,
@@ -160,13 +158,16 @@ ${systemInstruction}
   }
 
   async detectIntent(input: string): Promise<DetectionResult> {
+    // Intent Detection handles limited languages so use JA default for now or switch context
+    // Actually, detector should understand the language of input.
+    // We will use English for system instructions to ensuring better instruction following, but output is JSON anyway.
     return runGeminiRequest({
       model: 'gemini-3-flash-preview',
       contents: Prompts.DETECTION_PROMPT(input),
       config: { 
-        systemInstruction: `${Prompts.DETECTOR_SOUL}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.DETECTOR_SOUL('en')}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
-        responseSchema: Schemas.detectionSchema 
+        responseSchema: Schemas.getDetectionSchema('en') 
       },
       usageLabel: 'Architect/IntentDetection',
       onUsage: this.onUsage,
@@ -177,17 +178,17 @@ ${systemInstruction}
 
   async extractSyncOps(history: GeminiContent[], project: StoryProject, memory: string, detection: DetectionResult, processOps: (json: any) => ExtractionResult): Promise<ExtractionResult> {
     const conversationText = history.map(h => h.parts.map(p => p.text).join(" ")).join("\n");
-    // Extraction does not rely on cacheManager yet as it's a one-off analytical task
-    // It constructs its own specialized context.
     const relevantIds = await this.librarian.identifyRelevantEntities(conversationText, project);
     const storyData = PromptBuilder.buildStructuredStoryData(project, undefined, relevantIds);
+    const lang = project.meta.language || 'ja';
+    const persona = project.meta.preferences?.aiPersona || "STANDARD";
     
     const basePrompt = `
-対話履歴から物語設定の変更点を抽出し、JSON形式で出力せよ。
+Extract story setting changes from the dialogue history and output in JSON.
 【STORY_DATA】
 ${storyData}
 【MEMORY】
-${memory || "なし"}
+${memory || "None"}
 【HISTORY】
 ${JSON.stringify(history)}
 `.trim();
@@ -195,16 +196,17 @@ ${JSON.stringify(history)}
     const tasks: Promise<ExtractionResult>[] = [];
     const domains = detection.domains || [];
 
+    // Use specific language instructions
     if (domains.length === 0) {
-      tasks.push(this._runExtraction(basePrompt, Prompts.SYNC_EXTRACTOR_SOUL, 'Architect/Extraction:General', processOps));
+      tasks.push(this._runExtraction(basePrompt, Prompts.SYNC_EXTRACTOR_SOUL(lang), 'Architect/Extraction:General', processOps, lang));
     } else {
-      if (domains.includes('ENTITIES')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_ENTITIES, 'Architect/Extraction:Entities', processOps));
-      if (domains.includes('FOUNDATION')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_FOUNDATION, 'Architect/Extraction:Foundation', processOps));
-      if (domains.includes('FORESHADOWING')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_FORESHADOWING, 'Architect/Extraction:Foreshadowing', processOps));
-      if (domains.includes('NARRATIVE')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_NARRATIVE, 'Architect/Extraction:Narrative', processOps));
+      if (domains.includes('ENTITIES')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_ENTITIES(lang), 'Architect/Extraction:Entities', processOps, lang));
+      if (domains.includes('FOUNDATION')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_FOUNDATION(lang), 'Architect/Extraction:Foundation', processOps, lang));
+      if (domains.includes('FORESHADOWING')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_FORESHADOWING(lang), 'Architect/Extraction:Foreshadowing', processOps, lang));
+      if (domains.includes('NARRATIVE')) tasks.push(this._runExtraction(basePrompt, Prompts.EXTRACTOR_SOUL_NARRATIVE(lang), 'Architect/Extraction:Narrative', processOps, lang));
     }
 
-    if (tasks.length === 0) tasks.push(this._runExtraction(basePrompt, Prompts.SYNC_EXTRACTOR_SOUL, 'Architect/Extraction:Fallback', processOps));
+    if (tasks.length === 0) tasks.push(this._runExtraction(basePrompt, Prompts.SYNC_EXTRACTOR_SOUL(lang), 'Architect/Extraction:Fallback', processOps, lang));
 
     const results = await Promise.all(tasks);
     const seenOps = new Map<string, SyncOperation>();
@@ -224,14 +226,14 @@ ${JSON.stringify(history)}
     return { readyOps: Array.from(seenOps.values()), quarantineItems: allQuarantine };
   }
 
-  private async _runExtraction(content: string, systemInstruction: string, label: string, processOps: (json: any) => ExtractionResult): Promise<ExtractionResult> {
+  private async _runExtraction(content: string, systemInstruction: string, label: string, processOps: (json: any) => ExtractionResult, lang: 'ja' | 'en'): Promise<ExtractionResult> {
     return runGeminiRequest({
        model: 'gemini-3-pro-preview',
        contents: [{ role: 'user', parts: [{ text: content }] }],
        config: {
          systemInstruction: `${systemInstruction}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
          responseMimeType: "application/json",
-         responseSchema: { type: Type.ARRAY, items: { ...Schemas.syncOperationSchema } },
+         responseSchema: { type: Type.ARRAY, items: { ...Schemas.getSyncOperationSchema(lang) } },
          maxOutputTokens: 32768,
          thinkingConfig: { thinkingBudget: 4000 } 
        },
@@ -244,13 +246,13 @@ ${JSON.stringify(history)}
 
   async summarize(currentMemory: string, oldMessages: GeminiContent[]): Promise<string> {
     const prompt = `
-以下の対話履歴から、物語設定に関する「決定事項(Decisions)」と「未解決の課題(Open Questions)」を抽出し、JSON形式のサマリーを更新してください。
-これまでのメモリを上書き・統合し、最新の状態を維持してください。
+Extract "Decisions" and "Open Questions" regarding story settings from the following dialogue history, and update the JSON summary.
+Overwrite and integrate with the current memory to maintain the latest state.
 
-【現在のメモリ】
-${currentMemory || "なし"}
+【CURRENT MEMORY】
+${currentMemory || "None"}
 
-【追加の対話】
+【ADDITIONAL DIALOGUE】
 ${JSON.stringify(oldMessages)}
 `.trim();
 
@@ -258,13 +260,13 @@ ${JSON.stringify(oldMessages)}
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
-        systemInstruction: `あなたは物語の司書です。対話から重要な決定事項を抽出し、JSON形式で返してください。\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `You are a story librarian. Extract key decisions and return in JSON.\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            decisions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "確定した設定や展開" },
-            open_questions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "今後検討が必要な項目" }
+            decisions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Decided settings or plot points" },
+            open_questions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Items requiring further discussion" }
           },
           required: ["decisions", "open_questions"]
         }
@@ -278,18 +280,38 @@ ${JSON.stringify(oldMessages)}
 
   async whisper(chunk: string, project: StoryProject, activeChapterId: string): Promise<WhisperAdvice | null> {
     const storyData = PromptBuilder.buildStructuredStoryData(project, activeChapterId);
+    const lang = project.meta.language || 'ja';
     return runGeminiRequest({
       model: 'gemini-3-flash-preview',
       contents: `【STORY_DATA】\n${storyData}\n【CHUNK】\n"${chunk}"`,
       config: { 
-        systemInstruction: `${Prompts.WHISPER_SOUL}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.WHISPER_SOUL(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
-        responseSchema: Schemas.whisperSchema 
+        responseSchema: Schemas.getWhisperSchema(lang)
       },
       usageLabel: 'Architect/WhisperScan',
       onUsage: this.onUsage,
       logCallback: this.logCallback,
-      mapper: (res) => res.text?.includes("なし") ? null : safeJsonParse<WhisperAdvice>(res.text, 'Whisper').value || null
+      mapper: (res) => res.text?.includes("なし") || res.text?.includes("None") ? null : safeJsonParse<WhisperAdvice>(res.text, 'Whisper').value || null
+    });
+  }
+
+  async genesisFill(project: StoryProject, currentProfile: any, fieldLabel: string): Promise<string> {
+    const lang = project.meta.language || 'ja';
+    const worldContext = `Setting: ${project.bible.setting}\nTone: ${project.bible.tone}`;
+    const profileStr = JSON.stringify(currentProfile, null, 2);
+
+    return runGeminiRequest({
+      model: 'gemini-3-flash-preview',
+      contents: Prompts.GENESIS_FILL_PROMPT(fieldLabel, profileStr, worldContext, lang),
+      config: {
+        maxOutputTokens: 200,
+        temperature: 0.8 // Slightly creative
+      },
+      usageLabel: 'Architect/GenesisFill',
+      onUsage: this.onUsage,
+      logCallback: this.logCallback,
+      mapper: (res) => res.text.trim()
     });
   }
 }

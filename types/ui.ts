@@ -52,7 +52,9 @@ export interface UIState {
   showHelpModal: boolean;
   saveStatus: 'idle' | 'saving' | 'saved';
   isConflict: boolean;
-  isContextActive: boolean; // 追加: 設定を参照するかどうかのフラグ
+  forceSaveRequested: boolean; 
+  isContextActive: boolean;
+  thinkingPhase: string | null; // AIの思考プロセスを表示するための状態
 }
 
 import { 
@@ -109,7 +111,9 @@ export type UIAction =
   | { type: 'SET_HELP_MODAL'; payload: boolean }
   | { type: 'SET_SAVE_STATUS'; payload: 'idle' | 'saving' | 'saved' }
   | { type: 'SET_CONFLICT'; payload: boolean }
-  | { type: 'TOGGLE_CONTEXT_ACTIVE'; payload: boolean }; // 追加: トグルアクション
+  | { type: 'SET_FORCE_SAVE_REQUESTED'; payload: boolean } 
+  | { type: 'TOGGLE_CONTEXT_ACTIVE'; payload: boolean }
+  | { type: 'SET_THINKING_PHASE'; payload: string | null };
 
 export type ProjectAction = 
   | MetaAction

@@ -199,8 +199,14 @@ export const uiReducer = (state: UIState, action: UIAction): UIState => {
       case 'SET_CONFLICT':
         draft.isConflict = action.payload;
         break;
+      case 'SET_FORCE_SAVE_REQUESTED':
+        draft.forceSaveRequested = action.payload;
+        break;
       case 'TOGGLE_CONTEXT_ACTIVE':
         draft.isContextActive = action.payload;
+        break;
+      case 'SET_THINKING_PHASE':
+        draft.thinkingPhase = action.payload;
         break;
     }
   });

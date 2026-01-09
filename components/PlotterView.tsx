@@ -25,6 +25,7 @@ import { CharactersTab } from './plotter/tabs/CharactersTab';
 import { WorldTab } from './plotter/tabs/WorldTab';
 import { TimelineTab } from './plotter/tabs/TimelineTab';
 import { NexusTab } from './plotter/tabs/NexusTab';
+import { ThinkingIndicator } from './ui/ThinkingIndicator';
 
 const PlotterView: React.FC = () => {
   const meta = useMetadata();
@@ -39,7 +40,7 @@ const PlotterView: React.FC = () => {
 
   const ui = useUI();
   const uiDispatch = useUIDispatch();
-  const { plotterTab: activeTab, pendingMsg, isContextActive } = ui;
+  const { plotterTab: activeTab, pendingMsg, isContextActive, thinkingPhase } = ui;
   const { addLog } = useNotificationDispatch();
 
   const { chatHistory, archivedChat, conversationMemory, pendingChanges, history: bibleHistory } = sync;
@@ -130,6 +131,7 @@ const PlotterView: React.FC = () => {
         const historyContent: GeminiContent[] = PromptBuilder.buildCompressedHistory({ ...sync, chatHistory: processingHistory });
 
         // 1. Detect Intent
+        // Background process, so no visual thinking phase update for user to avoid distraction
         const detection = await detectSettingChange(combinedInput, (u) => metaDispatch(Actions.trackUsage(u)), addLog);
 
         if (detection.hasChangeIntent) {
@@ -192,25 +194,20 @@ const PlotterView: React.FC = () => {
     
     setInput('');
     setIsTyping(true);
+    uiDispatch(Actions.setThinkingPhase("Consulting RAG..."));
 
     try {
       // 2. Build API Context
-      // IMPORTANT: Use syncRef.current to ensure we have the latest state if available, 
-      // but strictly for this turn, we also need to include the 'userMsg' which might not be in the ref yet due to async dispatch.
-      // Actually, 'userMsg' is passed as 'input' to 'chatWithArchitectStream', so we just need history UP TO userMsg.
-      // Using syncRef.current ensures we have the latest confirmed history from previous turns.
       const currentSyncState = syncRef.current;
-      
-      // We manually construct the history content to ensure consistency.
-      // currentSyncState.chatHistory should contain previous turns.
       const historyContent: GeminiContent[] = PromptBuilder.buildCompressedHistory(currentSyncState);
       
       const aiMsgId = crypto.randomUUID();
       const initialAiMsg: ChatMessage = { id: aiMsgId, role: 'model', content: '', timestamp: Date.now(), kind: 'dialogue' };
       
-      // We use the locally constructed newChatHistory to avoid flicker
       let currentHistory = [...newChatHistory, initialAiMsg];
       syncDispatch(Actions.setChatHistory(currentHistory));
+
+      uiDispatch(Actions.setThinkingPhase("Architect Reasoning..."));
 
       const stream = chatWithArchitectStream(
         historyContent, 
@@ -225,8 +222,13 @@ const PlotterView: React.FC = () => {
 
       let accumulatedText = "";
       let accumulatedSources: any[] = [];
+      let firstChunk = true;
 
       for await (const chunk of stream) {
+        if (firstChunk) {
+          uiDispatch(Actions.setThinkingPhase(null));
+          firstChunk = false;
+        }
         accumulatedText += chunk.text;
         if (chunk.sources) accumulatedSources = chunk.sources;
         
@@ -235,44 +237,9 @@ const PlotterView: React.FC = () => {
         syncDispatch(Actions.setChatHistory(currentHistory));
       }
 
-      // Handle large responses as Artifacts
-      if (accumulatedText.length > 500) {
-        addLog('info', 'System', '長文の応答を成果物(Artifact)として保存しています...');
-        const artifactId = crypto.randomUUID();
-        const decisions = accumulatedText.split('\n').filter(l => l.includes('・') || l.includes('- ')).slice(0, 5).map(l => l.replace(/^[・-]\s*/, ''));
-
-        const artifact: Artifact = {
-          id: artifactId,
-          projectId: meta.id,
-          type: 'general',
-          title: `対話ログ: ${userMsg.content.slice(0, 20)}...`,
-          content: accumulatedText,
-          summary: {
-            docId: artifactId,
-            title: `対話ログ: ${userMsg.content.slice(0, 20)}...`,
-            type: 'General',
-            decisions_made: decisions.length > 0 ? decisions : ["詳細な議論"],
-            entities_used: [],
-          },
-          createdAt: Date.now(),
-          sourceAgent: 'Architect'
-        };
-
-        await saveArtifact(artifact);
-
-        const artifactMsg: ChatMessage = {
-          ...initialAiMsg,
-          kind: 'artifact_ref',
-          collapsedContent: artifact.summary,
-          artifactId: artifact.id,
-          content: accumulatedText.slice(0, 150) + "..."
-        };
-        currentHistory = [...newChatHistory, artifactMsg];
-        syncDispatch(Actions.setChatHistory(currentHistory));
-      }
-
-      // Summarization Check (Non-blocking promise chain)
+      // Summarization Check
       if (currentHistory.length > 10) {
+         // Background task, no indicator needed
          const fullHistoryForSummary: GeminiContent[] = [
            ...historyContent, 
            { role: 'user', parts: [{ text: userMsg.content }] }, 
@@ -293,14 +260,14 @@ const PlotterView: React.FC = () => {
     } catch (e: any) {
       addLog('error', 'Architect', `応答の生成に失敗しました: ${e.message}`);
     } finally {
-      // Unlock input immediately after generation finishes.
-      // The background effect will handle the Neural Sync.
       setIsTyping(false);
+      uiDispatch(Actions.setThinkingPhase(null));
     }
   };
 
-  const handleApplyOp = (op: SyncOperation) => {
+  const handleApplyOp = async (op: SyncOperation) => {
     try {
+      await new Promise(resolve => setTimeout(resolve, 50));
       const { nextBible, nextChapters, historyEntry } = calculateSyncResult(bible, chapters, op, bibleHistory);
       bibleDispatch(Actions.applySyncOp(nextBible, nextChapters, historyEntry));
       syncDispatch(Actions.addHistoryEntry(historyEntry));
@@ -308,6 +275,15 @@ const PlotterView: React.FC = () => {
       addLog('success', 'NeuralSync', `設定を更新しました: ${historyEntry.targetName || op.path}`);
     } catch (e: any) {
       addLog('error', 'NeuralSync', `適用エラー: ${e.message}`);
+      
+      if (e.message.includes("Integrity Error") || e.message.includes("Target ID")) {
+        syncDispatch(Actions.updatePendingOp(op.id, {
+          targetId: undefined,
+          targetName: op.targetName || "Unknown",
+          status: 'needs_resolution',
+          resolutionHint: "対象が見つかりません。再検索してください。"
+        }));
+      }
     }
   };
 
@@ -332,6 +308,8 @@ const PlotterView: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col md:flex-row overflow-hidden bg-stone-950 pt-safe relative">
+      <ThinkingIndicator phase={thinkingPhase} />
+      
       <div className="md:hidden fixed top-[calc(env(safe-area-inset-top)+1rem)] right-4 z-[100] flex bg-stone-900/80 backdrop-blur rounded-full border border-white/10 p-1 shadow-2xl">
          <button 
            onClick={() => setMobileMode('bible')} 

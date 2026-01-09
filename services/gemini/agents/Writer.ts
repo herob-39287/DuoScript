@@ -12,15 +12,13 @@ export class WriterAgent {
 
   async* streamDraft(chapter: ChapterLog, tone: string, usePro: boolean, project: StoryProject, isContextActive: boolean = true) {
     const ai = getClient();
+    const lang = project.meta.language || 'ja';
     
-    const systemInstruction = Prompts.WRITER_MTP.replace('{{TONE}}', tone);
-    const storyData = isContextActive ? PromptBuilder.buildStructuredStoryData(project, chapter.id) : "ユーザーが設定参照を無効化しています。";
+    // PromptBuilder.buildWriterMTP handles persona implicitly via project meta
+    const systemInstruction = PromptBuilder.buildWriterMTP(project, chapter.id, tone, isContextActive);
     
     const userPrompt = `
-【STORY_DATA (JSON)】
-${storyData}
-
-${Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats)}
+${Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats, lang)}
 `.trim();
 
     const label = usePro ? 'Writer/Drafting:Reasoning' : 'Writer/Drafting:Fast';
@@ -41,19 +39,20 @@ ${Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats)}
   }
 
   async suggest(content: string, project: StoryProject, activeChapterId: string, isContextActive: boolean = true): Promise<string[]> {
-    const storyData = isContextActive ? PromptBuilder.buildStructuredStoryData(project, activeChapterId) : "設定参照なし";
+    const storyData = isContextActive ? PromptBuilder.buildStructuredStoryData(project, activeChapterId) : "No Bible Reference";
+    const lang = project.meta.language || 'ja';
     const userPrompt = `
 【STORY_DATA (JSON)】
 ${storyData}
 
-${Prompts.NEXT_SENTENCE_PROMPT(content)}
+${Prompts.NEXT_SENTENCE_PROMPT(content, lang)}
 `.trim();
 
     return runGeminiRequest({
       model: AiModel.FAST,
       contents: userPrompt,
       config: { 
-        systemInstruction: `${Prompts.COPILOT_SOUL}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.COPILOT_SOUL(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
         responseSchema: Schemas.suggestionsSchema 
       },
@@ -66,6 +65,7 @@ ${Prompts.NEXT_SENTENCE_PROMPT(content)}
 
   async scanDraft(draft: string, project: StoryProject, activeChapterId: string, processOps: (json: any) => ExtractionResult): Promise<ExtractionResult> {
     const storyData = PromptBuilder.buildStructuredStoryData(project, activeChapterId);
+    const lang = project.meta.language || 'ja';
     const userPrompt = `
 【STORY_DATA (JSON)】
 ${storyData}
@@ -77,9 +77,9 @@ ${Prompts.DRAFT_SCAN_PROMPT(draft)}
       model: AiModel.FAST,
       contents: userPrompt,
       config: {
-        systemInstruction: `${Prompts.SYNC_EXTRACTOR_SOUL}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.SYNC_EXTRACTOR_SOUL(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json",
-        responseSchema: { type: Type.ARRAY, items: Schemas.syncOperationSchema }
+        responseSchema: { type: Type.ARRAY, items: Schemas.getSyncOperationSchema(lang) }
       },
       usageLabel: 'Writer/DraftConsistencyScanner',
       onUsage: this.onUsage,
@@ -90,6 +90,9 @@ ${Prompts.DRAFT_SCAN_PROMPT(draft)}
 
   async generatePackage(project: StoryProject, chapter: ChapterLog): Promise<ChapterPackageResponse> {
     const storyData = PromptBuilder.buildStructuredStoryData(project, chapter.id);
+    const lang = project.meta.language || 'ja';
+    const persona = project.meta.preferences?.aiPersona;
+    
     const userPrompt = `
 【STORY_DATA (JSON)】
 ${storyData}
@@ -101,9 +104,9 @@ ${Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary)}
       model: AiModel.REASONING,
       contents: userPrompt,
       config: { 
-        systemInstruction: `${Prompts.ARCHITECT_MTP}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.ARCHITECT_MTP(lang, persona)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
-        responseSchema: Schemas.chapterPackageSchema 
+        responseSchema: Schemas.getChapterPackageSchema(lang)
       },
       usageLabel: 'Writer/PlotPackageGeneration',
       onUsage: this.onUsage,

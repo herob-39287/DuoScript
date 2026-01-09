@@ -9,6 +9,8 @@ export class VisualAgent {
 
   async generatePortrait(character: Character, project: StoryProject): Promise<string> {
     const ai = getClient();
+    // Visual prompts should ideally be in English for better image gen adherence, 
+    // but the input is story language. We let Gemini translate implicitly via "Illustration of:".
     const visualDesc = await runGeminiRequest({
       model: AiModel.FAST,
       contents: Prompts.VISUAL_DESCRIPTION_PROMPT(character, project.bible.tone),
@@ -31,9 +33,6 @@ export class VisualAgent {
     }, 'Artist/Painter', this.logCallback);
   }
 
-  /**
-   * Generates speech and returns the base64 encoded PCM data.
-   */
   async synthesizeSpeech(text: string, voiceName: string): Promise<string> {
     const ai = getClient();
     return await handleGeminiError(async () => {

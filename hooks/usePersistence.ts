@@ -1,13 +1,14 @@
 
 import React, { useEffect, useRef, useCallback } from 'react';
 import { 
-  StoryProject, ProjectAction, UIAction, ViewMode 
+  StoryProject, ProjectAction, UIAction, ViewMode, UIState 
 } from '../types';
-import { loadLatestProject, saveProjectRevision, getPortrait, getLastOpenedProjectId, getSyncChannel, loadFullSnapshot, tabId } from '../services/storageService';
+import { loadLatestProject, saveProjectRevision, getPortrait, getLastOpenedProjectId, getSyncChannel, loadFullSnapshot, tabId, getHeadRev } from '../services/storageService';
 import { normalizeProject } from '../services/bibleManager';
 
 export const usePersistence = (
-  project: StoryProject, 
+  project: StoryProject,
+  ui: UIState,
   projectDispatch: React.Dispatch<ProjectAction>,
   uiDispatch: React.Dispatch<UIAction>
 ) => {
@@ -16,17 +17,20 @@ export const usePersistence = (
   const pendingSaveRef = useRef<StoryProject | null>(null);
   const hasConflict = useRef(false);
   
+  // Track active project ID to detect switches
+  const activeProjectIdRef = useRef<string | null>(null);
+  
   // Track the authoritative headRev for this tab instance to avoid queue-induced conflicts
   const currentHeadRevRef = useRef<number>(project.meta.headRev || 0);
   
   // 保存に成功した直近のステート（Transient属性を除外して比較用）
   const lastKnownStableStateRef = useRef<string>("");
 
-  const getComparableState = (proj: StoryProject) => {
+  const getComparableState = useCallback((proj: StoryProject) => {
     // metadataのupdatedAtやtokenUsageなどは変更頻度が高く競合の本質ではないため除外
     const { tokenUsage, updatedAt, headRev, ...meta } = proj.meta;
     return JSON.stringify({ ...proj, meta });
-  };
+  }, []);
 
   const performSave = useCallback(async (proj: StoryProject) => {
     if (hasConflict.current) return;
@@ -71,7 +75,69 @@ export const usePersistence = (
         performSave(next);
       }
     }
-  }, [uiDispatch, projectDispatch]);
+  }, [uiDispatch, projectDispatch, getComparableState]);
+
+  // Handle Force Save Request (Rebase Strategy)
+  useEffect(() => {
+    if (ui.forceSaveRequested && hasConflict.current) {
+      const handleForceSave = async () => {
+        isSaving.current = true; // Block other saves
+        uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
+        try {
+          // 1. Fetch latest head revision from DB (Truth source)
+          const latestRev = await getHeadRev(project.meta.id);
+          
+          // 2. Perform Save
+          // We pass latestRev as 'expectedRev' to saveProjectRevision.
+          // This creates a new revision on top of the remote head, effectively forcing our local state
+          // to become the newest version, overwriting any concurrent changes logic-wise (but preserving history).
+          const nextRev = await saveProjectRevision(project, latestRev);
+          
+          // 3. Update local state
+          currentHeadRevRef.current = nextRev;
+          projectDispatch({ type: 'UPDATE_META', payload: { headRev: nextRev } });
+          
+          // 4. Update stable ref to prevent immediate auto-save trigger
+          const rebasedProject = { ...project, meta: { ...project.meta, headRev: nextRev } };
+          lastKnownStableStateRef.current = getComparableState(rebasedProject);
+
+          // 5. Reset Conflict Flags
+          hasConflict.current = false;
+          uiDispatch({ type: 'SET_CONFLICT', payload: false });
+          uiDispatch({ type: 'SET_FORCE_SAVE_REQUESTED', payload: false });
+          uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
+          setTimeout(() => uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
+
+        } catch (e) {
+          console.error("Force save failed", e);
+          uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
+          uiDispatch({ type: 'SET_FORCE_SAVE_REQUESTED', payload: false });
+          // Conflict remains active
+        } finally {
+          isSaving.current = false;
+        }
+      };
+      handleForceSave();
+    }
+  }, [ui.forceSaveRequested, project, projectDispatch, uiDispatch, getComparableState]);
+
+  // プロジェクトのコンテキスト切り替え検知
+  useEffect(() => {
+    const isNewId = project.meta.id && project.meta.id !== activeProjectIdRef.current;
+    
+    // プロジェクトIDが変更された場合、または外部要因（Sync/Undo）でHeadが進んだ場合にRefを同期
+    if (isNewId || (project.meta.headRev || 0) > currentHeadRevRef.current) {
+      if (isNewId) {
+        activeProjectIdRef.current = project.meta.id;
+        // ID切り替え時はコンフリクト状態をリセット
+        hasConflict.current = false;
+        uiDispatch({ type: 'SET_CONFLICT', payload: false });
+      }
+      
+      currentHeadRevRef.current = project.meta.headRev || 0;
+      lastKnownStableStateRef.current = getComparableState(project);
+    }
+  }, [project.meta.id, project.meta.headRev, getComparableState, uiDispatch]);
 
   // 初期ロード
   useEffect(() => {
@@ -100,8 +166,7 @@ export const usePersistence = (
               });
             }
             
-            currentHeadRevRef.current = norm.meta.headRev || 0;
-            lastKnownStableStateRef.current = getComparableState(norm);
+            // ステート更新（useEffectの検知によりRef類は自動更新される）
             projectDispatch({ type: 'LOAD_PROJECT', payload: norm });
             uiDispatch({ type: 'SET_VIEW', payload: ViewMode.DASHBOARD });
           }
@@ -139,8 +204,6 @@ export const usePersistence = (
             const updatedProject = await loadFullSnapshot(projectId, rev);
             if (updatedProject) {
               const norm = normalizeProject(updatedProject);
-              currentHeadRevRef.current = norm.meta.headRev || 0;
-              lastKnownStableStateRef.current = getComparableState(norm);
               projectDispatch({ type: 'LOAD_PROJECT', payload: norm });
             }
           }
@@ -149,7 +212,7 @@ export const usePersistence = (
     };
     channel.addEventListener('message', onMessage);
     return () => channel.removeEventListener('message', onMessage);
-  }, [project, projectDispatch, uiDispatch]);
+  }, [project, projectDispatch, uiDispatch, getComparableState]);
 
   // 自動保存サイクル
   useEffect(() => {
@@ -163,5 +226,5 @@ export const usePersistence = (
     }, 10000); 
 
     return () => clearTimeout(timer);
-  }, [project, performSave]);
+  }, [project, performSave, getComparableState]);
 };

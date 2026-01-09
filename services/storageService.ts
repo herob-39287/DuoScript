@@ -149,7 +149,8 @@ export const saveProjectRevision = async (project: StoryProject, expectedRev?: n
   const projectId = project.meta.id;
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_HEADS, STORE_REVISIONS, STORE_CHAPTER_DATA, STORE_APP_STATE], 'readwrite');
+    // Added STORE_PORTRAITS to transaction scope
+    const transaction = db.transaction([STORE_HEADS, STORE_REVISIONS, STORE_CHAPTER_DATA, STORE_APP_STATE, STORE_PORTRAITS], 'readwrite');
     let nextRev = 0;
     
     transaction.oncomplete = () => {
@@ -168,6 +169,7 @@ export const saveProjectRevision = async (project: StoryProject, expectedRev?: n
     const headStore = transaction.objectStore(STORE_HEADS);
     const revStore = transaction.objectStore(STORE_REVISIONS);
     const chapterStore = transaction.objectStore(STORE_CHAPTER_DATA);
+    const portraitStore = transaction.objectStore(STORE_PORTRAITS);
 
     const headReq = headStore.get(projectId);
 
@@ -187,6 +189,25 @@ export const saveProjectRevision = async (project: StoryProject, expectedRev?: n
         chapterStore.put({ projectId, chapterId: ch.id, rev: nextRev, content: content || "" });
         return header;
       });
+
+      // Restore Assets if present (e.g. from file import)
+      if (project.assets) {
+        Object.entries(project.assets).forEach(([id, base64]) => {
+          if (typeof base64 === 'string' && base64.startsWith('data:')) {
+            const mimeType = base64.match(/data:([^;]+);/)?.[1] || 'image/png';
+            portraitStore.put({
+              id,
+              projectId,
+              type: 'portrait',
+              size: base64.length,
+              mimeType,
+              createdAt: Date.now(),
+              lastUsedAt: Date.now(),
+              data: base64
+            });
+          }
+        });
+      }
 
       revStore.put({
         projectId,

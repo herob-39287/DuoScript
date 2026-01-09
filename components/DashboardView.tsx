@@ -12,7 +12,7 @@ import {
   Activity, Terminal, Trash2, ShieldCheck, Zap, 
   ShieldAlert, Database,
   BrainCircuit, Sparkles,
-  HardDrive, Image as ImageIcon, ThumbsUp, MessageSquareShare, ArrowUpRight, ArrowDownLeft, Cpu, BarChart3, AlertTriangle, Loader2, CloudLightning
+  HardDrive, Image as ImageIcon, ThumbsUp, MessageSquareShare, ArrowUpRight, ArrowDownLeft, Cpu, BarChart3, AlertTriangle, Loader2, CloudLightning, Search
 } from 'lucide-react';
 import { getAllAssetMetadata, deletePortrait, getPortrait } from '../services/storageService';
 import { translateSafetyCategory } from '../services/gemini/utils';
@@ -47,7 +47,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [logLimit, setLogLimit] = useState(30);
   const [assets, setAssets] = useState<AssetMetadata[]>([]);
-  const [usageViewMode, setUsageViewMode] = useState<'source' | 'model'>('source');
+  const [usageViewMode, setUsageViewMode] = useState<'source' | 'model' | 'architect'>('source');
   
   const totalTokens = useMemo(() => {
     return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.input) || 0) + (Number(entry.output) || 0), 0);
@@ -65,7 +65,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.output) || 0), 0);
   }, [tokenUsage]);
 
-  // キャッシュ効率
+  // 全体のキャッシュ効率
   const cacheEfficiency = useMemo(() => {
     if (totalInputTokens === 0) return 0;
     return Math.round((totalCachedTokens / totalInputTokens) * 100);
@@ -74,6 +74,8 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
   const usageBySource = useMemo(() => {
     const raw = (tokenUsage || []).reduce((acc, entry) => {
       const src = entry.source || 'Unknown';
+      // Architectの内訳モードでない場合は、Architect系をまとめることも可能だが、
+      // ここでは詳細なSourceを表示する（既存動作）
       if (!acc[src]) acc[src] = { label: src, input: 0, cached: 0, output: 0, total: 0 };
       
       const totalInput = Number(entry.input) || 0;
@@ -116,7 +118,49 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     return (Object.values(raw) as Array<{ label: string; input: number; cached: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
   }, [tokenUsage]);
 
-  const activeUsageData = usageViewMode === 'source' ? usageBySource : usageByModel;
+  // Architect専用の内訳分析
+  const architectUsageBreakdown = useMemo(() => {
+    const raw = (tokenUsage || []).filter(entry => entry.source.startsWith('Architect/')).reduce((acc, entry) => {
+      // "Architect/Chat(Cached)" -> "Chat (Cached)"
+      let label = entry.source.replace('Architect/', '');
+      
+      // グルーピングの調整
+      if (label.startsWith('Extraction:')) label = 'Extraction'; // 個別の抽出タイプをまとめる
+      else if (label.includes('Chat')) label = 'Chat & Reason';
+      else if (label.includes('Memory')) label = 'Memory';
+      else if (label.includes('Intent')) label = 'Intent';
+      else if (label.includes('Whisper')) label = 'Whisper';
+
+      if (!acc[label]) acc[label] = { label: label, input: 0, cached: 0, output: 0, total: 0 };
+      
+      const totalInput = Number(entry.input) || 0;
+      const cached = Number(entry.cached) || 0;
+      const netInput = Math.max(0, totalInput - cached);
+      const output = Number(entry.output) || 0;
+
+      acc[label].input += netInput;
+      acc[label].cached += cached;
+      acc[label].output += output;
+      acc[label].total += totalInput + output;
+      return acc;
+    }, {} as Record<string, { label: string; input: number; cached: number; output: number; total: number }>);
+
+    return (Object.values(raw) as Array<{ label: string; input: number; cached: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
+  }, [tokenUsage]);
+
+  const architectCacheEfficiency = useMemo(() => {
+    const archEntries = (tokenUsage || []).filter(e => e.source.startsWith('Architect/'));
+    const input = archEntries.reduce((acc, e) => acc + (Number(e.input) || 0), 0);
+    const cached = archEntries.reduce((acc, e) => acc + (Number(e.cached) || 0), 0);
+    if (input === 0) return 0;
+    return Math.round((cached / input) * 100);
+  }, [tokenUsage]);
+
+  const activeUsageData = usageViewMode === 'source' ? usageBySource 
+                        : usageViewMode === 'model' ? usageByModel 
+                        : architectUsageBreakdown;
+
+  const currentEfficiency = usageViewMode === 'architect' ? architectCacheEfficiency : cacheEfficiency;
 
   useEffect(() => {
     const fetchAssets = async () => {
@@ -227,6 +271,19 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
     'Voice (TTS)': '#f59e0b',
     'Unknown': '#57534e'
   };
+  const ARCHITECT_COLORS: Record<string, string> = {
+    'Chat & Reason': '#d68a6d', // Orange
+    'Extraction': '#8b5cf6',    // Violet
+    'Intent': '#f59e0b',        // Amber
+    'Memory': '#10b981',        // Emerald
+    'Whisper': '#06b6d4',       // Cyan
+  };
+
+  const getBarColor = (label: string, index: number) => {
+    if (usageViewMode === 'model') return MODEL_COLORS[label] || COLORS[index % COLORS.length];
+    if (usageViewMode === 'architect') return ARCHITECT_COLORS[label] || COLORS[index % COLORS.length];
+    return COLORS[index % COLORS.length];
+  };
 
   return (
     <div className="p-4 md:p-12 h-full overflow-y-auto custom-scrollbar bg-stone-900/20 pb-32 md:pb-12 pt-safe">
@@ -248,7 +305,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 px-1">
             <StatCard icon={<Activity size={20}/>} label="トークン累積" value={totalTokens.toLocaleString()} unit="T" color="text-emerald-400" />
-            <StatCard icon={<CloudLightning size={20}/>} label="キャッシュ節約率" value={cacheEfficiency.toString()} unit="%" color="text-sky-400" />
+            <StatCard icon={<CloudLightning size={20}/>} label={usageViewMode === 'architect' ? "Architect Cache率" : "全体キャッシュ節約率"} value={currentEfficiency.toString()} unit="%" color="text-sky-400" />
             <StatCard icon={<HardDrive size={20}/>} label="アセット容量" value={(totalAssetSize / 1024 / 1024).toFixed(1)} unit="MB" color="text-blue-400" />
             <StatCard icon={<Sparkles size={20}/>} label="執筆完了" value={chapters.filter(c => c.status === 'Polished').length.toString()} unit="C" color="text-purple-400" />
         </div>
@@ -278,20 +335,44 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                 >
                   モデル別
                 </Button>
+                <Button 
+                   variant={usageViewMode === 'architect' ? 'indigo' : 'ghost'} 
+                   size="sm" 
+                   icon={<BrainCircuit size={12}/>} 
+                   onClick={() => setUsageViewMode('architect')}
+                   className={usageViewMode === 'architect' ? "shadow-lg" : ""}
+                >
+                  Architect分析
+                </Button>
               </div>
 
               <div className="flex gap-4 self-end md:self-center">
                 <div className="flex flex-col items-end">
                   <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft size={10} className="text-emerald-500"/> Net Input</span>
-                  <span className="text-base md:text-lg font-mono font-black text-emerald-400">{(totalInputTokens - totalCachedTokens).toLocaleString()}</span>
+                  <span className="text-base md:text-lg font-mono font-black text-emerald-400">
+                    {usageViewMode === 'architect' 
+                      ? activeUsageData.reduce((acc, i) => acc + i.input, 0).toLocaleString()
+                      : (totalInputTokens - totalCachedTokens).toLocaleString()
+                    }
+                  </span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><CloudLightning size={10} className="text-sky-400"/> Cached</span>
-                  <span className="text-base md:text-lg font-mono font-black text-sky-400">{totalCachedTokens.toLocaleString()}</span>
+                  <span className="text-base md:text-lg font-mono font-black text-sky-400">
+                    {usageViewMode === 'architect'
+                      ? activeUsageData.reduce((acc, i) => acc + i.cached, 0).toLocaleString()
+                      : totalCachedTokens.toLocaleString()
+                    }
+                  </span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowUpRight size={10} className="text-orange-400"/> Output</span>
-                  <span className="text-base md:text-lg font-mono font-black text-orange-400">{totalOutputTokens.toLocaleString()}</span>
+                  <span className="text-base md:text-lg font-mono font-black text-orange-400">
+                    {usageViewMode === 'architect'
+                      ? activeUsageData.reduce((acc, i) => acc + i.output, 0).toLocaleString()
+                      : totalOutputTokens.toLocaleString()
+                    }
+                  </span>
                 </div>
               </div>
             </div>
@@ -308,7 +389,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
                     type="category" 
                     stroke="#57534e" 
                     fontSize={10} 
-                    width={80} 
+                    width={90} 
                     tickLine={false} 
                     axisLine={false} 
                   />
@@ -326,19 +407,25 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
             </div>
 
             <div className="lg:col-span-4 space-y-2 md:space-y-3 max-h-[250px] md:max-h-[300px] overflow-y-auto no-scrollbar pr-2 min-w-0">
-              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest border-b border-white/5 pb-2">消費詳細</div>
-              {activeUsageData.map((item, idx) => (
-                <div key={idx} className="flex flex-col p-2.5 md:p-3 bg-stone-950/40 rounded-xl border border-white/5 gap-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: usageViewMode === 'model' ? (MODEL_COLORS[item.label] || COLORS[idx % COLORS.length]) : COLORS[idx % COLORS.length] }} />
-                    <span className="text-[10px] font-black text-stone-300 uppercase truncate">{item.label}</span>
+              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest border-b border-white/5 pb-2">
+                {usageViewMode === 'architect' ? 'Architect Task Detail' : '消費詳細'}
+              </div>
+              {activeUsageData.length === 0 ? (
+                <div className="text-stone-600 text-[10px] italic py-4 text-center">データがありません</div>
+              ) : (
+                activeUsageData.map((item, idx) => (
+                  <div key={idx} className="flex flex-col p-2.5 md:p-3 bg-stone-950/40 rounded-xl border border-white/5 gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getBarColor(item.label, idx) }} />
+                      <span className="text-[10px] font-black text-stone-300 uppercase truncate">{item.label}</span>
+                    </div>
+                    <div className="flex justify-between items-center pl-4">
+                       <span className="text-[8px] text-stone-500">Cached: {Math.round((item.cached / (item.input + item.cached || 1)) * 100)}%</span>
+                       <span className="text-[10px] font-mono text-stone-100">{item.total.toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center pl-4">
-                     <span className="text-[8px] text-stone-500">Cached: {Math.round((item.cached / (item.input + item.cached || 1)) * 100)}%</span>
-                     <span className="text-[10px] font-mono text-stone-100">{item.total.toLocaleString()}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </Card>

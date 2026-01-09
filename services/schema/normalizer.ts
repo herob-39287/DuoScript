@@ -1,13 +1,15 @@
 
-import { StoryProject, TransmissionScope, SafetyPreset, StoryProjectMetadata, WorldBible, ChapterLog, SyncState, Theme } from '../../types';
+import { StoryProject, TransmissionScope, SafetyPreset, StoryProjectMetadata, WorldBible, ChapterLog, SyncState, Theme, AppLanguage, AiPersona } from '../../types';
 
 export const normalizeProject = (data: any): StoryProject => {
   const now = Date.now();
   
   const savedPrefs = localStorage.getItem('duoscript_prefs');
   const defaultPrefs = savedPrefs ? JSON.parse(savedPrefs) : {
+    uiLanguage: 'ja' as AppLanguage,
     transmissionScope: TransmissionScope.FULL,
     safetyPreset: SafetyPreset.MATURE,
+    aiPersona: AiPersona.STANDARD,
     allowSearch: true,
     whisperSensitivity: 50,
     disabledLinterRules: []
@@ -54,13 +56,13 @@ export const normalizeProject = (data: any): StoryProject => {
     genre: String(data?.genre || data?.meta?.genre || '一般'),
     createdAt: data?.createdAt || data?.meta?.createdAt || now,
     updatedAt: data?.updatedAt || data?.meta?.updatedAt || now,
-    schemaVersion: 4, // Bumped for Timeline/Thread updates
-    language: (data?.language || data?.meta?.language || 'ja') as 'ja',
+    schemaVersion: 4, 
+    language: (data?.language || data?.meta?.language || 'ja') as AppLanguage,
     tokenUsage: Array.isArray(data?.tokenUsage) ? data.tokenUsage : 
                 Array.isArray(data?.meta?.tokenUsage) ? data.meta.tokenUsage : [],
     violationCount: data?.violationCount || data?.meta?.violationCount || 0,
     violationHistory: data?.violationHistory || data?.meta?.violationHistory || [],
-    preferences: data?.meta?.preferences || defaultPrefs
+    preferences: { ...defaultPrefs, ...(data?.meta?.preferences || {}) }
   };
 
   const bible: WorldBible = {
@@ -112,9 +114,7 @@ export const normalizeProject = (data: any): StoryProject => {
       id: v.id || crypto.randomUUID()
     })),
     
-    // Character Normalization (Migrate old structure to new Profile/State)
     characters: (Array.isArray(data?.bible?.characters) ? data.bible.characters : []).map((c: any) => {
-      // If 'profile' exists, assume new structure. Otherwise migrate.
       if (c.profile && c.state) {
         return {
           ...c,
@@ -122,7 +122,6 @@ export const normalizeProject = (data: any): StoryProject => {
           history: Array.isArray(c.history) ? c.history : []
         };
       } else {
-        // Migration logic
         const linguisticProfile = c.linguisticProfile || { firstPerson: '私', secondPerson: 'あなた', speechStyle: 'Casual', catchphrases: [], forbiddenWords: [] };
         return {
           id: c.id || crypto.randomUUID(),
@@ -132,9 +131,9 @@ export const normalizeProject = (data: any): StoryProject => {
              role: c.role || 'Supporting',
              description: c.description || '',
              shortSummary: c.shortSummary || c.summary || '',
-             appearance: '', // New field
+             appearance: '', 
              personality: c.personality || '',
-             background: c.description || '', // Fallback
+             background: c.description || '', 
              voice: linguisticProfile,
              traits: Array.isArray(c.traits) ? c.traits : [],
              motivation: c.motivation || '',
@@ -166,7 +165,7 @@ export const normalizeProject = (data: any): StoryProject => {
       ...t,
       id: t.id || crypto.randomUUID(),
       foreshadowingLinks: Array.isArray(t.foreshadowingLinks) ? t.foreshadowingLinks : [],
-      status: t.status || 'Canon', // Default to Canon for existing events
+      status: t.status || 'Canon', 
       relatedThreadId: t.relatedThreadId
     })),
     foreshadowing: (Array.isArray(data?.bible?.foreshadowing) ? data.bible.foreshadowing : []).map((f: any) => ({
@@ -182,7 +181,7 @@ export const normalizeProject = (data: any): StoryProject => {
       ...e,
       id: e.id || crypto.randomUUID(),
       isPrivate: e.isPrivate || false,
-      isSecret: e.isSecret ?? false, // Ensure defaults to false
+      isSecret: e.isSecret ?? false, 
       aliases: Array.isArray(e.aliases) ? e.aliases : [],
       tags: Array.isArray(e.tags) ? e.tags : [],
       linkedIds: Array.isArray(e.linkedIds) ? e.linkedIds : []
@@ -234,7 +233,6 @@ export const normalizeProject = (data: any): StoryProject => {
         status: 'Idea', 
         wordCount: 0, 
         draftVersion: 0, 
-        stateDeltas: [],
         involvedCharacterIds: [],
         foreshadowingLinks: [],
         updatedAt: now
@@ -262,5 +260,7 @@ export const normalizeProject = (data: any): StoryProject => {
              }))
   };
 
-  return { meta, bible, chapters, sync };
+  const assets = data?.assets || {};
+
+  return { meta, bible, chapters, sync, assets };
 };

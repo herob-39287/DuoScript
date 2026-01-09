@@ -1,5 +1,5 @@
 
-import { StoryProject, Character, GeminiContent, SyncState } from "../../types";
+import { StoryProject, Character, GeminiContent, SyncState, AiPersona } from "../../types";
 import { ChatMessage } from "../../types/sync";
 import * as Prompts from "./prompts";
 
@@ -34,16 +34,10 @@ export class PromptBuilder {
     });
   }
 
-  /**
-   * 物語の構造化データを生成する。
-   * relevantIds が指定されていない場合は、フィルタリングなしの「完全なBible」を返す。
-   */
   static buildStructuredStoryData(project: StoryProject, activeChapterId?: string, relevantIds: string[] = []): string {
     const { bible, chapters } = project;
     const activeChapter = activeChapterId ? chapters.find(c => c.id === activeChapterId) : null;
     
-    // relevantIdsが空配列でない場合はフィルタリングを行うが、
-    // キャッシング用途(空配列)の場合は全データを含める。
     const isFullExport = relevantIds.length === 0 && !activeChapterId;
 
     const core = {
@@ -56,7 +50,6 @@ export class PromptBuilder {
     let focalEntities;
 
     if (isFullExport) {
-      // キャッシュ用：全データ出力
       focalEntities = {
         characters: bible.characters.map(c => ({ id: c.id, profile: c.profile, state: c.state })),
         locations: bible.locations,
@@ -66,49 +59,53 @@ export class PromptBuilder {
         activeForeshadowings: bible.foreshadowing
       };
     } else {
-      // 執筆/個別参照用：関連データのみ抽出
       const focalIds = Array.from(new Set([...(activeChapter?.relevantEntityIds || []), ...(activeChapter?.involvedCharacterIds || []), ...relevantIds]));
       focalEntities = {
         characters: bible.characters.filter(c => focalIds.includes(c.id) || c.profile.role === 'Protagonist').map(c => ({ id: c.id, profile: c.profile, state: c.state })),
         locations: bible.locations.filter(l => focalIds.includes(l.id)),
         activeForeshadowings: bible.foreshadowing.filter(f => focalIds.includes(f.id) || activeChapter?.foreshadowingLinks?.some(l => l.foreshadowingId === f.id)),
-        currentChapterSummary: activeChapter?.summary || "なし"
+        currentChapterSummary: activeChapter?.summary || "None"
       };
     }
 
     return JSON.stringify({ core, focalEntities }, null, 2);
   }
 
-  /**
-   * [Cache Target] 静的なコンテキスト（人格 + 完全な世界設定）を生成する。
-   */
-  static buildStaticArchitectContext(project: StoryProject): string {
+  static buildStaticArchitectContext(project: StoryProject, persona: AiPersona = AiPersona.STANDARD): string {
     const fullStoryData = this.buildStructuredStoryData(project);
+    const lang = project.meta.language || 'ja';
     
     return `
-${Prompts.ARCHITECT_MTP}
+${Prompts.ARCHITECT_MTP(lang, persona)}
 
 ---
-### TIER 1: ETERNAL CANON (物語の正史・聖書)
-これは絶対不変の設定です。あなたの推論の「唯一の根底」としてください。
+### TIER 1: ETERNAL CANON (Story Bible)
+This is the absolute immutable setting. Use it as the "sole basis" of your reasoning.
 ${fullStoryData}
 `.trim();
   }
 
-  /**
-   * [Request Target] 動的な指示（メモリ + フォーカス指示 + ルール）を生成する。
-   */
-  static buildDynamicArchitectContext(memory: string, relevantIds: string[], isContextActive: boolean = true): string {
+  static buildDynamicArchitectContext(memory: string, relevantIds: string[], isContextActive: boolean = true, lang: 'ja' | 'en' = 'ja'): string {
     const focusNote = relevantIds.length > 0 
-      ? `\n[Attention] 現在の文脈では、以下のIDを持つ項目に特に注目してください: ${relevantIds.join(", ")}`
+      ? `\n[Attention] In the current context, pay special attention to items with these IDs: ${relevantIds.join(", ")}`
       : "";
+
+    const inst = lang === 'ja' ? {
+      redacted: "ユーザーは現在、設定（聖書）の参照を無効化しています。あなたは既存の設定に縛られず、自由な発想で提案を行ってください。",
+      guide1: "回答は常に Tier 1 の正史（Cached Context）に準拠してください。",
+      guide2: "議論の着地点は Tier 2 のメモリを優先し、無用な蒸し返しを避けてください。",
+      guide3: "未解決の課題（Open Questions）がある場合、それらを解消する方向で作家をサポートしてください。"
+    } : {
+      redacted: "The user has currently disabled Bible reference. Please propose freely without being bound by existing settings.",
+      guide1: "Always adhere to Tier 1 Eternal Canon (Cached Context).",
+      guide2: "Prioritize Tier 2 Memory for conclusions and avoid unnecessary rehashing.",
+      guide3: "If there are Open Questions, support the writer in resolving them."
+    };
 
     if (!isContextActive) {
       return `
-### TIER 1: (REDACTED / 封印中)
-ユーザーは現在、設定（聖書）の参照を無効化しています。
-あなたは既存の設定に縛られず、自由な発想で提案を行ってください。
-もし設定を参照しなければ回答が困難な場合は、ユーザーに「設定の参照」を提案してください。
+### TIER 1: (REDACTED)
+${inst.redacted}
 
 ---
 ### TIER 2: DECISION LOG
@@ -118,33 +115,37 @@ ${memory || '{"decisions": [], "open_questions": []}'}
 
     return `
 ---
-### TIER 2: DECISION LOG (対話メモリ)
-過去の議論から導き出された決定事項と、未解決の課題です。
+### TIER 2: DECISION LOG
+Decisions derived from past discussions and open questions.
 ${memory || '{"decisions": [], "open_questions": []}'}
 
 ---
 ### DYNAMIC INSTRUCTION
 ${focusNote}
 
-# 行動指針:
-1. 回答は常に Tier 1 の正史（Cached Context）に準拠してください。
-2. 議論の着地点は Tier 2 のメモリを優先し、無用な蒸し返しを避けてください。
-3. 未解決の課題（Open Questions）がある場合、それらを解消する方向で作家をサポートしてください。
+# Guidelines:
+1. ${inst.guide1}
+2. ${inst.guide2}
+3. ${inst.guide3}
 `.trim();
   }
 
-  // Legacy support for non-cached calls (or fallback)
   static buildArchitectMTP(project: StoryProject, memory: string, relevantIds: string[] = [], isContextActive: boolean = true): string {
+    const lang = project.meta.language || 'ja';
+    const persona = project.meta.preferences?.aiPersona || AiPersona.STANDARD;
+    
     if (isContextActive) {
-        return this.buildStaticArchitectContext(project) + "\n" + this.buildDynamicArchitectContext(memory, relevantIds, true);
+        return this.buildStaticArchitectContext(project, persona) + "\n" + this.buildDynamicArchitectContext(memory, relevantIds, true, lang);
     }
-    return Prompts.ARCHITECT_MTP + "\n" + this.buildDynamicArchitectContext(memory, relevantIds, false);
+    return Prompts.ARCHITECT_MTP(lang, persona) + "\n" + this.buildDynamicArchitectContext(memory, relevantIds, false, lang);
   }
 
   static buildWriterMTP(project: StoryProject, activeChapterId: string, tone: string, isContextActive: boolean = true): string {
-    const storyData = isContextActive ? this.buildStructuredStoryData(project, activeChapterId) : "ユーザーが設定参照を無効化しています。";
+    const lang = project.meta.language || 'ja';
+    const persona = project.meta.preferences?.aiPersona || AiPersona.STANDARD;
+    const storyData = isContextActive ? this.buildStructuredStoryData(project, activeChapterId) : "User has disabled Bible reference.";
     return `
-${this.inject(Prompts.WRITER_MTP, { TONE: tone })}
+${this.inject(Prompts.WRITER_MTP(lang, persona), { TONE: tone })}
 【STRUCTURED_CONTEXT】
 ${storyData}
 `.trim();
