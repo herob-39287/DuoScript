@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Plus } from 'lucide-react';
-import { useCharacters, useBibleDispatch, useNotificationDispatch, useBible } from '../../../contexts/StoryContext';
+import { useCharacters, useBibleDispatch, useNotificationDispatch } from '../../../contexts/StoryContext';
 import * as Actions from '../../../store/actions';
 import { CharacterCard } from '../CharacterCard';
 import { Character } from '../../../types';
@@ -13,7 +13,6 @@ interface CharactersTabProps {
 
 export const CharactersTab: React.FC<CharactersTabProps> = ({ onGeneratePortrait, generatingCharId }) => {
   const characters = useCharacters();
-  const bible = useBible();
   const bibleDispatch = useBibleDispatch();
   const { addLog } = useNotificationDispatch();
 
@@ -53,9 +52,12 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ onGeneratePortrait
       isPrivate: false
     };
 
-    bibleDispatch(Actions.updateBible({ characters: [...bible.characters, newChar] }));
+    // Use optimized action that doesn't require reading the full list
+    bibleDispatch(Actions.manipulateBibleList('characters', 'add', undefined, newChar));
     addLog('success', 'System', '新しいキャラクターを作成しました。');
   };
+
+  if (!characters) return null;
 
   return (
     <div className="space-y-6 animate-fade-in">

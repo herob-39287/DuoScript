@@ -1,9 +1,12 @@
+
 import React, { useMemo } from 'react';
 import { 
   MetadataStateContext, 
   ManuscriptStateContext,
   BibleStateContext,
   CharactersContext,
+  CharacterProfilesContext,
+  CharacterStatesContext,
   WorldFoundationContext,
   GeographyContext,
   PlotPlanContext,
@@ -12,11 +15,11 @@ import {
   ProjectDispatchContext,
   UIStateContext, UIDispatchContext,
   NotificationStateContext, NotificationDispatchContext,
-  UIState, UIDispatch, NotificationState, NotificationDispatch
+  UIDispatch, NotificationState, NotificationDispatch
 } from '../contexts/StoryContext';
 import { 
   StoryProjectMetadata, ChapterLog, WorldBible, SyncState,
-  ProjectAction
+  ProjectAction, UIState
 } from '../types';
 
 interface AppProvidersProps {
@@ -45,9 +48,32 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
   const uiValue = useMemo(() => state.ui, [state.ui]);
   const notificationValue = useMemo(() => state.notification, [state.notification]);
 
-  // Granular Bible Sub-States (Suggestion 1 implementation)
-  const charactersValue = useMemo(() => state.bible.characters, [state.bible.characters]);
+  // Granular Bible Sub-States (Optimization)
+  // Use JSON.stringify for deep comparison simulation to ensure reference stability
+  // when the underlying content hasn't actually changed.
   
+  // 1. Characters (Full)
+  const charactersValue = useMemo(() => state.bible.characters, [state.bible.characters]);
+
+  // 2. Character Profiles (Static - changes rarely)
+  // Extract only profile-related data. If 'state' changes, this string won't change.
+  const profilesHash = JSON.stringify(state.bible.characters.map(c => ({ 
+    id: c.id, 
+    ...c.profile, 
+    imageUrl: c.imageUrl, 
+    isPrivate: c.isPrivate 
+  })));
+  const characterProfilesValue = useMemo(() => JSON.parse(profilesHash), [profilesHash]);
+
+  // 3. Character States (Volatile - changes often)
+  // Extract only state-related data.
+  const statesHash = JSON.stringify(state.bible.characters.map(c => ({ 
+    id: c.id, 
+    ...c.state 
+  })));
+  const characterStatesValue = useMemo(() => JSON.parse(statesHash), [statesHash]);
+  
+  // 4. World Foundation
   const worldFoundationValue = useMemo(() => ({
     version: state.bible.version,
     setting: state.bible.setting,
@@ -58,11 +84,13 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
     lastSummaryUpdate: state.bible.lastSummaryUpdate,
   }), [state.bible.version, state.bible.setting, state.bible.laws, state.bible.grandArc, state.bible.tone, state.bible.summaryBuffer, state.bible.lastSummaryUpdate]);
 
+  // 5. Geography
   const geographyValue = useMemo(() => ({
     locations: state.bible.locations,
     organizations: state.bible.organizations,
   }), [state.bible.locations, state.bible.organizations]);
 
+  // 6. Plot Plan
   const plotPlanValue = useMemo(() => ({
     storyStructure: state.bible.storyStructure,
     timeline: state.bible.timeline,
@@ -71,6 +99,7 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
     volumes: state.bible.volumes,
   }), [state.bible.storyStructure, state.bible.timeline, state.bible.foreshadowing, state.bible.storyThreads, state.bible.volumes]);
 
+  // 7. Knowledge Base
   const knowledgeValue = useMemo(() => ({
     entries: state.bible.entries,
     keyItems: state.bible.keyItems,
@@ -92,17 +121,21 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
                 <ManuscriptStateContext.Provider value={chaptersValue}>
                   <BibleStateContext.Provider value={bibleValue}>
                     <CharactersContext.Provider value={charactersValue}>
-                      <WorldFoundationContext.Provider value={worldFoundationValue}>
-                        <GeographyContext.Provider value={geographyValue}>
-                          <PlotPlanContext.Provider value={plotPlanValue}>
-                            <KnowledgeContext.Provider value={knowledgeValue}>
-                              <NeuralSyncStateContext.Provider value={syncValue}>
-                                {children}
-                              </NeuralSyncStateContext.Provider>
-                            </KnowledgeContext.Provider>
-                          </PlotPlanContext.Provider>
-                        </GeographyContext.Provider>
-                      </WorldFoundationContext.Provider>
+                      <CharacterProfilesContext.Provider value={characterProfilesValue}>
+                        <CharacterStatesContext.Provider value={characterStatesValue}>
+                          <WorldFoundationContext.Provider value={worldFoundationValue}>
+                            <GeographyContext.Provider value={geographyValue}>
+                              <PlotPlanContext.Provider value={plotPlanValue}>
+                                <KnowledgeContext.Provider value={knowledgeValue}>
+                                  <NeuralSyncStateContext.Provider value={syncValue}>
+                                    {children}
+                                  </NeuralSyncStateContext.Provider>
+                                </KnowledgeContext.Provider>
+                              </PlotPlanContext.Provider>
+                            </GeographyContext.Provider>
+                          </WorldFoundationContext.Provider>
+                        </CharacterStatesContext.Provider>
+                      </CharacterProfilesContext.Provider>
                     </CharactersContext.Provider>
                   </BibleStateContext.Provider>
                 </ManuscriptStateContext.Provider>

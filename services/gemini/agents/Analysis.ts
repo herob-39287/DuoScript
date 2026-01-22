@@ -1,20 +1,22 @@
 
-import { AiModel, StoryProject, UsageCallback, LogCallback, BibleIssue, NexusBranch, ProjectGenerationResponse, IntegrityScanResponse, NexusSimulationResponse } from "../../../types";
-import { runGeminiRequest } from "../core";
+import { StoryProject, UsageCallback, LogCallback, BibleIssue, NexusBranch, ProjectGenerationResponse, IntegrityScanResponse, NexusSimulationResponse } from "../../../types";
 import { PromptBuilder } from "../promptBuilder";
-import { safeJsonParse } from "../utils";
+import { parseWithSchema } from "../utils";
 import * as Prompts from "../prompts";
+import { STRICT_JSON_ENFORCEMENT } from "../prompts/resources";
 import * as Schemas from "../schemas";
+import { IntegrityScanZodSchema, NexusSimulationZodSchema } from "../../validation/schemas";
 import { Type } from "@google/genai";
+import { z } from "zod";
+import { AI_MODELS, TOKEN_LIMITS } from "../../../constants";
+import { BaseAgent } from "./BaseAgent";
 
-export class AnalysisAgent {
-  constructor(private onUsage?: UsageCallback, private logCallback: LogCallback = () => {}) {}
-
-  async scanIntegrity(project: StoryProject, activeChapterId?: string): Promise<BibleIssue[]> {
+export class AnalysisAgent extends BaseAgent {
+  
+  async scanIntegrity(project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback, activeChapterId?: string): Promise<BibleIssue[]> {
     const bible = project.bible;
     const lang = project.meta.language || 'ja';
     
-    // Create lightweight map
     const chapterMap = project.chapters.map(c => {
       const characters = (c.involvedCharacterIds || [])
         .map(id => bible.characters.find(char => char.id === id)?.profile.name)
@@ -48,37 +50,44 @@ export class AnalysisAgent {
       chapters: chapterMap
     });
     
-    return runGeminiRequest({
-      model: AiModel.FAST,
+    return this.client.request({
+      model: AI_MODELS.FAST,
       contents: Prompts.INTEGRITY_SCAN_PROMPT(lang, bibleData),
       config: { 
-        systemInstruction: `${Prompts.ANALYST_SOUL(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.ANALYST_SOUL(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
         responseSchema: Schemas.getIntegrityScanSchema(lang)
       },
       usageLabel: 'Analysis/IntegrityLinter',
-      onUsage: this.onUsage,
-      logCallback: this.logCallback,
-      mapper: (res) => (safeJsonParse<IntegrityScanResponse>(res.text, 'Linter').value?.issues || []).map(i => ({ ...i, id: crypto.randomUUID() }))
+      onUsage: onUsage,
+      logCallback: logCallback,
+      mapper: (res) => {
+        const data = parseWithSchema<IntegrityScanResponse>(res.text, IntegrityScanZodSchema, 'Linter', { issues: [] });
+        return (data.issues || []).map(i => ({ ...i, id: crypto.randomUUID() })) as BibleIssue[];
+      }
     });
   }
 
-  async simulateNexus(hypothesis: string, project: StoryProject): Promise<NexusBranch> {
-    const ctx = PromptBuilder.buildStructuredStoryData(project);
+  async simulateNexus(hypothesis: string, project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback): Promise<NexusBranch> {
+    const index = PromptBuilder.buildIndexData(project);
+    const laws = JSON.stringify(project.bible.laws);
+    const ctx = `INDEX:\n${index}\nFULL LAWS:\n${laws}`;
     const lang = project.meta.language || 'ja';
-    return runGeminiRequest({
-      model: AiModel.FAST,
-      contents: Prompts.NEXUS_SIM_PROMPT(hypothesis, ctx),
+
+    return this.client.request({
+      model: AI_MODELS.REASONING,
+      contents: Prompts.NEXUS_SIM_PROMPT(hypothesis, ctx, lang),
       config: { 
-        systemInstruction: `${Prompts.ARCHITECT_MTP(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.ARCHITECT_MTP(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
-        responseSchema: Schemas.getNexusSchema(lang)
+        responseSchema: Schemas.getNexusSchema(lang),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM }
       },
       usageLabel: 'Analysis/NexusSimulation',
-      onUsage: this.onUsage,
-      logCallback: this.logCallback,
+      onUsage: onUsage,
+      logCallback: logCallback,
       mapper: (res) => {
-        const sim = safeJsonParse<NexusSimulationResponse>(res.text, 'Nexus').value || Schemas.DEFAULT_RESPONSES.NEXUS;
+        const sim = parseWithSchema<NexusSimulationResponse>(res.text, NexusSimulationZodSchema, 'Nexus', Schemas.DEFAULT_RESPONSES.NEXUS);
         return { 
           id: crypto.randomUUID(), 
           hypothesis: hypothesis, 
@@ -91,37 +100,92 @@ export class AnalysisAgent {
     });
   }
 
-  async generateProject(theme: string): Promise<ProjectGenerationResponse> {
-    // Muse generates based on prompt language usually, but we can enforce default
-    // We assume default language is JA for now unless passed from WelcomeScreen (not yet implemented fully there)
-    // For now we use 'ja' or infer from input.
-    return runGeminiRequest({
-      model: AiModel.FAST,
-      contents: Prompts.PROJECT_GEN_PROMPT(theme),
+  async generateProject(theme: string, onUsage: UsageCallback, logCallback: LogCallback): Promise<ProjectGenerationResponse> {
+    logCallback('info', 'Architect', 'Step 1/3: 創世記（世界設定・用語）を構築中... (Deep Reasoning)');
+
+    const bibleRes = await this.client.request<any>({
+      model: AI_MODELS.REASONING, 
+      contents: Prompts.PROJECT_GEN_BIBLE_PROMPT(theme, 'ja'),
       config: { 
-        systemInstruction: `${Prompts.ARCHITECT_MTP('ja')}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.ARCHITECT_MTP('ja')}\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
-        responseSchema: Schemas.getProjectGenSchema('ja')
+        responseSchema: Schemas.getGenesisBibleSchema('ja'),
+        thinkingConfig: { thinkingBudget: 8192 },
+        maxOutputTokens: TOKEN_LIMITS.GENESIS_BIBLE
       },
-      usageLabel: 'Analysis/MuseIdeaGen',
-      onUsage: this.onUsage,
-      logCallback: this.logCallback,
-      mapper: (res) => safeJsonParse<ProjectGenerationResponse>(res.text, 'Muse').value || Schemas.DEFAULT_RESPONSES.PROJECT_GEN
+      usageLabel: 'Analysis/MuseBibleGen',
+      onUsage: onUsage,
+      logCallback: logCallback,
+      mapper: (res) => parseWithSchema<any>(res.text, z.any(), 'MuseBible', {})
     });
+
+    if (!bibleRes || !bibleRes.bible) throw new Error("Bible generation failed");
+
+    logCallback('info', 'Architect', 'Step 2/3: 物語の章構成（プロット・年表）を設計中...');
+    const bibleJson = JSON.stringify(bibleRes.bible);
+
+    const chapterRes = await this.client.request<any>({
+      model: AI_MODELS.REASONING,
+      contents: Prompts.INITIAL_CHAPTERS_PROMPT(bibleJson, 'ja'),
+      config: {
+        systemInstruction: `${Prompts.ARCHITECT_MTP('ja')}\n\n${STRICT_JSON_ENFORCEMENT}`,
+        responseMimeType: "application/json",
+        responseSchema: Schemas.getInitialChaptersSchema('ja'),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM }, 
+        maxOutputTokens: TOKEN_LIMITS.DEFAULT_OUTPUT
+      },
+      usageLabel: 'Analysis/MuseChapterGen',
+      onUsage: onUsage,
+      logCallback: logCallback,
+      mapper: (res) => parseWithSchema<any>(res.text, z.any(), 'MuseChapters', {})
+    });
+
+    logCallback('info', 'Architect', 'Step 3/3: 確定したプロットに伏線とスレッドを仕込んでいます...');
+    const chaptersJson = JSON.stringify(chapterRes?.chapters || []);
+
+    const foreshadowingRes = await this.client.request<any>({
+      model: AI_MODELS.REASONING,
+      contents: Prompts.INITIAL_FORESHADOWING_PROMPT(bibleJson, chaptersJson, 'ja'),
+      config: {
+        systemInstruction: `${Prompts.ARCHITECT_MTP('ja')}\n\n${STRICT_JSON_ENFORCEMENT}`,
+        responseMimeType: "application/json",
+        responseSchema: Schemas.getInitialForeshadowingSchema('ja'),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_LIGHT },
+        maxOutputTokens: 16384
+      },
+      usageLabel: 'Analysis/MuseForeshadowingGen',
+      onUsage: onUsage,
+      logCallback: logCallback,
+      mapper: (res) => parseWithSchema<any>(res.text, z.any(), 'MuseForeshadowing', {})
+    });
+
+    return {
+      title: bibleRes.title,
+      genre: bibleRes.genre,
+      bible: {
+        ...bibleRes.bible,
+        timeline: chapterRes?.timeline || [],
+        storyStructure: chapterRes?.storyStructure || [],
+        volumes: chapterRes?.volumes || [],
+        foreshadowing: foreshadowingRes?.foreshadowing || [],
+        storyThreads: foreshadowingRes?.storyThreads || []
+      },
+      chapters: chapterRes?.chapters || []
+    };
   }
 
-  async getSafetyAlternatives(input: string, category: string, logCb: LogCallback): Promise<string[]> {
-    return runGeminiRequest({
-      model: AiModel.FAST,
-      contents: Prompts.SAFETY_ALTERNATIVES_PROMPT(input, category),
+  async getSafetyAlternatives(input: string, category: string, logCallback: LogCallback): Promise<string[]> {
+    return this.client.request({
+      model: AI_MODELS.FAST,
+      contents: Prompts.SAFETY_ALTERNATIVES_PROMPT(input, category, 'ja'),
       config: { 
-        systemInstruction: `You are a safety guide assisting a writer.\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `You are a safety guide assisting a writer.\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
         responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } } 
       },
       usageLabel: 'Analysis/SafetyAlternatives',
-      logCallback: this.logCallback,
-      mapper: (res) => safeJsonParse<string[]>(res.text, 'Safety').value || []
+      logCallback: logCallback,
+      mapper: (res) => parseWithSchema<string[]>(res.text, z.array(z.string()), 'Safety', [])
     });
   }
 }

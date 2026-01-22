@@ -1,21 +1,22 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { BrainCircuit, Network, Loader2, Feather, Globe, Send, FileText, Check, Activity, Info, HelpCircle, X, Book, UserCheck } from 'lucide-react';
-import { ChatMessage, Artifact } from '../../types/sync';
+import { BrainCircuit, Network, Loader2, Globe, Send, Activity, HelpCircle, X, Check, Book, UserCheck, ChevronDown, WifiOff } from 'lucide-react';
+import { ChatMessage } from '../../types/sync';
 import { AiPersona } from '../../types/project';
 import { getArtifact } from '../../services/storageService';
-import { Badge, Card, Button } from '../ui/DesignSystem';
+import { Card } from '../ui/DesignSystem';
 import { useNeuralSync, useUI, useUIDispatch, useMetadata, useMetadataDispatch } from '../../contexts/StoryContext';
 import * as Actions from '../../store/actions';
 
 interface ArchitectChatProps {
-  mobileMode: 'chat' | 'bible';
   isSyncing: boolean;
   displayHistory: ChatMessage[];
   input: string;
   setInput: (val: string) => void;
   isTyping: boolean;
   onSendMessage: () => void;
+  className?: string; // Allow external styling for flexible layout
+  onClose?: () => void; // Mobile minimize action
 }
 
 const MessageBubble: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
@@ -115,13 +116,14 @@ const PersonaSelector: React.FC = () => {
 };
 
 export const ArchitectChat: React.FC<ArchitectChatProps> = ({
-  mobileMode,
   isSyncing,
   displayHistory,
   input,
   setInput,
   isTyping,
-  onSendMessage
+  onSendMessage,
+  className = "",
+  onClose
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sync = useNeuralSync();
@@ -141,38 +143,48 @@ export const ArchitectChat: React.FC<ArchitectChatProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [displayHistory.length, isTyping, mobileMode]);
+  }, [displayHistory.length, isTyping]);
 
   const lastMsg = displayHistory[displayHistory.length - 1];
   const hasActiveResponse = lastMsg?.role === 'model' && (lastMsg.content.length > 0 || lastMsg.kind === 'artifact_ref');
 
   return (
-    <div className={`${mobileMode === 'chat' ? 'flex' : 'hidden md:flex'} w-full md:w-[400px] lg:w-[480px] flex-col border-r border-white/5 bg-stone-900/40 relative z-10 shrink-0 h-full`}>
-      <div className="p-4 border-b border-white/5 flex items-center justify-between bg-stone-900/60 backdrop-blur-md relative z-20">
-         <div className="flex items-center gap-3">
-           <div className="p-2 bg-stone-800 rounded-lg text-orange-400"><BrainCircuit size={20}/></div>
-           <div className="min-w-0">
-             <h2 className="text-sm font-black text-stone-200 uppercase tracking-widest truncate">物語の設計士</h2>
-             <div className="flex gap-3">
-               <button onClick={() => setShowMemoryMonitor(true)} className="flex items-center gap-1.5 text-[8px] font-black text-stone-500 hover:text-orange-400 uppercase tracking-[0.2em] transition-colors">
-                 <Activity size={10} /> Memory
-               </button>
-               <PersonaSelector />
-             </div>
-           </div>
-         </div>
-         <div className="flex items-center gap-2">
-            <button 
-              onClick={() => uiDispatch({ type: 'TOGGLE_CONTEXT_ACTIVE', payload: !ui.isContextActive })}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${ui.isContextActive ? 'border-orange-500/50 text-orange-400 bg-orange-500/10 shadow-lg shadow-orange-950/20' : 'border-stone-800 text-stone-600 hover:border-stone-700'}`}
-              title={ui.isContextActive ? "設定を参照中" : "設定を無視中（創造性優先）"}
-            >
-              <Book size={10} className={ui.isContextActive ? "animate-pulse" : ""} />
-              {ui.isContextActive ? "Bible ON" : "Bible OFF"}
-            </button>
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${isSyncing ? 'border-orange-500/30 text-orange-400 bg-orange-500/5' : 'border-stone-800 text-stone-600'}`}>
-              {isSyncing ? <Loader2 size={10} className="animate-spin" /> : <Network size={10} />}
-              Sync
+    <div className={`flex flex-col relative z-10 shrink-0 h-full ${className}`}>
+      <div className="p-4 border-b border-white/5 bg-stone-900/60 backdrop-blur-md relative z-20 flex-shrink-0">
+         <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-stone-800 rounded-lg text-orange-400"><BrainCircuit size={20}/></div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-black text-stone-200 uppercase tracking-widest truncate">物語の設計士</h2>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowMemoryMonitor(true)} className="flex items-center gap-1.5 text-[8px] font-black text-stone-500 hover:text-orange-400 uppercase tracking-[0.2em] transition-colors">
+                    <Activity size={10} /> Memory
+                  </button>
+                  <PersonaSelector />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => uiDispatch({ type: 'TOGGLE_CONTEXT_ACTIVE', payload: !ui.isContextActive })}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${ui.isContextActive ? 'border-orange-500/50 text-orange-400 bg-orange-500/10 shadow-lg shadow-orange-950/20' : 'border-stone-800 text-stone-600 hover:border-stone-700'}`}
+                  title={ui.isContextActive ? "設定を参照中" : "設定を無視中（創造性優先）"}
+                >
+                  <Book size={10} className={ui.isContextActive ? "animate-pulse" : ""} />
+                  <span className="hidden md:inline">{ui.isContextActive ? "Bible ON" : "Bible OFF"}</span>
+                </button>
+                
+                {onClose ? (
+                  <button onClick={onClose} className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full text-stone-400 transition-colors">
+                    <ChevronDown size={16} />
+                  </button>
+                ) : (
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${isSyncing ? 'border-orange-500/30 text-orange-400 bg-orange-500/5' : 'border-stone-800 text-stone-600'}`}>
+                    {isSyncing ? <Loader2 size={10} className="animate-spin" /> : <Network size={10} />}
+                    Sync
+                  </div>
+                )}
             </div>
          </div>
       </div>
@@ -192,20 +204,29 @@ export const ArchitectChat: React.FC<ArchitectChatProps> = ({
          )}
       </div>
 
-      <div className="p-4 bg-stone-900/80 backdrop-blur border-t border-white/5 pb-20 md:pb-safe">
+      <div className="p-4 bg-stone-900/80 backdrop-blur border-t border-white/5 flex-shrink-0 relative">
+         {/* オフラインオーバーレイ */}
+         {!ui.isOnline && (
+           <div className="absolute inset-0 bg-stone-950/80 backdrop-blur-sm z-30 flex items-center justify-center gap-2">
+              <WifiOff size={16} className="text-stone-500"/>
+              <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">Offline Mode</span>
+           </div>
+         )}
+
          <div className="relative group">
            <textarea 
              value={input}
              onChange={e => setInput(e.target.value)}
              onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSendMessage(); } }}
              placeholder="設計士に相談..."
-             className="w-full bg-stone-950/50 border border-stone-800 rounded-xl px-4 py-3 md:py-4 pr-12 text-[13px] text-stone-200 outline-none focus:border-orange-500/30 transition-all resize-none shadow-inner h-12 md:h-14 custom-scrollbar"
+             disabled={!ui.isOnline}
+             className="w-full bg-stone-950/50 border border-stone-800 rounded-xl px-4 py-3 md:py-4 pr-12 text-[13px] text-stone-200 outline-none focus:border-orange-500/30 transition-all resize-none shadow-inner h-12 md:h-14 custom-scrollbar disabled:opacity-30"
            />
-           <button onClick={onSendMessage} disabled={!input.trim() || isTyping} className="absolute right-2 bottom-2 md:bottom-3 p-2 bg-stone-800 text-stone-400 rounded-lg hover:bg-orange-600 hover:text-white disabled:opacity-30 transition-all active:scale-95">
+           <button onClick={onSendMessage} disabled={!input.trim() || isTyping || !ui.isOnline} className="absolute right-2 bottom-2 md:bottom-3 p-2 bg-stone-800 text-stone-400 rounded-lg hover:bg-orange-600 hover:text-white disabled:opacity-30 transition-all active:scale-95">
              {isTyping ? <Loader2 size={16} className="animate-spin"/> : <Send size={16}/>}
            </button>
          </div>
-         {!ui.isContextActive && (
+         {!ui.isContextActive && ui.isOnline && (
            <p className="text-[8px] font-black text-orange-400/50 uppercase tracking-[0.2em] mt-2 text-center animate-pulse">Bible Reference Disabled - High Creativity Mode</p>
          )}
       </div>

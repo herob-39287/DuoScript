@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Zap, LayoutDashboard, RefreshCw, X } from 'lucide-react';
+import { Zap, LayoutDashboard, RefreshCw, X, Feather, Loader2 } from 'lucide-react';
 import { PlotBeat, WhisperAdvice } from '../../types';
 
 interface PlotReferenceProps {
@@ -9,34 +9,88 @@ interface PlotReferenceProps {
   contextUsage: number;
   onGeneratePackage: () => void;
   onCloseWhisper: () => void;
+  onDraftBeat?: (beat: PlotBeat) => void;
+  processingBeatId?: string | null;
+  isProcessing?: boolean;
+  className?: string;
+  onClose?: () => void;
 }
 
 export const PlotReference: React.FC<PlotReferenceProps> = ({
   beats,
   whisper,
-  contextUsage = 64, // Default placeholder
+  contextUsage = 64, 
   onGeneratePackage,
-  onCloseWhisper
+  onCloseWhisper,
+  onDraftBeat,
+  processingBeatId,
+  isProcessing = false,
+  className = "",
+  onClose
 }) => {
   return (
-    <aside className="w-80 border-l border-white/5 flex flex-col bg-stone-900/40 hidden lg:flex shrink-0">
+    <div className={`flex flex-col h-full bg-stone-900/40 relative ${className}`}>
       <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+        {onClose && (
+          <div className="flex justify-end lg:hidden">
+             <button onClick={onClose} className="p-2 bg-stone-800 text-stone-500 rounded-full hover:bg-stone-700 transition-colors">
+               <X size={16}/>
+             </button>
+          </div>
+        )}
+
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest flex items-center gap-2"><Zap size={12} /> プロット・ビート</span>
-            <button onClick={onGeneratePackage} className="text-[9px] font-black text-orange-400 hover:text-white transition-colors">再構成</button>
+            <button 
+              onClick={onGeneratePackage} 
+              disabled={isProcessing}
+              className={`text-[9px] font-black uppercase tracking-widest transition-colors ${isProcessing ? 'text-stone-600 cursor-not-allowed' : 'text-orange-400 hover:text-white'}`}
+              title="章のあらすじから詳細なビート（展開案）をAIが再構成します"
+            >
+              再構成
+            </button>
           </div>
           <div className="space-y-3">
-            {beats.map((beat, i) => (
-              <div key={beat.id} className="p-4 bg-stone-950/40 border border-white/5 rounded-2xl space-y-2 group">
-                <div className="flex items-center gap-2">
-                  <span className="text-[8px] font-black text-stone-700 uppercase">Beat {i + 1}</span>
+            {beats.map((beat, i) => {
+              const isThisBeatProcessing = processingBeatId === beat.id;
+              
+              return (
+                <div 
+                  key={beat.id} 
+                  className={`p-4 border rounded-2xl space-y-2 group relative transition-colors ${isThisBeatProcessing ? 'bg-orange-600/10 border-orange-500/50 shadow-[0_0_15px_rgba(234,88,12,0.2)]' : 'bg-stone-950/40 border-white/5 hover:border-orange-500/20'}`}
+                >
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className={`text-[8px] font-black uppercase ${isThisBeatProcessing ? 'text-orange-400' : 'text-stone-700'}`}>Beat {i + 1}</span>
+                    {onDraftBeat && (
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          if (!isProcessing) onDraftBeat(beat);
+                        }}
+                        disabled={isProcessing}
+                        className={`relative z-10 p-2 rounded-lg transition-all shadow-sm ${isThisBeatProcessing ? 'bg-orange-500 text-white animate-pulse' : 'bg-stone-800 text-stone-500 hover:text-orange-400 hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed'}`}
+                        title="このビートを執筆"
+                      >
+                        {isThisBeatProcessing ? <Loader2 size={14} className="animate-spin" /> : <Feather size={14} />}
+                      </button>
+                    )}
+                  </div>
+                  <p className={`text-[11px] font-serif leading-relaxed line-clamp-2 group-hover:line-clamp-none transition-all cursor-text select-text ${isThisBeatProcessing ? 'text-stone-200' : 'text-stone-400'}`}>
+                    "{beat.text}"
+                  </p>
                 </div>
-                <p className="text-[11px] text-stone-400 font-serif leading-relaxed line-clamp-2 group-hover:line-clamp-none transition-all">"{beat.text}"</p>
-              </div>
-            ))}
+              );
+            })}
             {(!beats || beats.length === 0) && (
-              <button onClick={onGeneratePackage} className="w-full py-8 border border-dashed border-stone-800 rounded-[2rem] flex flex-col items-center justify-center gap-3 text-stone-600 hover:text-orange-400 hover:border-orange-500/30 transition-all">
+              <button 
+                onClick={onGeneratePackage} 
+                disabled={isProcessing}
+                className="w-full py-8 border border-dashed border-stone-800 rounded-[2rem] flex flex-col items-center justify-center gap-3 text-stone-600 hover:text-orange-400 hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                title="あらすじを基に、章の展開案（ビート）をAIに設計させます"
+              >
                 <LayoutDashboard size={24} strokeWidth={1} />
                 <span className="text-[10px] font-black uppercase tracking-widest">ビートを自動生成</span>
               </button>
@@ -48,7 +102,13 @@ export const PlotReference: React.FC<PlotReferenceProps> = ({
           <div className="space-y-4 animate-fade-in">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-2"><RefreshCw size={12} /> 設計士の助言</span>
-              <button onClick={onCloseWhisper} className="text-stone-600 hover:text-white"><X size={12} /></button>
+              <button 
+                onClick={onCloseWhisper} 
+                className="text-stone-600 hover:text-white"
+                title="助言を閉じる"
+              >
+                <X size={12} />
+              </button>
             </div>
             <div className={`p-6 rounded-[2rem] border space-y-4 ${whisper.type === 'alert' ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
               <div className="flex items-center gap-2">
@@ -78,6 +138,6 @@ export const PlotReference: React.FC<PlotReferenceProps> = ({
           <div className="h-full bg-orange-600 shadow-[0_0_10px_rgba(234,88,12,0.5)]" style={{ width: `${contextUsage}%` }} />
         </div>
       </div>
-    </aside>
+    </div>
   );
 };

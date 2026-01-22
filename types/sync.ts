@@ -1,10 +1,12 @@
-
 import { 
-  Character, WorldLaw, WorldEntry, TimelineEvent, Foreshadowing, 
-  Location, Organization, Theme, KeyItem, StoryThread, StoryPhase,
-  Race, Bestiary, Ability, WorldBible
-} from './bible';
-import { ChapterLog, StoryVolume } from './project';
+  SyncOperationZodSchema, DetectionZodSchema, 
+  IntegrityScanZodSchema, NexusSimulationZodSchema,
+  ChapterPackageZodSchema, WhisperZodSchema,
+  SyncOperation as ZodSyncOperation,
+  SyncCandidate as ZodSyncCandidate,
+  SyncPath as ZodSyncPath
+} from '../services/validation/schemas';
+import { z } from 'zod';
 
 /**
  * Message Kinds for handling context window efficiency
@@ -39,12 +41,10 @@ export interface ChatMessage {
   sources?: { title: string; uri: string }[];
 }
 
-export interface SyncCandidate {
-  id: string;
-  name: string;
-  confidence: number;
-  reason: string;
-}
+// Re-export Zod types
+export type SyncCandidate = ZodSyncCandidate;
+export type SyncOperation = ZodSyncOperation;
+export type SyncPath = ZodSyncPath;
 
 /**
  * Project domains for intent detection.
@@ -81,54 +81,6 @@ export interface GeminiContent {
   parts: { text: string }[];
 }
 
-/**
- * 判別共用体（Discriminated Unions）によるSyncOperationの厳密な定義
- */
-export type SyncPath = 
-  | 'characters' | 'timeline' | 'foreshadowing' | 'entries' | 'chapters' 
-  | 'setting' | 'tone' | 'laws' | 'grandArc' | 'storyStructure' 
-  | 'locations' | 'organizations' | 'volumes' | 'themes' | 'keyItems' 
-  | 'storyThreads' | 'races' | 'bestiary' | 'abilities' | 'nexusBranches';
-
-export interface BaseSyncOperation {
-  id: string;
-  requestId: string; 
-  op: 'add' | 'update' | 'delete' | 'merge' | 'rename' | 'set' | 'addAlias';
-  targetId?: string;
-  targetName?: string;
-  field?: string;
-  oldValue?: any;
-  rationale: string;
-  evidence: string;
-  confidence: number;
-  status: 'proposal' | 'committed' | 'rejected' | 'quarantined' | 'needs_resolution';
-  candidates?: SyncCandidate[];
-  baseVersion: number;
-  timestamp: number;
-  beatId?: string;
-  resolutionHint?: string;
-  isHypothetical?: boolean;
-}
-
-export type SyncOperation = 
-  | (BaseSyncOperation & { path: 'characters'; value: Partial<Character> })
-  | (BaseSyncOperation & { path: 'laws'; value: Partial<WorldLaw> })
-  | (BaseSyncOperation & { path: 'entries'; value: Partial<WorldEntry> })
-  | (BaseSyncOperation & { path: 'timeline'; value: Partial<TimelineEvent> })
-  | (BaseSyncOperation & { path: 'foreshadowing'; value: Partial<Foreshadowing> })
-  | (BaseSyncOperation & { path: 'locations'; value: Partial<Location> })
-  | (BaseSyncOperation & { path: 'organizations'; value: Partial<Organization> })
-  | (BaseSyncOperation & { path: 'themes'; value: Partial<Theme> })
-  | (BaseSyncOperation & { path: 'keyItems'; value: Partial<KeyItem> })
-  | (BaseSyncOperation & { path: 'storyThreads'; value: Partial<StoryThread> })
-  | (BaseSyncOperation & { path: 'storyStructure'; value: Partial<StoryPhase> })
-  | (BaseSyncOperation & { path: 'races'; value: Partial<Race> })
-  | (BaseSyncOperation & { path: 'bestiary'; value: Partial<Bestiary> })
-  | (BaseSyncOperation & { path: 'abilities'; value: Partial<Ability> })
-  | (BaseSyncOperation & { path: 'volumes'; value: Partial<StoryVolume> })
-  | (BaseSyncOperation & { path: 'chapters'; value: Partial<ChapterLog> })
-  | (BaseSyncOperation & { path: 'setting' | 'tone' | 'grandArc'; value: string });
-
 export interface QuarantineItem {
   id: string;
   timestamp: number;
@@ -162,15 +114,8 @@ export interface HistoryEntry {
   versionAtCommit: number;
 }
 
-export interface NexusBranch {
-  id: string;
-  hypothesis: string;
-  impactOnCanon: string;
-  impactOnState: string;
-  alternateTimeline: string[];
-  timestamp: number;
-  color?: string;
-}
+// NexusBranch is now exported from bible.ts (which exports schemas)
+export { NexusBranch } from './bible';
 
 /**
  * Stored Artifact in IndexedDB (Not in Redux state)
@@ -196,30 +141,12 @@ export interface SyncState {
   history: HistoryEntry[];
 }
 
-// API Response Types
-export interface DetectionResult {
-  hasChangeIntent: boolean;
-  isHypothetical: boolean; 
-  domains: string[];
-  categories: string[];
-  instructionSummary: string;
-}
-
-export interface IntegrityScanResponse {
-  issues: any[];
-}
-
-export interface NexusSimulationResponse {
-  impactOnCanon: string;
-  impactOnState: string;
-  alternateTimeline: string[];
-}
-
-export interface ChapterPackageResponse {
-  strategy: any;
-  beats: any[];
-  draft: string;
-}
+// API Response Types derived from Zod
+export type DetectionResult = z.infer<typeof DetectionZodSchema>;
+export type IntegrityScanResponse = z.infer<typeof IntegrityScanZodSchema>;
+export type NexusSimulationResponse = z.infer<typeof NexusSimulationZodSchema>;
+export type ChapterPackageResponse = z.infer<typeof ChapterPackageZodSchema>;
+export type WhisperAdvice = z.infer<typeof WhisperZodSchema>;
 
 export interface ProjectGenerationResponse {
   title: string;
@@ -228,12 +155,8 @@ export interface ProjectGenerationResponse {
     setting: string;
     grandArc: string;
   };
-}
-
-export interface WhisperAdvice {
-  id: string;
-  ruleId: string;
-  text: string;
-  type: 'info' | 'alert';
-  citations: any[];
+  chapters?: {
+    title: string;
+    summary: string;
+  }[];
 }

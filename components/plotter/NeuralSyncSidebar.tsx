@@ -5,6 +5,7 @@ import { SyncOperation, WorldBible, ChapterLog } from '../../types';
 import { ProposalItem } from './ProposalItem';
 import { useNeuralSyncDispatch } from '../../contexts/StoryContext';
 import * as Actions from '../../store/actions';
+import { Styles, Txt } from '../ui/DesignSystem';
 
 interface NeuralSyncSidebarProps {
   pendingChanges: SyncOperation[];
@@ -31,7 +32,7 @@ export const NeuralSyncSidebar: React.FC<NeuralSyncSidebarProps> = ({
   return (
     <aside className={`flex flex-col bg-stone-900/40 ${className}`}>
        <div className="p-4 border-b border-white/5 bg-stone-900/60 backdrop-blur-md flex items-center justify-between shrink-0">
-          <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
+          <span className={Styles.text.label}>
              Neural Sync Status
           </span>
           <div className="flex items-center gap-1">
@@ -53,7 +54,7 @@ export const NeuralSyncSidebar: React.FC<NeuralSyncSidebarProps> = ({
        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
          {showGuide && (
            <div className="space-y-3 animate-fade-in bg-stone-950/30 p-3 rounded-xl border border-white/5 mb-4">
-             <h4 className="text-[9px] font-black text-stone-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-2">Sync Logic Guide</h4>
+             <h4 className={`${Styles.text.labelSm} border-b border-white/5 pb-2 mb-2`}>Sync Logic Guide</h4>
              
              <div className="space-y-2">
                <div className="flex gap-2 items-start">
@@ -94,12 +95,12 @@ export const NeuralSyncSidebar: React.FC<NeuralSyncSidebarProps> = ({
 
          <div className="space-y-3">
            <div className="flex items-center justify-between">
-             <span className="text-[9px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-2"><GitBranch size={10}/> 変更の提案 ({pendingChanges.length})</span>
+             <span className={`${Styles.text.labelSm} text-orange-400 flex items-center gap-2`}><GitBranch size={10}/> 変更の提案 ({pendingChanges.length})</span>
            </div>
            {sortedPendingChanges.length === 0 ? (
              <div className="p-6 text-center border border-dashed border-stone-800 rounded-2xl">
                <Check size={16} className="text-emerald-500/50 mx-auto mb-2"/>
-               <p className="text-[10px] text-stone-600 font-serif">全て同期されています。</p>
+               <Txt variant="bodySm">全て同期されています。</Txt>
              </div>
            ) : (
              sortedPendingChanges.map((op) => (

@@ -1,11 +1,20 @@
 
 import { 
-  StoryProject, StoryProjectMetadata, WorldBible, ChapterLog, 
-  SyncOperation, HistoryEntry, ChatMessage, ViewMode, 
-  UsagePayload, SystemLog, DialogState, ProjectAction, 
-  MetaAction, BibleAction, ChapterAction, SyncAction, UIAction, NotificationAction,
-  SyncState, QuarantineItem, AppPreferences, SafetyIntervention
-} from '../types';
+  StoryProject, StoryProjectMetadata, ChapterLog, 
+  UsagePayload, AppPreferences, SafetyViolation
+} from '../types/project';
+import { 
+  WorldBible, Character
+} from '../types/bible';
+import { 
+  SyncState, ChatMessage, SyncOperation, HistoryEntry, 
+  QuarantineItem
+} from '../types/sync';
+import { 
+  ViewMode, SystemLog, DialogState, UIAction, NotificationAction, 
+  BibleAction, ChapterAction, MetaAction, ProjectAction, 
+  SafetyIntervention, BibleArrayKeys, SyncAction
+} from '../types/ui';
 
 /**
  * Metadata Actions
@@ -20,6 +29,48 @@ export const trackUsage = (usage: UsagePayload): MetaAction => ({ type: 'TRACK_U
  */
 export const loadBible = (bible: WorldBible): BibleAction => ({ type: 'LOAD_BIBLE', payload: bible });
 export const updateBible = (updates: Partial<WorldBible>): BibleAction => ({ type: 'UPDATE_BIBLE', payload: updates });
+
+// Optimized specific actions
+export const updateCharacterData = (id: string, updates: Partial<Character>): BibleAction => ({ type: 'UPDATE_CHARACTER_DATA', id, updates });
+
+// Helper type to infer item type from path
+type BibleListItem<K extends BibleArrayKeys> = WorldBible[K] extends Array<infer I> ? I : never;
+
+// Overloads for manipulateBibleList to ensure type safety
+export function manipulateBibleList<K extends BibleArrayKeys>(
+  path: K,
+  op: 'add',
+  id: undefined,
+  item: BibleListItem<K>
+): BibleAction;
+export function manipulateBibleList<K extends BibleArrayKeys>(
+  path: K,
+  op: 'update',
+  id: string,
+  item: undefined,
+  updates: Partial<BibleListItem<K>>
+): BibleAction;
+export function manipulateBibleList<K extends BibleArrayKeys>(
+  path: K,
+  op: 'delete',
+  id: string
+): BibleAction;
+export function manipulateBibleList(
+  path: any,
+  op: any,
+  id?: any,
+  item?: any,
+  updates?: any
+): BibleAction { 
+  return { 
+    type: 'MANIPULATE_BIBLE_LIST', 
+    path, 
+    op, 
+    id, 
+    item, 
+    updates 
+  };
+}
 
 export const applySyncOp = (nextBible: WorldBible, nextChapters: ChapterLog[], historyEntry: HistoryEntry): BibleAction => ({ 
   type: 'APPLY_SYNC_OP', 
@@ -72,6 +123,7 @@ export const setSaveStatus = (status: 'idle' | 'saving' | 'saved'): UIAction => 
 export const setConflict = (isConflict: boolean): UIAction => ({ type: 'SET_CONFLICT', payload: isConflict });
 export const setForceSaveRequested = (requested: boolean): UIAction => ({ type: 'SET_FORCE_SAVE_REQUESTED', payload: requested });
 export const setThinkingPhase = (phase: string | null): UIAction => ({ type: 'SET_THINKING_PHASE', payload: phase });
+export const setOnlineStatus = (isOnline: boolean): UIAction => ({ type: 'SET_ONLINE_STATUS', payload: isOnline });
 
 /**
  * Notification Actions

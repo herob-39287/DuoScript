@@ -1,6 +1,7 @@
 
 import { SyncOperation, SyncCandidate } from '../../types';
 import { normalizeJapanese, calculateSimilarity } from '../../utils/stringUtils';
+import { SyncOperationZodSchema } from '../validation/schemas';
 
 export const findMatchCandidates = (
   list: any[], 
@@ -14,7 +15,7 @@ export const findMatchCandidates = (
     // Check ID first
     if (targetId && item.id === targetId) {
       const name = item.profile?.name || item.name || item.title || item.event || item.concept || "Unknown";
-      results.push({ id: item.id, name, confidence: 1.0, reason: 'IDマッチ' });
+      results.push({ id: item.id, name, confidence: 1.0, reason: 'sync.reason.id_match' });
       return;
     }
 
@@ -23,7 +24,7 @@ export const findMatchCandidates = (
     // Check Name fields (handle new profile.name structure)
     const name = item.profile?.name || item.name || item.title || item.event || item.concept;
     if (name && normalizeJapanese(String(name)) === normTarget) {
-        results.push({ id: item.id, name, confidence: 0.98, reason: '名称完全一致' });
+        results.push({ id: item.id, name, confidence: 0.98, reason: 'sync.reason.name_match' });
         return;
     }
 
@@ -31,16 +32,16 @@ export const findMatchCandidates = (
     const aliases = item.profile?.aliases || item.aliases;
     if (Array.isArray(aliases)) {
       if (aliases.some((a: string) => normalizeJapanese(String(a)) === normTarget)) {
-        results.push({ id: item.id, name, confidence: 0.95, reason: '別名一致' });
+        results.push({ id: item.id, name, confidence: 0.95, reason: 'sync.reason.alias_match' });
         return;
-      }
+    }
     }
 
     // Similarity
     if (name) {
       const sim = calculateSimilarity(normalizeJapanese(String(name)), normTarget);
       if (sim > 0.85) {
-        results.push({ id: item.id, name, confidence: 0.6 + (sim * 0.2), reason: '類似名称' });
+        results.push({ id: item.id, name, confidence: 0.6 + (sim * 0.2), reason: 'sync.reason.sim_match' });
       }
     }
   });
@@ -63,12 +64,20 @@ export const findItemIdx = (list: any[], targetId?: string, targetName?: string)
   return -1;
 };
 
+/**
+ * Validates a SyncOperation using Zod Schema.
+ * Returns an array of error messages. Empty array implies valid.
+ */
 export const validateSyncOperation = (op: SyncOperation): string[] => {
+  const result = SyncOperationZodSchema.safeParse(op);
+  if (!result.success) {
+    return result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+  }
+  
   const errors: string[] = [];
-  if (!op.path) errors.push("path is required");
-  if (!op.op) errors.push("op is required");
-  if (op.op !== 'add' && !op.targetName && !op.targetId) errors.push("targetName or targetId is required for updates/deletes");
-  if (op.value === undefined) errors.push("value is required");
+  if (op.op !== 'add' && !op.targetName && !op.targetId) {
+    errors.push("targetName or targetId is required for updates/deletes");
+  }
   return errors;
 };
 

@@ -1,11 +1,14 @@
 
-import React, { useReducer, useState, useCallback, useMemo } from 'react';
+import React, { useReducer, useState, useCallback, useMemo, useEffect } from 'react';
 import ComplianceModal from './components/ComplianceModal';
 import { AppProviders } from './components/AppProviders';
 import AppShell from './components/AppShell';
 import { 
-  ViewMode, StoryProject, SystemLog, UIState, AppPreferences
-} from './types';
+  StoryProject, AppPreferences
+} from './types/project';
+import { 
+  ViewMode, SystemLog, UIState
+} from './types/ui';
 import { normalizeProject } from './services/bibleManager';
 import { projectReducer, uiReducer, notificationReducer } from './store/reducers';
 import { usePersistence } from './hooks/usePersistence';
@@ -29,7 +32,8 @@ const App: React.FC = () => {
     isConflict: false,
     forceSaveRequested: false, // Initialize forceSave flag
     isContextActive: true, // Story context activation flag
-    thinkingPhase: null // AIの思考プロセスを表示するための状態
+    thinkingPhase: null, // AIの思考プロセスを表示するための状態
+    isOnline: navigator.onLine // 初期オンライン状態
   };
   const [ui, uiDispatch] = useReducer(uiReducer, initialUIState);
   
@@ -40,6 +44,20 @@ const App: React.FC = () => {
   const [hasAgreed, setHasAgreed] = useState(localStorage.getItem('duoscript_agreed_v2') === 'true');
 
   usePersistence(project, ui, projectDispatch, uiDispatch);
+
+  // ネットワーク状態の監視
+  useEffect(() => {
+    const handleOnline = () => uiDispatch(Actions.setOnlineStatus(true));
+    const handleOffline = () => uiDispatch(Actions.setOnlineStatus(false));
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const addLog = useCallback((type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
     notifDispatch({ type: 'ADD_LOG', payload: { id: crypto.randomUUID(), timestamp: Date.now(), type, source, message, details } });

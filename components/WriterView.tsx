@@ -1,204 +1,159 @@
-
-import React, { useState, useMemo } from 'react';
-import { generateDraftStream, suggestNextSentence, generateFullChapterPackage } from '../services/geminiService';
-import { 
-  useManuscript, useBible, useUI, useMetadata, 
-  useManuscriptDispatch, useMetadataDispatch, useNotificationDispatch, 
-  useUIDispatch, useNeuralSync 
-} from '../contexts/StoryContext';
-import * as Actions from '../store/actions';
+import React from 'react';
 import { ViewMode } from '../types';
-import { useManuscriptEditor } from '../hooks/useManuscriptEditor';
+import { useWriterLogic } from '../hooks/useWriterLogic';
 
 // Sub-components
 import { EditorCanvas } from './writer/EditorCanvas';
 import { WriterHeader } from './writer/WriterHeader';
 import { ChapterNavigation } from './writer/ChapterNavigation';
 import { PlotReference } from './writer/PlotReference';
+import { MiniBible } from './writer/MiniBible';
 import { WriterToolbar } from './writer/WriterToolbar';
 import { SuggestionOverlay } from './writer/SuggestionOverlay';
+import { AppearanceSettingsModal } from './writer/AppearanceSettingsModal';
 import { ThinkingIndicator } from './ui/ThinkingIndicator';
+import { Book, Zap } from 'lucide-react';
+import { Styles } from './ui/DesignSystem';
+import { MobileDrawers } from './writer/MobileDrawers';
 
 const WriterView: React.FC = () => {
-  const chapters = useManuscript();
-  const projectDispatch = useManuscriptDispatch();
-  const bible = useBible();
-  const meta = useMetadata();
-  const metaDispatch = useMetadataDispatch();
-  const { addLog } = useNotificationDispatch();
-  const uiDispatch = useUIDispatch();
-  const sync = useNeuralSync();
-  const ui = useUI();
-
-  const project = useMemo(() => ({ meta, bible, chapters, sync }), [meta, bible, chapters, sync]);
-
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isZenMode, setIsZenMode] = useState(false);
-  const [isVertical, setIsVertical] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [isSuggesting, setIsSuggesting] = useState(false);
-
-  const {
-    activeChapter,
-    activeChapterId,
-    setActiveChapterId,
-    isLoadingContent,
-    wordCount,
-    setWordCount,
-    whisper,
-    setWhisper,
-    isWhispering,
-    textareaRef,
-    handleTextChange,
-    triggerWhisper
-  } = useManuscriptEditor(chapters[0]?.id || '', isProcessing);
-
-  const handleGeneratePackage = async () => {
-    if (!activeChapter || isProcessing) return;
-    setIsProcessing(true);
-    uiDispatch(Actions.setThinkingPhase("Designing Plot Beats..."));
-    addLog('info', 'Writer', `${activeChapter.title} の展開を設計中...`);
-    try {
-      const res = await generateFullChapterPackage(project as any, activeChapter, (u) => metaDispatch(Actions.trackUsage(u)), addLog);
-      projectDispatch(Actions.updateChapter(activeChapterId, {
-        beats: res.beats.map((b: any) => ({ id: crypto.randomUUID(), text: b.text })),
-        strategy: { ...activeChapter.strategy, milestones: res.strategy.milestones }
-      }));
-      addLog('success', 'Writer', '章のプロット構成が完了しました。執筆の準備が整いました。');
-    } catch (e) {
-      addLog('error', 'Writer', '設計パッケージの生成に失敗しました。');
-    } finally {
-      setIsProcessing(false);
-      uiDispatch(Actions.setThinkingPhase(null));
-    }
-  };
-
-  const handleSuggest = async () => {
-    const text = textareaRef.current?.value || "";
-    if (text.length < 20 || isSuggesting) return;
-    setIsSuggesting(true);
-    uiDispatch(Actions.setThinkingPhase("Generating Suggestions..."));
-    try {
-      const res = await suggestNextSentence(text.slice(-1000), project as any, activeChapterId, (u) => metaDispatch(Actions.trackUsage(u)), addLog, ui.isContextActive);
-      setSuggestions(res);
-    } catch (e) {
-      addLog('error', 'Writer', '続きの提案に失敗しました。');
-    } finally {
-      setIsSuggesting(false);
-      uiDispatch(Actions.setThinkingPhase(null));
-    }
-  };
-
-  const applySuggestion = (text: string) => {
-    if (!textareaRef.current) return;
-    const current = textareaRef.current.value;
-    const next = current.endsWith(' ') || current.endsWith('\n') ? current + text : current + " " + text;
-    textareaRef.current.value = next;
-    handleTextChange();
-    setSuggestions([]);
-  };
-
-  const handleStreamDraft = async () => {
-    if (!activeChapter || isProcessing) return;
-    setIsProcessing(true);
-    uiDispatch(Actions.setThinkingPhase("Drafting Story..."));
-    addLog('info', 'Writer', '物語を紡いでいます...');
-    
-    let fullText = textareaRef.current?.value || "";
-    if (fullText.length > 0) fullText += "\n\n";
-
-    try {
-      const stream = generateDraftStream(activeChapter, bible.tone, true, project as any, addLog, ui.isContextActive);
-      for await (const chunk of stream) {
-        // Stop "thinking" indicator once text starts streaming
-        uiDispatch(Actions.setThinkingPhase(null)); 
-        const text = chunk.text || "";
-        fullText += text;
-        if (textareaRef.current) {
-          textareaRef.current.value = fullText;
-          textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
-        }
-        setWordCount(fullText.length);
-      }
-      handleTextChange();
-      addLog('success', 'Writer', '執筆が完了しました。');
-    } catch (e: any) {
-      if (e.message?.includes("SAFETY_BLOCK")) {
-        addLog('error', 'Safety', '内容に不適切な表現が含まれる可能性があるため、生成が中断されました。');
-      } else {
-        addLog('error', 'Writer', '執筆中にエラーが発生しました。');
-      }
-    } finally {
-      setIsProcessing(false);
-      uiDispatch(Actions.setThinkingPhase(null));
-    }
-  };
+  const { state, refs, actions } = useWriterLogic();
+  const { ui, data, status } = state;
 
   return (
-    <div className={`h-full flex flex-col transition-all duration-700 bg-stone-900 ${isZenMode ? 'bg-stone-950' : ''}`}>
+    <div className={`h-full flex flex-col transition-all duration-700 bg-stone-900 ${ui.isZenMode ? 'fixed inset-0 z-[200] bg-stone-950' : ''}`}>
       <ThinkingIndicator phase={ui.thinkingPhase} />
       
-      {!isZenMode && (
+      {!ui.isZenMode && (
         <WriterHeader
-          activeChapter={activeChapter}
-          wordCount={wordCount}
-          isVertical={isVertical}
-          onToggleVertical={() => setIsVertical(!isVertical)}
-          onToggleZen={() => setIsZenMode(true)}
-          onNavigateBack={() => uiDispatch(Actions.setView(ViewMode.DASHBOARD))}
+          activeChapter={data.activeChapter}
+          wordCount={data.wordCount}
+          isVertical={ui.isVertical}
+          onToggleVertical={actions.toggleVertical}
+          onToggleZen={actions.toggleZen}
+          onNavigateBack={actions.navigateBack}
+          onOpenChapters={() => actions.setMobileTab('chapters')}
+          onOpenPlot={() => actions.setMobileTab('rightPanel')}
+          onOpenSettings={() => actions.toggleSettings(true)}
         />
       )}
 
       <div className="flex-1 flex overflow-hidden relative h-full">
-        {!isZenMode && (
+        {/* Desktop Sidebar: Chapter Nav */}
+        {!ui.isZenMode && (
           <ChapterNavigation 
-            chapters={chapters}
-            activeChapterId={activeChapterId}
-            onSelectChapter={setActiveChapterId}
-            onAddChapter={() => projectDispatch(Actions.addChapter({ id: crypto.randomUUID(), title: `第${chapters.length + 1}章`, summary: '', scenes: [], beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, draftVersion: 0, updatedAt: Date.now(), involvedCharacterIds: [] }))}
+            chapters={data.chapters}
+            activeChapterId={data.activeChapterId}
+            onSelectChapter={actions.selectChapter}
+            onAddChapter={actions.addChapter}
           />
         )}
 
-        <main className={`flex-1 relative flex flex-col overflow-hidden items-center ${isZenMode ? 'pt-12 md:pt-24' : ''}`}>
-          <div className={`w-full max-w-4xl h-full flex flex-col transition-all duration-1000 ${isZenMode ? 'px-4 md:px-0' : 'px-4 md:px-8'}`}>
+        <main className={`flex-1 relative flex flex-col overflow-hidden items-center ${ui.isZenMode ? 'pt-12 md:pt-16 pb-safe' : 'pb-safe'}`}>
+          <div className={`w-full max-w-4xl h-full flex flex-col transition-all duration-1000 ${ui.isZenMode ? 'px-4 md:px-0' : 'px-4 md:px-8'}`}>
             <EditorCanvas 
-              textareaRef={textareaRef}
-              onChange={handleTextChange}
-              isVertical={isVertical}
-              isZenMode={isZenMode}
-              isLoading={isLoadingContent}
-              isProcessing={isProcessing}
+              textareaRef={refs.textareaRef}
+              onChange={actions.handleTextChange}
+              isVertical={ui.isVertical}
+              isZenMode={ui.isZenMode}
+              isLoading={status.isLoadingContent}
+              isProcessing={status.isProcessing}
             />
 
             <SuggestionOverlay 
-              suggestions={suggestions}
-              onApply={applySuggestion}
-              onClose={() => setSuggestions([])}
+              suggestions={data.suggestions}
+              onApply={actions.applySuggestion}
+              onClose={actions.closeSuggestions}
             />
 
             <WriterToolbar 
-              isZenMode={isZenMode}
-              isProcessing={isProcessing}
-              isSuggesting={isSuggesting}
-              isWhispering={isWhispering}
-              onSuggest={handleSuggest}
-              onDraft={handleStreamDraft}
-              onWhisper={() => triggerWhisper()}
-              onToggleZen={() => setIsZenMode(!isZenMode)}
+              isZenMode={ui.isZenMode}
+              isProcessing={status.isProcessing}
+              isSuggesting={status.isSuggesting}
+              isWhispering={status.isWhispering}
+              isScanning={status.isScanning}
+              onSuggest={actions.suggest}
+              onDraft={() => actions.streamDraft()}
+              onWhisper={() => actions.triggerWhisper()}
+              onScan={actions.scanDraft}
+              onToggleZen={actions.toggleZen}
             />
           </div>
         </main>
 
-        {!isZenMode && (
-          <PlotReference 
-            beats={activeChapter?.beats || []}
-            whisper={whisper}
-            contextUsage={64} // Placeholder for calculated usage
-            onGeneratePackage={handleGeneratePackage}
-            onCloseWhisper={() => setWhisper(null)}
-          />
+        {/* Desktop Sidebar: Right Panel (Plot/Bible) */}
+        {!ui.isZenMode && (
+          <div className="hidden xl:flex w-80 border-l border-white/5 flex-col bg-stone-900/40 shrink-0">
+             <div className="flex border-b border-white/5">
+                <button 
+                  onClick={() => actions.setRightPanelTab('plot')}
+                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'plot' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  <Zap size={12}/> Plot
+                </button>
+                <button 
+                  onClick={() => actions.setRightPanelTab('bible')}
+                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'bible' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  <Book size={12}/> Bible
+                </button>
+             </div>
+             
+             {ui.rightPanelTab === 'plot' ? (
+                <PlotReference 
+                  beats={data.activeChapter?.beats || []}
+                  whisper={data.whisper}
+                  contextUsage={64} 
+                  onGeneratePackage={actions.generatePackage}
+                  onCloseWhisper={actions.closeWhisper}
+                  onDraftBeat={(beatText) => actions.streamDraft(beatText)}
+                  className="flex-1 overflow-hidden"
+                />
+             ) : (
+                <MiniBible 
+                  onInsert={(text) => actions.applySuggestion(text)} 
+                  className="flex-1 overflow-hidden"
+                />
+             )}
+          </div>
         )}
+
+        {/* Mobile Drawers */}
+        <MobileDrawers
+          mobileTab={ui.mobileTab}
+          onClose={() => actions.setMobileTab('none')}
+          chapterNavProps={{
+            chapters: data.chapters,
+            activeChapterId: data.activeChapterId,
+            onSelectChapter: actions.selectChapter,
+            onAddChapter: actions.addChapter
+          }}
+          rightPanelProps={{
+            rightPanelTab: ui.rightPanelTab,
+            setRightPanelTab: actions.setRightPanelTab,
+            plotProps: {
+              beats: data.activeChapter?.beats || [],
+              whisper: data.whisper,
+              contextUsage: 64,
+              onGeneratePackage: actions.generatePackage,
+              onCloseWhisper: actions.closeWhisper,
+              onDraftBeat: (beatText) => actions.streamDraft(beatText)
+            },
+            miniBibleProps: {
+              onInsert: (text) => actions.applySuggestion(text)
+            }
+          }}
+        />
       </div>
+      
+      <AppearanceSettingsModal isOpen={ui.showSettings} onClose={() => actions.toggleSettings(false)} />
+
+      <style>{`
+        .animate-slide-in-left { animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        .animate-slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+      `}</style>
     </div>
   );
 };

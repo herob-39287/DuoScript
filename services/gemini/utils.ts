@@ -1,6 +1,8 @@
 
-import { StoryProject, AiModel, UsageCallback, LogCallback, TaskComplexity, ModelRequestConfig, TransmissionScope, SafetyPreset, Character, ContextFocus } from "../../types";
+import { StoryProject, UsageCallback, LogCallback, TaskComplexity, ModelRequestConfig, TransmissionScope, SafetyPreset, Character, ContextFocus } from "../../types";
+import { AiModel } from "../../constants";
 import { GenerateContentResponse, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { z } from "zod";
 
 export class DuoScriptError extends Error {
   constructor(
@@ -43,70 +45,128 @@ export function repairTruncatedJson(text: string): { repairedText: string, repai
   const steps: string[] = [];
 
   // 1. Markdownコードブロックの除去
-  // Regex without backticks to prevent syntax errors in some environments
   const jsonMatch = repaired.match(new RegExp("```(?:json)?\\s*([\\s\\S]*?)\\s*```"));
   if (jsonMatch) {
     repaired = jsonMatch[1].trim();
     steps.push("Extracted from Markdown block");
   } else {
-    // 閉じタグがない不完全なコードブロック
     repaired = repaired.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
   }
 
   // 2. 制御文字などの除去
   repaired = repaired.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
 
-  // 3. 文字列の閉じ忘れチェック (トークン切れ対策)
-  let isInsideString = false;
-  let escaped = false;
+  // 3. Stack-based repair for structure (Robust against truncation)
+  const stack: string[] = [];
+  let inString = false;
+  let isEscaped = false;
+  
   for (let i = 0; i < repaired.length; i++) {
-    const char = repaired[i];
-    if (char === '"' && !escaped) {
-      isInsideString = !isInsideString;
-    }
-    escaped = char === '\\' && !escaped;
-  }
-  if (isInsideString) {
-    repaired += '"';
-    steps.push("Closed unterminated string");
+      const c = repaired[i];
+      
+      if (inString) {
+          if (c === '"' && !isEscaped) {
+              inString = false;
+          }
+          isEscaped = (c === '\\' && !isEscaped);
+      } else {
+          if (c === '"') {
+              inString = true;
+              isEscaped = false;
+          } else if (c === '{') {
+              stack.push('}');
+          } else if (c === '[') {
+              stack.push(']');
+          } else if (c === '}' || c === ']') {
+              if (stack.length > 0) {
+                  const expected = stack[stack.length - 1];
+                  if (c === expected) {
+                      stack.pop();
+                  } 
+                  // If mismatch, assume minor corruption or desync, proceed scanning
+              }
+          }
+      }
   }
 
-  // 4. 括弧の不一致の簡易補完
-  const openBraces = (repaired.match(/\{/g) || []).length;
-  const closeBraces = (repaired.match(/\}/g) || []).length;
-  const openBrackets = (repaired.match(/\[/g) || []).length;
-  const closeBrackets = (repaired.match(/\]/g) || []).length;
-
-  if (openBrackets > closeBrackets) {
-    repaired += ']'.repeat(openBrackets - closeBrackets);
-    steps.push(`Added ${openBrackets - closeBrackets} brackets`);
+  // 4. Close unterminated string
+  if (inString) {
+      repaired += '"';
+      steps.push("Closed unterminated string");
   }
-  if (openBraces > closeBraces) {
-    repaired += '}'.repeat(openBraces - closeBraces);
-    steps.push(`Added ${openBraces - closeBraces} braces`);
+
+  // 5. Remove trailing comma (often happens before truncation or after string closure)
+  // Check trimming white space from end first
+  const trimmedEnd = repaired.trimEnd();
+  if (trimmedEnd.endsWith(',')) {
+      repaired = trimmedEnd.slice(0, -1);
+      steps.push("Removed trailing comma");
+  }
+
+  // 6. Close open containers
+  while (stack.length > 0) {
+      const closer = stack.pop();
+      repaired += closer;
+      steps.push(`Added '${closer}'`);
   }
 
   return { repairedText: repaired, repairSteps: steps };
 }
 
 /**
- * スキーマ遵守のJSONパース
+ * 従来の非推奨パーサー（互換性のため維持）
  */
 export function safeJsonParse<T>(text: string, source: string): { value: T | null; error?: string } {
   if (!text) return { value: null, error: "Empty response" };
   
   try {
-    // まずはそのままパース
     return { value: JSON.parse(text) as T };
   } catch (e1) {
     try {
-      // 修復を試みる
       const { repairedText } = repairTruncatedJson(text);
       return { value: JSON.parse(repairedText) as T };
     } catch (e2: any) {
-      console.error(`JSON Parse Error [${source}]:`, e2.message, "Text preview:", text.slice(-100));
+      console.error(`JSON Parse Error [${source}]:`, e2.message);
       return { value: null, error: e2.message };
     }
+  }
+}
+
+/**
+ * Zodを使用した堅牢なバリデーション付きパース
+ */
+export function parseWithSchema<T>(
+  text: string, 
+  schema: z.ZodType<T>, 
+  source: string,
+  fallback?: T
+): T {
+  if (!text && fallback !== undefined) return fallback;
+  if (!text) throw new Error("Empty response from AI");
+
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    try {
+      const { repairedText } = repairTruncatedJson(text);
+      json = JSON.parse(repairedText);
+    } catch (finalError) {
+      console.error(`[${source}] JSON Parse Fatal:`, text.slice(0, 200));
+      if (fallback !== undefined) return fallback;
+      throw new Error(`JSON Parse Failed: ${source}`);
+    }
+  }
+
+  const result = schema.safeParse(json);
+  
+  if (result.success) {
+    return result.data;
+  } else {
+    console.warn(`[${source}] Schema Validation Failed:`, result.error.format());
+    // バリデーション失敗時も、フォールバックがあればそれを返す
+    if (fallback !== undefined) return fallback;
+    throw new Error(`Schema Validation Failed: ${source}`);
   }
 }
 
@@ -137,35 +197,34 @@ export async function handleGeminiError<T>(
   try {
     return await operation();
   } catch (error: any) {
+    let msg = error.message || "AI通信エラー";
+    
+    // Customize user-facing error messages for common auth/rate issues
+    if (error.status === 403) {
+      msg = "権限エラー(403): APIキーが正しくないか、モデルへのアクセス権がありません。";
+    } else if (error.status === 404) {
+      msg = "モデルが見つかりません(404): 指定されたモデルが利用できない可能性があります。";
+    } else if (error.status === 429) {
+      msg = "リクエスト上限(429): APIの利用制限に達しました。しばらく待って再試行してください。";
+    } else if (error.message?.includes('API_KEY')) {
+      msg = "APIキーの設定エラー: 環境変数を確認してください。";
+    }
+
     if (logCallback) {
-      const msg = error.message || "AI通信エラー";
       logCallback('error', source as any, msg);
     }
     throw error;
   }
 }
 
+// Deprecated: Use runGeminiRequest internal retry mechanism
 export async function withRetry<T>(
   operation: () => Promise<T>,
   source: string,
   logCallback: LogCallback,
   maxRetries = 3
 ): Promise<T> {
-  let lastError: any;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await operation();
-    } catch (error: any) {
-      lastError = error;
-      if (error.status === 429 || error.message.includes("429")) {
-        const delay = Math.pow(2, i) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
-      throw error; 
-    }
-  }
-  throw lastError;
+  return await operation(); 
 }
 
 export function trackUsage(

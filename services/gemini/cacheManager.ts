@@ -2,6 +2,7 @@
 import { StoryProject, LogCallback } from "../../types";
 import { getClient } from "./core";
 import { PromptBuilder } from "./promptBuilder";
+import { AI_MODELS } from "../../constants";
 
 interface CacheEntry {
   name: string;
@@ -18,7 +19,7 @@ class CacheManager {
   // Cache TTL in seconds (e.g., 60 minutes).
   private readonly TTL_SECONDS = 3600;
   // The model compatible with the cache (must match generation model)
-  private readonly MODEL_NAME = 'gemini-3-pro-preview';
+  private readonly MODEL_NAME = AI_MODELS.REASONING;
 
   /**
    * Retrieves an active cache name or creates a new one if stale/missing.

@@ -1,664 +1,109 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { BibleIssue, SystemLog } from '../types';
-import { analyzeBibleIntegrity, maintainSummaryBuffer } from '../services/geminiService';
-import { 
-  useMetadata, useMetadataDispatch, useBibleDispatch, useManuscript, 
-  useNotificationDispatch, useNotifications, useUIDispatch,
-  useCharacters, useWorldFoundation, usePlotPlan, useKnowledge, useBible
-} from '../contexts/StoryContext';
-import * as Actions from '../store/actions';
-import { 
-  Activity, Terminal, Trash2, ShieldCheck, Zap, 
-  ShieldAlert, Database,
-  BrainCircuit, Sparkles,
-  HardDrive, Image as ImageIcon, ThumbsUp, MessageSquareShare, ArrowUpRight, ArrowDownLeft, Cpu, BarChart3, AlertTriangle, Loader2, CloudLightning, Search
-} from 'lucide-react';
-import { getAllAssetMetadata, deletePortrait, getPortrait } from '../services/storageService';
-import { translateSafetyCategory } from '../services/gemini/utils';
-import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
-  PieChart, Pie, Cell, BarChart, Bar, Legend
-} from 'recharts';
-import { ViewMode, AssetMetadata } from '../types';
-import { Card, Button, SectionHeader, Badge } from './ui/DesignSystem';
+import React from 'react';
+import { BrainCircuit, ShieldCheck, Home, History } from 'lucide-react';
+import { Button, Styles, Txt } from './ui/DesignSystem';
+import { t } from '../utils/i18n';
+import { useDashboardLogic } from '../hooks/useDashboardLogic';
+
+// Sub-components
+import { DashboardMetrics } from './dashboard/DashboardMetrics';
+import { ResourceAnalysis } from './dashboard/ResourceAnalysis';
+import { StoryProgress } from './dashboard/StoryProgress';
+import { SafetyMonitor } from './dashboard/SafetyMonitor';
+import { AssetLibrary } from './dashboard/AssetLibrary';
+import { AtelierLog } from './dashboard/AtelierLog';
+import { HistoryModal } from './HistoryModal';
 
 interface Props {
   onOpenPublication: () => void;
+  onExit: () => void;
 }
 
-const DashboardView: React.FC<Props> = ({ onOpenPublication }) => {
-  const meta = useMetadata();
-  const { id: projectId, tokenUsage, preferences, violationCount, violationHistory } = meta;
-  const metaDispatch = useMetadataDispatch();
-  const bibleDispatch = useBibleDispatch();
-  const chapters = useManuscript();
-  const uiDispatch = useUIDispatch();
-  const { logs } = useNotifications();
-  const { addLog, dispatch: notifDispatch } = useNotificationDispatch();
-
-  const characters = useCharacters();
-  const foundation = useWorldFoundation();
-  const plot = usePlotPlan();
-  const knowledge = useKnowledge();
-  const bible = useBible();
-
-  const [isScanning, setIsScanning] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [logLimit, setLogLimit] = useState(30);
-  const [assets, setAssets] = useState<AssetMetadata[]>([]);
-  const [usageViewMode, setUsageViewMode] = useState<'source' | 'model' | 'architect'>('source');
-  
-  const totalTokens = useMemo(() => {
-    return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.input) || 0) + (Number(entry.output) || 0), 0);
-  }, [tokenUsage]);
-
-  const totalCachedTokens = useMemo(() => {
-    return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.cached) || 0), 0);
-  }, [tokenUsage]);
-
-  const totalInputTokens = useMemo(() => {
-    return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.input) || 0), 0);
-  }, [tokenUsage]);
-
-  const totalOutputTokens = useMemo(() => {
-    return (tokenUsage || []).reduce((acc, entry) => acc + (Number(entry.output) || 0), 0);
-  }, [tokenUsage]);
-
-  // 全体のキャッシュ効率
-  const cacheEfficiency = useMemo(() => {
-    if (totalInputTokens === 0) return 0;
-    return Math.round((totalCachedTokens / totalInputTokens) * 100);
-  }, [totalInputTokens, totalCachedTokens]);
-
-  const usageBySource = useMemo(() => {
-    const raw = (tokenUsage || []).reduce((acc, entry) => {
-      const src = entry.source || 'Unknown';
-      // Architectの内訳モードでない場合は、Architect系をまとめることも可能だが、
-      // ここでは詳細なSourceを表示する（既存動作）
-      if (!acc[src]) acc[src] = { label: src, input: 0, cached: 0, output: 0, total: 0 };
-      
-      const totalInput = Number(entry.input) || 0;
-      const cached = Number(entry.cached) || 0;
-      const netInput = Math.max(0, totalInput - cached);
-      const output = Number(entry.output) || 0;
-
-      acc[src].input += netInput;
-      acc[src].cached += cached;
-      acc[src].output += output;
-      acc[src].total += totalInput + output;
-      return acc;
-    }, {} as Record<string, { label: string; input: number; cached: number; output: number; total: number }>);
-
-    return (Object.values(raw) as Array<{ label: string; input: number; cached: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
-  }, [tokenUsage]);
-
-  const usageByModel = useMemo(() => {
-    const raw = (tokenUsage || []).reduce((acc, entry) => {
-      let modelLabel = entry.model || 'Unknown';
-      if (modelLabel.includes('pro')) modelLabel = 'Gemini Pro';
-      else if (modelLabel.includes('flash') && !modelLabel.includes('image')) modelLabel = 'Gemini Flash';
-      else if (modelLabel.includes('image')) modelLabel = 'Image Gen';
-      else if (modelLabel.includes('tts')) modelLabel = 'Voice (TTS)';
-
-      if (!acc[modelLabel]) acc[modelLabel] = { label: modelLabel, input: 0, cached: 0, output: 0, total: 0 };
-      
-      const totalInput = Number(entry.input) || 0;
-      const cached = Number(entry.cached) || 0;
-      const netInput = Math.max(0, totalInput - cached);
-      const output = Number(entry.output) || 0;
-
-      acc[modelLabel].input += netInput;
-      acc[modelLabel].cached += cached;
-      acc[modelLabel].output += output;
-      acc[modelLabel].total += totalInput + output;
-      return acc;
-    }, {} as Record<string, { label: string; input: number; cached: number; output: number; total: number }>);
-
-    return (Object.values(raw) as Array<{ label: string; input: number; cached: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
-  }, [tokenUsage]);
-
-  // Architect専用の内訳分析
-  const architectUsageBreakdown = useMemo(() => {
-    const raw = (tokenUsage || []).filter(entry => entry.source.startsWith('Architect/')).reduce((acc, entry) => {
-      // "Architect/Chat(Cached)" -> "Chat (Cached)"
-      let label = entry.source.replace('Architect/', '');
-      
-      // グルーピングの調整
-      if (label.startsWith('Extraction:')) label = 'Extraction'; // 個別の抽出タイプをまとめる
-      else if (label.includes('Chat')) label = 'Chat & Reason';
-      else if (label.includes('Memory')) label = 'Memory';
-      else if (label.includes('Intent')) label = 'Intent';
-      else if (label.includes('Whisper')) label = 'Whisper';
-
-      if (!acc[label]) acc[label] = { label: label, input: 0, cached: 0, output: 0, total: 0 };
-      
-      const totalInput = Number(entry.input) || 0;
-      const cached = Number(entry.cached) || 0;
-      const netInput = Math.max(0, totalInput - cached);
-      const output = Number(entry.output) || 0;
-
-      acc[label].input += netInput;
-      acc[label].cached += cached;
-      acc[label].output += output;
-      acc[label].total += totalInput + output;
-      return acc;
-    }, {} as Record<string, { label: string; input: number; cached: number; output: number; total: number }>);
-
-    return (Object.values(raw) as Array<{ label: string; input: number; cached: number; output: number; total: number }>).sort((a, b) => b.total - a.total);
-  }, [tokenUsage]);
-
-  const architectCacheEfficiency = useMemo(() => {
-    const archEntries = (tokenUsage || []).filter(e => e.source.startsWith('Architect/'));
-    const input = archEntries.reduce((acc, e) => acc + (Number(e.input) || 0), 0);
-    const cached = archEntries.reduce((acc, e) => acc + (Number(e.cached) || 0), 0);
-    if (input === 0) return 0;
-    return Math.round((cached / input) * 100);
-  }, [tokenUsage]);
-
-  const activeUsageData = usageViewMode === 'source' ? usageBySource 
-                        : usageViewMode === 'model' ? usageByModel 
-                        : architectUsageBreakdown;
-
-  const currentEfficiency = usageViewMode === 'architect' ? architectCacheEfficiency : cacheEfficiency;
-
-  useEffect(() => {
-    const fetchAssets = async () => {
-      try {
-        const meta = await getAllAssetMetadata(projectId);
-        setAssets(meta);
-      } catch (e) {
-        console.error("Failed to load asset metadata", e);
-      }
-    };
-    fetchAssets();
-  }, [projectId]);
-
-  const totalAssetSize = useMemo(() => {
-    return assets.reduce((acc, a) => acc + (a.size || 0), 0);
-  }, [assets]);
-
-  const progressData = useMemo(() => {
-    return chapters.map((ch, i) => ({
-      name: `第${i+1}章`,
-      wordCount: ch.wordCount || 0,
-      status: ch.status
-    }));
-  }, [chapters]);
-
-  const roleDistribution = useMemo(() => {
-    const counts = characters.reduce((acc, char) => {
-      acc[char.profile.role] = (acc[char.profile.role] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [characters]);
-
-  const handleDeleteAsset = async (assetId: string) => {
-    uiDispatch(Actions.openDialog({
-      isOpen: true,
-      type: 'confirm',
-      title: 'アセットの削除',
-      message: 'この肖像画データを削除しますか？プロジェクトからは削除されませんが、表示されなくなります。',
-      onConfirm: async () => {
-        await deletePortrait(assetId);
-        setAssets(prev => prev.filter(a => a.id !== assetId));
-        addLog('info', 'Artist', 'アセットを削除しました。');
-      }
-    }));
-  };
-
-  const handleIntegrityScan = async () => {
-    if (isScanning) return;
-    setIsScanning(true);
-    addLog('info', 'Architect', '物語設定の整合性をスキャン中...');
-    try {
-      const issues = await analyzeBibleIntegrity({ meta, bible, chapters, sync: { history: [] } } as any, (usage: any) => metaDispatch(Actions.trackUsage(usage)), addLog);
-      bibleDispatch(Actions.updateBible({ integrityIssues: issues }));
-      if (issues.length === 0) addLog('success', 'Architect', '不整合は見つかりませんでした。完璧な理です。');
-      else addLog('error', 'Architect', `${issues.length}件の潜在的な問題が発見されました。`);
-    } catch (e: any) {
-      addLog('error', 'Architect', 'スキャンに失敗しました。', e.message);
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-  const handleMaintainSummary = async () => {
-    if (isSummarizing) return;
-    setIsSummarizing(true);
-    addLog('info', 'Architect', 'コンテキスト・バッファを最適化中...');
-    try {
-      const newSummary = await maintainSummaryBuffer({ bible } as any, (usage: any) => metaDispatch(Actions.trackUsage(usage)), addLog);
-      bibleDispatch(Actions.updateBible({ summaryBuffer: newSummary, lastSummaryUpdate: Date.now() }));
-      addLog('success', 'Architect', 'コンテキストが最新の状態に統合されました。');
-    } catch (e: any) {
-      addLog('error', 'Architect', '要約に失敗しました。');
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
-  const handleConsultIssue = (issue: BibleIssue) => {
-    const message = `不整合の可能性について相談があります：${issue.description}`;
-    uiDispatch(Actions.setPendingMsg(message));
-    uiDispatch(Actions.setView(ViewMode.PLOTTER));
-  };
-
-  const handleIssueFeedback = (issue: BibleIssue, feedback: 'Useful' | 'FalsePositive' | 'Disabled') => {
-    if (feedback === 'Disabled') {
-      const currentDisabled = preferences.disabledLinterRules || [];
-      metaDispatch(Actions.updatePreferences({ 
-        disabledLinterRules: Array.from(new Set([...currentDisabled, issue.ruleId])) 
-      }));
-      const nextIssues = knowledge.integrityIssues.filter(i => i.ruleId !== issue.ruleId);
-      bibleDispatch(Actions.updateBible({ integrityIssues: nextIssues }));
-      addLog('info', 'System', `判定ルール "${issue.ruleId}" を無効化しました。`);
-    } else {
-      const nextIssues = knowledge.integrityIssues.map(i => i.id === issue.id ? { ...i, feedback } : i);
-      bibleDispatch(Actions.updateBible({ integrityIssues: nextIssues }));
-      if (feedback === 'FalsePositive') addLog('info', 'System', '誤検知を記録しました。');
-    }
-  };
-
-  const visibleLogs = useMemo(() => logs.slice(0, logLimit), [logs, logLimit]);
-
-  const COLORS = ['#d68a6d', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
-  const MODEL_COLORS: Record<string, string> = {
-    'Gemini Pro': '#d68a6d',
-    'Gemini Flash': '#10b981',
-    'Image Gen': '#6366f1',
-    'Voice (TTS)': '#f59e0b',
-    'Unknown': '#57534e'
-  };
-  const ARCHITECT_COLORS: Record<string, string> = {
-    'Chat & Reason': '#d68a6d', // Orange
-    'Extraction': '#8b5cf6',    // Violet
-    'Intent': '#f59e0b',        // Amber
-    'Memory': '#10b981',        // Emerald
-    'Whisper': '#06b6d4',       // Cyan
-  };
-
-  const getBarColor = (label: string, index: number) => {
-    if (usageViewMode === 'model') return MODEL_COLORS[label] || COLORS[index % COLORS.length];
-    if (usageViewMode === 'architect') return ARCHITECT_COLORS[label] || COLORS[index % COLORS.length];
-    return COLORS[index % COLORS.length];
-  };
+const DashboardView: React.FC<Props> = ({ onOpenPublication, onExit }) => {
+  const { metrics, data, ui, actions } = useDashboardLogic();
 
   return (
     <div className="p-4 md:p-12 h-full overflow-y-auto custom-scrollbar bg-stone-900/20 pb-32 md:pb-12 pt-safe">
       <div className="max-w-[1400px] mx-auto space-y-6 md:space-y-10">
+        
+        {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 animate-fade-in px-2">
-            <div className="space-y-1 md:space-y-4">
-              <div className="flex items-center gap-3"><div className="w-6 md:w-8 h-[1px] bg-orange-400/30"></div><span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] text-orange-400">Story Vitality</span></div>
-              <h2 className="text-3xl md:text-6xl font-display font-black text-white italic tracking-tighter">物語の工房</h2>
+            <div className="space-y-1 md:space-y-4 w-full md:w-auto">
+              <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3"><div className="w-6 md:w-8 h-[1px] bg-orange-400/30"></div><Txt variant="label" className="text-orange-400">Story Vitality</Txt></div>
+                  <button onClick={onExit} className={`md:hidden flex items-center gap-2 px-3 py-1.5 bg-stone-800/50 rounded-full border border-white/5 ${Styles.text.label} hover:bg-stone-800 hover:text-white transition-colors`}>
+                     <Home size={12} /> {t('dashboard.exit', ui.lang)}
+                  </button>
+              </div>
+              <h2 className={Styles.text.title}>{t('dashboard.title', ui.lang)}</h2>
             </div>
-            <div className="flex gap-3 w-full md:w-auto">
-              <Button variant="secondary" onClick={handleMaintainSummary} isLoading={isSummarizing} icon={<BrainCircuit size={14} className="text-orange-400" />} className="flex-1 md:flex-none">
-                記憶整理
+            <div className="flex gap-3 w-full md:w-auto overflow-x-auto no-scrollbar">
+              <Button variant="secondary" onClick={actions.handleMaintainSummary} isLoading={ui.isSummarizing} icon={<BrainCircuit size={14} className="text-orange-400" />} className="flex-1 md:flex-none">
+                {t('dashboard.memory_maintenance', ui.lang)}
               </Button>
-              <Button variant="primary" onClick={handleIntegrityScan} isLoading={isScanning} icon={<ShieldCheck size={14} />} className="flex-1 md:flex-none px-4 md:px-8">
-                整合性分析
+              <Button variant="secondary" onClick={() => actions.setShowHistory(true)} icon={<History size={14} className="text-stone-400" />} className="flex-1 md:flex-none">
+                {t('dashboard.history', ui.lang)}
+              </Button>
+              <Button variant="primary" onClick={actions.handleIntegrityScan} isLoading={ui.isScanning} icon={<ShieldCheck size={14} />} className="flex-1 md:flex-none px-4 md:px-8">
+                {t('dashboard.integrity_scan', ui.lang)}
               </Button>
             </div>
         </header>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 px-1">
-            <StatCard icon={<Activity size={20}/>} label="トークン累積" value={totalTokens.toLocaleString()} unit="T" color="text-emerald-400" />
-            <StatCard icon={<CloudLightning size={20}/>} label={usageViewMode === 'architect' ? "Architect Cache率" : "全体キャッシュ節約率"} value={currentEfficiency.toString()} unit="%" color="text-sky-400" />
-            <StatCard icon={<HardDrive size={20}/>} label="アセット容量" value={(totalAssetSize / 1024 / 1024).toFixed(1)} unit="MB" color="text-blue-400" />
-            <StatCard icon={<Sparkles size={20}/>} label="執筆完了" value={chapters.filter(c => c.status === 'Polished').length.toString()} unit="C" color="text-purple-400" />
-        </div>
+        {/* Key Metrics */}
+        <DashboardMetrics metrics={metrics} lang={ui.lang} />
 
-        {/* トークン消費内訳セクション */}
-        <Card variant="glass" padding="lg" className="space-y-8 mx-1 min-w-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <SectionHeader icon={<Database size={20} className="text-emerald-400" />} title="リソース消費分析" subtitle="コンテキストキャッシュの効果と消費内訳。" />
-            
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="p-1.5 bg-stone-950/60 rounded-xl border border-white/5 flex gap-1 w-full md:w-auto">
-                <Button 
-                   variant={usageViewMode === 'source' ? 'secondary' : 'ghost'} 
-                   size="sm" 
-                   icon={<Database size={12}/>} 
-                   onClick={() => setUsageViewMode('source')} 
-                   className={usageViewMode === 'source' ? "bg-stone-800 text-white shadow-lg" : ""}
-                >
-                  機能別
-                </Button>
-                <Button 
-                   variant={usageViewMode === 'model' ? 'primary' : 'ghost'} 
-                   size="sm" 
-                   icon={<Cpu size={12}/>} 
-                   onClick={() => setUsageViewMode('model')}
-                   className={usageViewMode === 'model' ? "shadow-lg" : ""}
-                >
-                  モデル別
-                </Button>
-                <Button 
-                   variant={usageViewMode === 'architect' ? 'indigo' : 'ghost'} 
-                   size="sm" 
-                   icon={<BrainCircuit size={12}/>} 
-                   onClick={() => setUsageViewMode('architect')}
-                   className={usageViewMode === 'architect' ? "shadow-lg" : ""}
-                >
-                  Architect分析
-                </Button>
-              </div>
+        {/* Resource Analysis */}
+        <ResourceAnalysis 
+          data={data.activeUsageData} 
+          viewMode={ui.usageViewMode} 
+          onViewModeChange={actions.setUsageViewMode}
+          lang={ui.lang} 
+        />
 
-              <div className="flex gap-4 self-end md:self-center">
-                <div className="flex flex-col items-end">
-                  <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft size={10} className="text-emerald-500"/> Net Input</span>
-                  <span className="text-base md:text-lg font-mono font-black text-emerald-400">
-                    {usageViewMode === 'architect' 
-                      ? activeUsageData.reduce((acc, i) => acc + i.input, 0).toLocaleString()
-                      : (totalInputTokens - totalCachedTokens).toLocaleString()
-                    }
-                  </span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><CloudLightning size={10} className="text-sky-400"/> Cached</span>
-                  <span className="text-base md:text-lg font-mono font-black text-sky-400">
-                    {usageViewMode === 'architect'
-                      ? activeUsageData.reduce((acc, i) => acc + i.cached, 0).toLocaleString()
-                      : totalCachedTokens.toLocaleString()
-                    }
-                  </span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[8px] font-black text-stone-600 uppercase tracking-widest flex items-center gap-1"><ArrowUpRight size={10} className="text-orange-400"/> Output</span>
-                  <span className="text-base md:text-lg font-mono font-black text-orange-400">
-                    {usageViewMode === 'architect'
-                      ? activeUsageData.reduce((acc, i) => acc + i.output, 0).toLocaleString()
-                      : totalOutputTokens.toLocaleString()
-                    }
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* Progress & Roles */}
+        <StoryProgress 
+          progressData={data.progressData} 
+          roleDistribution={data.roleDistribution} 
+          totalWordCount={metrics.totalWordCount}
+          lang={ui.lang}
+        />
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-8 h-[250px] md:h-[300px] min-w-0 relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={activeUsageData} layout="vertical" margin={{ left: 0, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" horizontal={true} vertical={false} />
-                  <XAxis type="number" hide />
-                  <YAxis 
-                    dataKey="label" 
-                    type="category" 
-                    stroke="#57534e" 
-                    fontSize={10} 
-                    width={90} 
-                    tickLine={false} 
-                    axisLine={false} 
-                  />
-                  <Tooltip 
-                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                    contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                    itemStyle={{ fontSize: '11px' }}
-                  />
-                  <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
-                  <Bar dataKey="input" name="Net Input" stackId="a" fill="#10b981" barSize={20} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="cached" name="Cached (Saved)" stackId="a" fill="#38bdf8" barSize={20} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="output" name="Output" stackId="a" fill="#d68a6d" radius={[0, 4, 4, 0]} barSize={20} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        {/* Safety */}
+        <SafetyMonitor 
+          violationCount={metrics.violationCount} 
+          violationHistory={data.violationHistory} 
+          lang={ui.lang} 
+        />
 
-            <div className="lg:col-span-4 space-y-2 md:space-y-3 max-h-[250px] md:max-h-[300px] overflow-y-auto no-scrollbar pr-2 min-w-0">
-              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest border-b border-white/5 pb-2">
-                {usageViewMode === 'architect' ? 'Architect Task Detail' : '消費詳細'}
-              </div>
-              {activeUsageData.length === 0 ? (
-                <div className="text-stone-600 text-[10px] italic py-4 text-center">データがありません</div>
-              ) : (
-                activeUsageData.map((item, idx) => (
-                  <div key={idx} className="flex flex-col p-2.5 md:p-3 bg-stone-950/40 rounded-xl border border-white/5 gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getBarColor(item.label, idx) }} />
-                      <span className="text-[10px] font-black text-stone-300 uppercase truncate">{item.label}</span>
-                    </div>
-                    <div className="flex justify-between items-center pl-4">
-                       <span className="text-[8px] text-stone-500">Cached: {Math.round((item.cached / (item.input + item.cached || 1)) * 100)}%</span>
-                       <span className="text-[10px] font-mono text-stone-100">{item.total.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </Card>
+        {/* Asset Library */}
+        <AssetLibrary 
+          assets={data.assets} 
+          onDeleteAsset={actions.handleDeleteAsset} 
+          lang={ui.lang} 
+        />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-1">
-            <Card variant="glass" padding="lg" className="lg:col-span-2 space-y-6 h-[300px] md:h-[400px] flex flex-col min-w-0">
-              <div className="flex items-center justify-between">
-                <SectionHeader icon={<BarChart3 size={16} className="text-orange-400" />} title="文字数推移" />
-                <span className="text-[9px] font-mono text-stone-700">{chapters.reduce((a,c) => a+(c.wordCount||0),0).toLocaleString()} c</span>
-              </div>
-              <div className="flex-1 w-full min-h-0 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={progressData}>
-                    <defs>
-                      <linearGradient id="colorWords" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#d68a6d" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#d68a6d" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                    <XAxis dataKey="name" stroke="#57534e" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#57534e" fontSize={10} tickLine={false} axisLine={false} hide={window.innerWidth < 768} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                      itemStyle={{ color: '#d68a6d', fontSize: '12px' }}
-                    />
-                    <Area type="monotone" dataKey="wordCount" stroke="#d68a6d" strokeWidth={2} fillOpacity={1} fill="url(#colorWords)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
+        {/* Logs */}
+        <AtelierLog 
+          logs={data.logs} 
+          summaryBuffer={data.summaryBuffer} 
+          onClearLogs={actions.handleClearLogs} 
+          lang={ui.lang} 
+        />
 
-            <Card variant="glass" padding="lg" className="space-y-6 h-[300px] md:h-[400px] flex flex-col min-w-0">
-              <SectionHeader icon={<Activity size={16} className="text-indigo-400" />} title="役割分布" />
-              <div className="flex-1 w-full flex items-center justify-center min-h-0 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={roleDistribution}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {roleDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-2 overflow-y-auto no-scrollbar">
-                {roleDistribution.slice(0, 4).map((r, i) => (
-                  <div key={r.name} className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-[8px] md:text-[9px] font-black text-stone-500 uppercase truncate">{r.name}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-           <Card variant="glass" padding="lg" className="lg:col-span-4 space-y-6 mx-1 border border-amber-500/10 min-w-0">
-              <SectionHeader icon={<AlertTriangle size={20} className="text-amber-500" />} title="Safety Status" />
-              
-              <div className="flex items-center justify-center py-2 md:py-4">
-                 <div className={`relative w-20 h-20 md:w-24 md:h-24 rounded-full border-4 flex items-center justify-center ${violationCount >= 4 ? 'border-rose-500 bg-rose-500/10' : violationCount > 0 ? 'border-amber-500 bg-amber-500/10' : 'border-emerald-500 bg-emerald-500/10'}`}>
-                    <div className="text-center">
-                       <div className="text-xl md:text-2xl font-black italic">{violationCount}</div>
-                       <div className="text-[7px] font-black uppercase">Violations</div>
-                    </div>
-                 </div>
-              </div>
-              <p className="text-[11px] text-stone-500 font-serif leading-relaxed text-center italic">
-                {violationCount >= 4 ? "AI機能が一部制限されています。" : violationCount > 0 ? "不適切な表現が検知されました。" : "健全な執筆環境です。"}
-              </p>
-           </Card>
-           
-           <Card variant="glass" padding="lg" className="lg:col-span-8 space-y-4 mx-1 overflow-hidden h-auto lg:h-[300px] flex flex-col min-w-0">
-              <div className="text-[9px] font-black text-stone-600 uppercase tracking-widest">安全ポリシー検知履歴</div>
-              <div className="flex-1 overflow-y-auto no-scrollbar space-y-3">
-                 {violationHistory && violationHistory.length > 0 ? violationHistory.map((v, i) => (
-                    <div key={i} className="p-3 md:p-4 bg-stone-950/40 rounded-2xl border border-white/5 flex items-center justify-between gap-4">
-                       <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                             <Badge color="amber">{translateSafetyCategory(v.category)}</Badge>
-                             <span className="text-[7px] md:text-[8px] font-mono text-stone-700">{new Date(v.timestamp).toLocaleTimeString()}</span>
-                          </div>
-                          <p className="text-[10px] text-stone-500 italic truncate">"{v.inputSnippet}..."</p>
-                       </div>
-                    </div>
-                 )) : (
-                    <div className="h-full flex items-center justify-center text-stone-700 italic font-serif text-xs py-8">検知履歴はありません。</div>
-                 )}
-              </div>
-           </Card>
-        </div>
-
-        {knowledge.integrityIssues && knowledge.integrityIssues.length > 0 && (
-          <div className="space-y-4 md:space-y-6">
-            <div className="flex items-center gap-3 px-2">
-              <ShieldAlert size={20} className="text-rose-500"/>
-              <h3 className="text-xl font-display font-black text-white italic tracking-tight uppercase">整合性アラート</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 animate-fade-in px-1">
-              {knowledge.integrityIssues.filter(i => i.feedback !== 'FalsePositive').map(issue => (
-                <Card key={issue.id} variant="glass" padding="lg" className="border border-rose-500/20 space-y-5 relative overflow-hidden group">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <Badge color={issue.severity === 'High' ? 'rose' : 'orange'}>{issue.severity}</Badge>
-                    </div>
-                  </div>
-                  <p className="text-sm md:text-base font-serif-bold text-stone-200 italic leading-relaxed">"{issue.description}"</p>
-                  <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 space-y-1">
-                     <p className="text-[11px] text-stone-400 font-serif italic">{issue.suggestion}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" size="xs" onClick={() => handleConsultIssue(issue)} icon={<MessageSquareShare size={12} />} className="flex-1 text-orange-400">
-                      相談
-                    </Button>
-                    <Button variant="secondary" size="xs" onClick={() => handleIssueFeedback(issue, 'Useful')} icon={<ThumbsUp size={12}/>} />
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <Card variant="glass" padding="lg" className="space-y-6 md:space-y-8 mx-1 min-w-0">
-          <SectionHeader icon={<ImageIcon size={20} className="text-orange-400" />} title="アセットライブラリ" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 md:gap-4">
-            {assets.length === 0 ? (
-              <div className="col-span-full py-8 text-center text-stone-700 italic font-serif border border-dashed border-stone-800 rounded-2xl">
-                アセットはありません。
-              </div>
-            ) : (
-              assets.map(asset => (
-                <AssetThumbnail key={asset.id} asset={asset} onDelete={() => handleDeleteAsset(asset.id)} />
-              ))
-            )}
-          </div>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10 px-1">
-            <Card variant="glass" padding="lg" className="lg:col-span-8 flex flex-col h-[400px] md:h-[600px] shadow-2xl relative min-w-0">
-                <SectionHeader 
-                  icon={<Terminal size={18} className="text-orange-400" />} 
-                  title="アトリエ日誌" 
-                  className="mb-6 shrink-0"
-                  action={<button onClick={() => notifDispatch(Actions.clearLogs())} className="p-2 hover:bg-stone-800 rounded-lg text-stone-700 hover:text-rose-400 transition-colors"><Trash2 size={16} /></button>}
-                />
-                
-                <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pb-6">
-                    {visibleLogs.map(log => <LogItem key={log.id} log={log} />)}
-                </div>
-            </Card>
-
-            <Card variant="glass" padding="lg" className="lg:col-span-4 flex flex-col justify-between h-auto md:h-full min-h-[200px] relative overflow-hidden shadow-2xl min-w-0">
-                <BrainCircuit size={100} className="absolute -bottom-4 -right-4 text-white/[0.02] rotate-12" />
-                <div className="space-y-4">
-                  <span className="text-[9px] font-black text-stone-600 uppercase tracking-widest">現在の要約バッファ</span>
-                  <p className="text-[11px] text-stone-400 font-serif leading-relaxed italic line-clamp-6 md:line-clamp-none">
-                    {foundation.summaryBuffer || "記憶を整理してください。"}
-                  </p>
-                </div>
-            </Card>
-        </div>
       </div>
+      
+      <HistoryModal 
+        isOpen={ui.showHistory}
+        history={data.history}
+        currentRev={data.headRev}
+        isLoading={ui.isLoadingHistory}
+        onClose={() => actions.setShowHistory(false)}
+        onRestore={actions.handleRestoreRevision}
+        lang={ui.lang}
+      />
     </div>
   );
 };
-
-const AssetThumbnail: React.FC<{ asset: AssetMetadata; onDelete: () => void | Promise<void> }> = ({ asset, onDelete }) => {
-  const [data, setData] = useState<string | null>(null);
-
-  useEffect(() => {
-    getPortrait(asset.id).then(setData);
-  }, [asset.id]);
-
-  return (
-    <div className="relative group aspect-square rounded-xl overflow-hidden bg-stone-900 border border-white/5 shadow-lg">
-      {data ? (
-        <img src={data} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="portrait asset" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center text-stone-800">
-          <Loader2 size={14} className="animate-spin" />
-        </div>
-      )}
-      <div className="absolute inset-0 bg-stone-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-        <button onClick={onDelete} className="p-2 bg-rose-600 text-white rounded-full hover:bg-rose-500 transition-colors shadow-xl">
-          <Trash2 size={12} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-interface LogItemProps {
-  log: SystemLog;
-}
-
-const LogItem = React.memo(({ log }: LogItemProps) => (
-  <Card variant="glass-bright" padding="sm" className={`border-l-2 animate-fade-in ${log.type === 'error' ? 'border-l-rose-500' : log.type === 'success' ? 'border-l-emerald-500' : 'border-l-orange-400/50'}`}>
-      <div className="flex gap-3 items-start">
-         <div className="px-1.5 py-0.5 rounded-[4px] text-[7px] font-black uppercase bg-stone-800 text-stone-500 shrink-0">{log.source}</div>
-         <p className="text-[11px] font-serif text-stone-200 leading-relaxed">{log.message}</p>
-      </div>
-  </Card>
-));
-
-interface StatCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  unit: string;
-  color: string;
-}
-
-const StatCard = React.memo(({ icon, label, value, unit, color }: StatCardProps) => (
-  <Card variant="glass" padding="md" className="h-24 md:h-40 flex flex-col justify-between relative overflow-hidden group min-w-0">
-    <div className="absolute top-2 right-2 md:top-8 md:right-8 text-white/5 group-hover:text-white/10 transition-colors scale-75 md:scale-100">{icon}</div>
-    <span className="text-[7px] md:text-[9px] font-black text-stone-600 uppercase tracking-widest truncate">{label}</span>
-    <div className="flex items-baseline gap-1">
-        <span className={`text-lg md:text-4xl font-display font-black italic ${color}`}>{value}</span>
-        <span className="text-[6px] md:text-[8px] font-black text-stone-700 uppercase font-mono">{unit}</span>
-    </div>
-  </Card>
-));
 
 export default React.memo(DashboardView);

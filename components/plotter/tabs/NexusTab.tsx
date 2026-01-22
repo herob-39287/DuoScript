@@ -1,27 +1,29 @@
 
 import React, { useState } from 'react';
-import { useCharacters, useNotificationDispatch, useBible, useBibleDispatch, useMetadataDispatch, useMetadata, useManuscript, useNeuralSync } from '../../../contexts/StoryContext';
+import { useNotificationDispatch, useBible, useBibleDispatch, useMetadataDispatch, useMetadata, useManuscript, useNeuralSync, useKnowledge } from '../../../contexts/StoryContext';
 import { simulateBranch } from '../../../services/geminiService';
 import * as Actions from '../../../store/actions';
-import { NexusBranch } from '../../../types';
 import { Card, Button, Badge } from '../../ui/DesignSystem';
-import { GitBranch, Sparkles, Clock, AlertTriangle, ArrowRight, Trash2, RefreshCw } from 'lucide-react';
+import { GitBranch, Sparkles, Clock, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 
 export const NexusTab: React.FC = () => {
-  const bible = useBible();
+  const knowledge = useKnowledge();
+  const bible = useBible(); // Full bible required for simulation context building in simulateBranch service
   const bibleDispatch = useBibleDispatch();
   const meta = useMetadata();
   const metaDispatch = useMetadataDispatch();
   const chapters = useManuscript();
   const sync = useNeuralSync();
-  const characters = useCharacters();
   const { addLog } = useNotificationDispatch();
 
   const [hypothesis, setHypothesis] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
-  const activeBranch = bible.nexusBranches.find(b => b.id === selectedBranchId) || bible.nexusBranches[0];
+  if (!knowledge) return null;
+
+  const branches = knowledge.nexusBranches || [];
+  const activeBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
 
   const handleSimulate = async () => {
     if (!hypothesis.trim() || isSimulating) return;
@@ -36,7 +38,7 @@ export const NexusTab: React.FC = () => {
         addLog
       );
       
-      const newBranches = [result, ...bible.nexusBranches];
+      const newBranches = [result, ...branches];
       bibleDispatch(Actions.updateBible({ nexusBranches: newBranches }));
       setSelectedBranchId(result.id);
       setHypothesis('');
@@ -49,7 +51,7 @@ export const NexusTab: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    const updated = bible.nexusBranches.filter(b => b.id !== id);
+    const updated = branches.filter(b => b.id !== id);
     bibleDispatch(Actions.updateBible({ nexusBranches: updated }));
     if (selectedBranchId === id) setSelectedBranchId(null);
   };
@@ -89,27 +91,29 @@ export const NexusTab: React.FC = () => {
            </Card>
 
            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-              {bible.nexusBranches.length === 0 && (
+              {branches.length === 0 && (
                 <div className="text-center py-8 text-stone-600 text-[10px] italic border border-dashed border-stone-800 rounded-xl">
                   観測された分岐はありません。
                 </div>
               )}
-              {bible.nexusBranches.map(branch => (
-                <div 
+              {branches.map(branch => (
+                <button 
                   key={branch.id} 
                   onClick={() => setSelectedBranchId(branch.id)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all group relative ${selectedBranchId === branch.id ? 'bg-indigo-900/20 border-indigo-500/40 shadow-lg' : 'bg-stone-900/40 border-white/5 hover:bg-stone-800'}`}
+                  className={`w-full text-left p-3 rounded-xl border cursor-pointer transition-all group relative ${selectedBranchId === branch.id ? 'bg-indigo-900/20 border-indigo-500/40 shadow-lg' : 'bg-stone-900/40 border-white/5 hover:bg-stone-800'}`}
                 >
                    <div className="text-[8px] font-mono text-stone-500 mb-1">{new Date(branch.timestamp).toLocaleDateString()}</div>
                    <div className="text-[11px] font-bold text-stone-200 line-clamp-2 leading-relaxed">"{branch.hypothesis}"</div>
                    
-                   <button 
+                   <div 
                      onClick={(e) => { e.stopPropagation(); handleDelete(branch.id); }}
-                     className="absolute top-2 right-2 p-1.5 text-stone-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                     className="absolute top-2 right-2 p-1.5 text-stone-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+                     role="button"
+                     aria-label="Delete branch"
                    >
                      <Trash2 size={12}/>
-                   </button>
-                </div>
+                   </div>
+                </button>
               ))}
            </div>
         </div>
@@ -124,14 +128,6 @@ export const NexusTab: React.FC = () => {
                        <circle cx="250" cy="250" r="200" fill="none" stroke="#6366f1" strokeWidth="0.5" strokeDasharray="4 2" />
                        <circle cx="250" cy="250" r="150" fill="none" stroke="#d68a6d" strokeWidth="0.5" strokeDasharray="10 10" />
                     </svg>
-                    {characters.slice(0, 5).map((char, i) => {
-                       const angle = (i / 5) * 2 * Math.PI;
-                       const x = Math.cos(angle) * 200 + 250;
-                       const y = Math.sin(angle) * 200 + 250;
-                       return (
-                         <div key={char.id} className="absolute w-2 h-2 bg-stone-400 rounded-full" style={{ left: x, top: y }} />
-                       );
-                    })}
                  </div>
               </div>
 

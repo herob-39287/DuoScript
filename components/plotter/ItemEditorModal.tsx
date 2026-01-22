@@ -1,12 +1,15 @@
 
-import React, { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
-import { Button } from '../ui/DesignSystem';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Save, Sparkles, Loader2, PlusCircle, AlertTriangle } from 'lucide-react';
+import { Button, Card } from '../ui/DesignSystem';
+import { useBible, useMetadata, useManuscript, useNeuralSync, useNotificationDispatch, useMetadataDispatch, useUIDispatch } from '../../contexts/StoryContext';
+import { autoFillItem, brainstormItem } from '../../services/geminiService';
+import * as Actions from '../../store/actions';
+import { GenericItemForm, ContextData } from './forms/GenericItemForm';
+import { ItemType, ITEM_LABELS, SCHEMAS } from './forms/schema';
 
-export type ItemType = 
-  | 'law' | 'location' | 'organization' | 'item' | 'entry' 
-  | 'race' | 'bestiary' | 'ability' 
-  | 'timeline' | 'foreshadowing' | 'thread' | 'structure' | 'volume' | 'chapter';
+// Export ItemType for consumers
+export type { ItemType };
 
 interface ItemEditorModalProps {
   isOpen: boolean;
@@ -16,31 +19,37 @@ interface ItemEditorModalProps {
   onSave: (data: any) => void;
 }
 
-const TYPE_LABELS: Record<ItemType, string> = {
-  law: '世界の理 (Law)',
-  location: '場所・地理 (Location)',
-  organization: '組織 (Organization)',
-  item: '重要アイテム (Key Item)',
-  entry: '用語・設定 (Entry)',
-  race: '種族 (Race)',
-  bestiary: '魔物・生物 (Bestiary)',
-  ability: '魔法・能力 (Ability)',
-  timeline: '年表イベント (Event)',
-  foreshadowing: '伏線 (Foreshadowing)',
-  thread: '物語スレッド (Thread)',
-  structure: '構成フェーズ (Phase)',
-  volume: '巻 (Volume)',
-  chapter: '章 (Chapter)'
-};
-
 export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, initialData, onClose, onSave }) => {
   const [data, setData] = useState<any>({});
+  const [loadingField, setLoadingField] = useState<string | null>(null);
+  const [brainstormResults, setBrainstormResults] = useState<any[]>([]);
+  const [isBrainstorming, setIsBrainstorming] = useState(false);
+  
+  // Contexts for API Call & Dropdown Data
+  const bible = useBible();
+  const meta = useMetadata();
+  const chapters = useManuscript();
+  const sync = useNeuralSync();
+  const metaDispatch = useMetadataDispatch();
+  const uiDispatch = useUIDispatch();
+  const { addLog } = useNotificationDispatch();
 
   useEffect(() => {
     if (isOpen) {
-      setData(initialData || {});
+      setData(initialData ? JSON.parse(JSON.stringify(initialData)) : {});
+      setBrainstormResults([]);
+      setIsBrainstorming(false);
     }
   }, [isOpen, initialData]);
+
+  // Prepare context data for dropdowns (e.g. locations list)
+  const contextData: ContextData = useMemo(() => ({
+    locations: bible.locations.map(l => ({ id: l.id, name: l.name })),
+    organizations: bible.organizations.map(o => ({ id: o.id, name: o.name })),
+    chapters: chapters.map((c, i) => ({ id: c.id, title: `Ch.${i + 1} ${c.title}` })),
+    characters: bible.characters.map(c => ({ id: c.id, name: c.profile.name })),
+    items: bible.keyItems.map(i => ({ id: i.id, name: i.name }))
+  }), [bible, chapters]);
 
   if (!isOpen) return null;
 
@@ -48,161 +57,148 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, 
     setData((prev: any) => ({ ...prev, [key]: value }));
   };
 
-  const handleArrayChange = (key: string, value: string) => {
-    // Split by comma and trim
-    const array = value.split(',').map(s => s.trim()).filter(Boolean);
-    setData((prev: any) => ({ ...prev, [key]: array }));
-  };
-
   const handleSave = () => {
     onSave(data);
     onClose();
   };
 
-  const renderFields = () => {
-    switch (type) {
-      case 'law':
-        return (
-          <>
-            <Field label="名前" value={data.name} onChange={v => handleChange('name', v)} placeholder="例: 等価交換の法則" />
-            <Select label="種類" value={data.type || 'Physics'} onChange={v => handleChange('type', v)} options={['Physics', 'Magic', 'Social', 'Divine', 'Taboo']} />
-            <Select label="重要度" value={data.importance || 'Flexible'} onChange={v => handleChange('importance', v)} options={['Absolute', 'Flexible', 'Conditional']} />
-            <TextArea label="説明" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'location':
-        return (
-          <>
-            <Field label="名前" value={data.name} onChange={v => handleChange('name', v)} />
-            <Select label="種類" value={data.type || 'City'} onChange={v => handleChange('type', v)} options={['Continent', 'Country', 'City', 'Region', 'Spot', 'Building']} />
-            <TextArea label="説明" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'organization':
-        return (
-          <>
-            <Field label="名前" value={data.name} onChange={v => handleChange('name', v)} />
-            <Select label="種類" value={data.type || 'Guild'} onChange={v => handleChange('type', v)} options={['Guild', 'Government', 'Cult', 'Party', 'Company']} />
-            <TextArea label="説明" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'item':
-        return (
-          <>
-            <Field label="名前" value={data.name} onChange={v => handleChange('name', v)} />
-            <Select label="種類" value={data.type || 'Tool'} onChange={v => handleChange('type', v)} options={['Weapon', 'Tool', 'Relic', 'Evidence']} />
-            <TextArea label="説明" value={data.description} onChange={v => handleChange('description', v)} />
-            <TextArea label="仕組み・効果" value={data.mechanics} onChange={v => handleChange('mechanics', v)} placeholder="具体的な機能や魔法的効果..." />
-          </>
-        );
-      case 'entry':
-        return (
-          <>
-            <Field label="タイトル" value={data.title} onChange={v => handleChange('title', v)} />
-            <Select label="カテゴリ" value={data.category || 'Terminology'} onChange={v => handleChange('category', v)} options={['History', 'Culture', 'Technology', 'Magic', 'Geography', 'Lore', 'Terminology']} />
-            <TextArea label="定義・内容" value={data.definition || data.content} onChange={v => { handleChange('definition', v); handleChange('content', v); }} />
-            <Field label="タグ (カンマ区切り)" value={(data.tags || []).join(', ')} onChange={v => handleArrayChange('tags', v)} />
-          </>
-        );
-      case 'race':
-        return (
-          <>
-            <Field label="種族名" value={data.name} onChange={v => handleChange('name', v)} />
-            <Field label="寿命" value={data.lifespan} onChange={v => handleChange('lifespan', v)} placeholder="例: 約300年" />
-            <Field label="特徴 (カンマ区切り)" value={(data.traits || []).join(', ')} onChange={v => handleArrayChange('traits', v)} placeholder="例: 夜目, 俊敏, 魔力耐性" />
-            <TextArea label="説明" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'bestiary':
-        return (
-          <>
-            <Field label="名前" value={data.name} onChange={v => handleChange('name', v)} />
-            <Select label="種類" value={data.type || 'Beast'} onChange={v => handleChange('type', v)} options={['Beast', 'Plant', 'Monster', 'Spirit']} />
-            <Select label="危険度" value={data.dangerLevel || 'Caution'} onChange={v => handleChange('dangerLevel', v)} options={['Safe', 'Caution', 'Deadly', 'Catastrophic']} />
-            <Field label="生息地" value={data.habitat} onChange={v => handleChange('habitat', v)} />
-            <Field label="ドロップ品 (カンマ区切り)" value={(data.dropItems || []).join(', ')} onChange={v => handleArrayChange('dropItems', v)} />
-            <TextArea label="説明" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'ability':
-        return (
-          <>
-            <Field label="名前" value={data.name} onChange={v => handleChange('name', v)} />
-            <Select label="タイプ" value={data.type || 'Magic'} onChange={v => handleChange('type', v)} options={['Magic', 'Skill', 'Tech', 'Divine']} />
-            <Field label="代償・コスト" value={data.cost} onChange={v => handleChange('cost', v)} placeholder="例: MP, 生命力, 触媒" />
-            <TextArea label="効果・仕組み" value={data.mechanics} onChange={v => handleChange('mechanics', v)} />
-            <TextArea label="背景・説明" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'timeline':
-        return (
-          <>
-            <Field label="時期 (Time Label)" value={data.timeLabel} onChange={v => handleChange('timeLabel', v)} placeholder="例: 聖暦1024年" />
-            <Field label="出来事" value={data.event} onChange={v => handleChange('event', v)} />
-            <Select label="重要度" value={data.importance || 'Minor'} onChange={v => handleChange('importance', v)} options={['Minor', 'Major', 'Climax']} />
-            <Select label="ステータス" value={data.status || 'Canon'} onChange={v => handleChange('status', v)} options={['Canon', 'Plan', 'Hypothesis']} />
-            <TextArea label="詳細" value={data.description} onChange={v => handleChange('description', v)} />
-          </>
-        );
-      case 'foreshadowing':
-        return (
-          <>
-            <Field label="伏線タイトル" value={data.title} onChange={v => handleChange('title', v)} />
-            <Select label="ステータス" value={data.status || 'Open'} onChange={v => handleChange('status', v)} options={['Open', 'Resolved', 'Stale']} />
-            <Select label="優先度" value={data.priority || 'Medium'} onChange={v => handleChange('priority', v)} options={['Low', 'Medium', 'High', 'Critical']} />
-            <TextArea label="内容" value={data.description} onChange={v => handleChange('description', v)} />
-            <TextArea label="手がかり (Clues / カンマ区切り)" value={(data.clues || []).join(', ')} onChange={v => handleArrayChange('clues', v)} />
-            <TextArea label="ミスリード (Red Herrings / カンマ区切り)" value={(data.redHerrings || []).join(', ')} onChange={v => handleArrayChange('redHerrings', v)} />
-          </>
-        );
-      case 'thread':
-        return (
-          <>
-            <Field label="スレッド名" value={data.title} onChange={v => handleChange('title', v)} />
-            <Select label="ステータス" value={data.status || 'Open'} onChange={v => handleChange('status', v)} options={['Open', 'Resolved']} />
-            <TextArea label="概要" value={data.shortSummary} onChange={v => handleChange('shortSummary', v)} />
-          </>
-        );
-      case 'structure':
-        return (
-          <>
-            <Field label="フェーズ名" value={data.name} onChange={v => handleChange('name', v)} placeholder="例: 起" />
-            <Field label="ゴール" value={data.goal} onChange={v => handleChange('goal', v)} />
-            <TextArea label="概要" value={data.summary} onChange={v => handleChange('summary', v)} />
-          </>
-        );
-      case 'volume':
-        return (
-          <>
-            <Field label="巻タイトル" value={data.title} onChange={v => handleChange('title', v)} />
-            <Field label="巻数 (Order)" type="number" value={data.order} onChange={v => handleChange('order', Number(v))} />
-            <TextArea label="あらすじ" value={data.summary} onChange={v => handleChange('summary', v)} />
-          </>
-        );
-      case 'chapter':
-        return (
-          <>
-            <Field label="章タイトル" value={data.title} onChange={v => handleChange('title', v)} />
-            <TextArea label="あらすじ・プロット" value={data.summary} onChange={v => handleChange('summary', v)} />
-            <Select label="ステータス" value={data.status || 'Idea'} onChange={v => handleChange('status', v)} options={['Idea', 'Beats', 'Drafting', 'Polished']} />
-          </>
-        );
-      default:
-        return <div className="text-stone-500">Unknown Type</div>;
+  const handleError = (error: any, context: string) => {
+    if (error.message?.includes("SAFETY_BLOCK")) {
+      uiDispatch(Actions.openDialog({
+        isOpen: true,
+        type: 'alert',
+        title: 'Safety Blocked',
+        message: '生成内容が安全ガイドラインに抵触したため、処理が中断されました。入力内容や設定を見直してください。'
+      }));
+      addLog('error', 'Safety', `${context} Safety Policy Triggered`);
+    } else {
+      addLog('error', 'Architect', `${context}失敗: ${error.message}`);
     }
+  };
+
+  const handleAutoFill = async (fieldKey: string, fieldLabel: string) => {
+    if (loadingField) return;
+    const name = data.name || data.title || data.event || data.concept || "Unknown";
+    
+    if (!name || name === "Unknown") {
+      addLog('error', 'System', '自動生成するには、まず名前（タイトル）を入力してください。');
+      return;
+    }
+
+    setLoadingField(fieldKey);
+    addLog('info', 'Architect', `${ITEM_LABELS[type]}の「${fieldLabel}」を考案中...`);
+
+    try {
+      const generated = await autoFillItem(
+        { meta, bible, chapters, sync } as any,
+        ITEM_LABELS[type],
+        name,
+        fieldLabel,
+        data,
+        (u) => metaDispatch(Actions.trackUsage(u)),
+        addLog
+      );
+      handleChange(fieldKey, generated);
+      addLog('success', 'Architect', `${fieldLabel} を生成しました。`);
+    } catch (e: any) {
+      handleError(e, '自動生成');
+    } finally {
+      setLoadingField(null);
+    }
+  };
+
+  const handleBrainstorm = async () => {
+    if (isBrainstorming) return;
+    setIsBrainstorming(true);
+    setBrainstormResults([]);
+    addLog('info', 'Architect', `AIブレインストーミングを開始します...`);
+
+    // Dynamically build field hints from Schema
+    const schema = SCHEMAS[type];
+    const fields = schema.map(f => f.key).join(', ');
+    const fieldHints = `${fields}`;
+
+    try {
+      const results = await brainstormItem(
+        { meta, bible, chapters, sync } as any,
+        ITEM_LABELS[type],
+        data.name || data.title || data.concept,
+        data,
+        fieldHints,
+        (u) => metaDispatch(Actions.trackUsage(u)),
+        addLog
+      );
+      setBrainstormResults(results);
+      addLog('success', 'Architect', `${results.length}件のアイデアを提案しました。`);
+    } catch (e: any) {
+      handleError(e, 'ブレインストーミング');
+    } finally {
+      setIsBrainstorming(false);
+    }
+  };
+
+  const applyIdea = (idea: any) => {
+    const { concept_note, ...rest } = idea;
+    setData((prev: any) => ({ ...prev, ...rest }));
   };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-sm animate-fade-in">
       <div className="bg-stone-900 w-full max-w-lg rounded-2xl border border-stone-800 shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-stone-900/50 rounded-t-2xl">
-          <span className="text-sm font-black text-stone-200 uppercase tracking-widest">{initialData?.id ? '編集' : '新規追加'}: {TYPE_LABELS[type]}</span>
+        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-stone-900/50 rounded-t-2xl shrink-0">
+          <span className="text-sm font-black text-stone-200 uppercase tracking-widest">{initialData?.id ? '編集' : '新規追加'}: {ITEM_LABELS[type]}</span>
           <button onClick={onClose} className="text-stone-500 hover:text-white"><X size={18} /></button>
         </div>
-        <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-          {renderFields()}
+        
+        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+          {/* Brainstorming Section */}
+          <div className="space-y-4">
+              <button 
+                onClick={handleBrainstorm} 
+                disabled={isBrainstorming}
+                className="w-full py-4 bg-gradient-to-r from-indigo-900/30 to-purple-900/30 border border-indigo-500/20 rounded-xl flex items-center justify-center gap-3 text-indigo-300 hover:text-white hover:border-indigo-500/50 hover:from-indigo-900/50 hover:to-purple-900/50 transition-all group"
+              >
+                {isBrainstorming ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />}
+                <span className="text-xs font-black uppercase tracking-widest">AI Brainstorming</span>
+              </button>
+
+              {isBrainstorming && (
+                <div className="text-center text-[10px] font-black uppercase tracking-widest text-indigo-400 animate-pulse">
+                  設計士がアイデアを考案中...
+                </div>
+              )}
+
+              {brainstormResults.length > 0 && (
+                <div className="grid grid-cols-1 gap-3 animate-fade-in">
+                  {brainstormResults.map((idea, idx) => (
+                    <Card key={idx} variant="glass-bright" padding="sm" className="cursor-pointer hover:border-orange-500/40 group border border-white/5" onClick={() => applyIdea(idea)}>
+                      <div className="flex justify-between items-start mb-1">
+                          <span className="text-[11px] font-bold text-stone-200">{idea.name || idea.title || idea.event || idea.concept}</span>
+                          {idea.concept_note && <span className="text-[8px] bg-stone-800 text-stone-500 px-1.5 py-0.5 rounded uppercase font-black">{idea.concept_note}</span>}
+                      </div>
+                      <p className="text-[10px] text-stone-400 font-serif leading-relaxed line-clamp-2">{idea.description || idea.summary || idea.definition}</p>
+                      <div className="mt-2 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-[9px] text-orange-400 font-black uppercase tracking-widest flex items-center justify-center gap-1"><PlusCircle size={10}/> 採用する</span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+              <div className="h-px bg-white/5" />
+          </div>
+
+          {/* Generic Form Component */}
+          <GenericItemForm 
+            type={type}
+            data={data}
+            context={contextData}
+            onChange={handleChange}
+            onAutoFill={handleAutoFill}
+            loadingField={loadingField}
+          />
         </div>
-        <div className="p-4 border-t border-white/5 bg-stone-900/50 rounded-b-2xl flex justify-end gap-3">
+
+        <div className="p-4 border-t border-white/5 bg-stone-900/50 rounded-b-2xl flex justify-end gap-3 shrink-0">
           <Button variant="ghost" onClick={onClose}>キャンセル</Button>
           <Button variant="primary" onClick={handleSave} icon={<Save size={14}/>}>保存</Button>
         </div>
@@ -210,41 +206,3 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, 
     </div>
   );
 };
-
-const Field = ({ label, value, onChange, placeholder, type = "text" }: any) => (
-  <div className="space-y-1">
-    <label className="text-[10px] font-black text-stone-500 uppercase tracking-widest">{label}</label>
-    <input 
-      type={type}
-      value={value || ''} 
-      onChange={e => onChange(e.target.value)} 
-      placeholder={placeholder}
-      className="w-full bg-stone-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-stone-200 outline-none focus:border-orange-500/50 transition-all"
-    />
-  </div>
-);
-
-const TextArea = ({ label, value, onChange, placeholder }: any) => (
-  <div className="space-y-1">
-    <label className="text-[10px] font-black text-stone-500 uppercase tracking-widest">{label}</label>
-    <textarea 
-      value={value || ''} 
-      onChange={e => onChange(e.target.value)} 
-      placeholder={placeholder}
-      className="w-full bg-stone-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-stone-200 outline-none focus:border-orange-500/50 transition-all min-h-[100px] resize-none"
-    />
-  </div>
-);
-
-const Select = ({ label, value, onChange, options }: any) => (
-  <div className="space-y-1">
-    <label className="text-[10px] font-black text-stone-500 uppercase tracking-widest">{label}</label>
-    <select 
-      value={value || ''} 
-      onChange={e => onChange(e.target.value)} 
-      className="w-full bg-stone-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-stone-200 outline-none focus:border-orange-500/50 transition-all appearance-none"
-    >
-      {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-  </div>
-);

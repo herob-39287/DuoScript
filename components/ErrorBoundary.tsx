@@ -1,12 +1,13 @@
+
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 
-interface Props {
+interface ErrorBoundaryProps {
   children?: ReactNode;
   viewName: string;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
@@ -15,13 +16,13 @@ interface State {
  * ErrorBoundary provides a fallback UI when a component tree crashes.
  * It catches JavaScript errors anywhere in their child component tree.
  */
-class ErrorBoundary extends React.Component<Props, State> {
-  public state: State = {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
@@ -72,11 +73,11 @@ class ErrorBoundary extends React.Component<Props, State> {
                <button onClick={this.handleReset} className="w-full py-4 bg-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-500 shadow-lg shadow-orange-900/20 transition-all active:scale-95 flex items-center justify-center gap-2">
                  <RefreshCw size={14} /> 再試行
                </button>
-               <button onClick={this.handleReload} className="w-full py-4 bg-stone-800 text-stone-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all flex items-center justify-center gap-2">
-                 <RefreshCw size={14} /> ページを再読み込み
+               <button onClick={this.handleReload} className="w-full py-4 bg-stone-800 text-stone-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95">
+                 リロード
                </button>
-               <button onClick={this.handleEmergencyReset} className="w-full py-4 border border-rose-900/30 text-rose-500 hover:bg-rose-900/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2">
-                 <Trash2 size={14} /> 緊急リセット (ホームへ)
+               <button onClick={this.handleEmergencyReset} className="w-full py-4 bg-rose-900/20 text-rose-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-900/40 transition-all active:scale-95 flex items-center justify-center gap-2">
+                 <Trash2 size={14} /> 緊急リセット
                </button>
             </div>
           </div>
@@ -84,7 +85,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    return children;
+    return children || null;
   }
 }
 

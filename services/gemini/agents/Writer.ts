@@ -1,117 +1,132 @@
 
-import { AiModel, StoryProject, ChapterLog, UsageCallback, LogCallback, ExtractionResult, ChapterPackageResponse } from "../../../types";
-import { runGeminiRequest, getClient } from "../core";
+import { StoryProject, ChapterLog, UsageCallback, LogCallback, ExtractionResult, ChapterPackageResponse } from "../../../types";
 import { PromptBuilder } from "../promptBuilder";
-import { withRetry, safeJsonParse, getSafetySettings, trackUsage } from "../utils";
+import { parseWithSchema, getSafetySettings } from "../utils";
 import * as Prompts from "../prompts";
+import { STRICT_JSON_ENFORCEMENT } from "../prompts/resources";
 import * as Schemas from "../schemas";
+import { ChapterPackageZodSchema } from "../../validation/schemas";
 import { Type } from "@google/genai";
+import { z } from "zod";
+import { AI_MODELS, TOKEN_LIMITS } from "../../../constants";
+import { BaseAgent } from "./BaseAgent";
 
-export class WriterAgent {
-  constructor(private onUsage?: UsageCallback, private logCallback: LogCallback = () => {}) {}
-
-  async* streamDraft(chapter: ChapterLog, tone: string, usePro: boolean, project: StoryProject, isContextActive: boolean = true) {
-    const ai = getClient();
+export class WriterAgent extends BaseAgent {
+  
+  async* streamDraft(
+    chapter: ChapterLog, 
+    tone: string, 
+    usePro: boolean, 
+    project: StoryProject, 
+    previousContent: string,
+    targetBeats: string[] | undefined,
+    logCallback: LogCallback,
+    isContextActive: boolean = true,
+    onUsage?: UsageCallback
+  ) {
     const lang = project.meta.language || 'ja';
-    
-    // PromptBuilder.buildWriterMTP handles persona implicitly via project meta
     const systemInstruction = PromptBuilder.buildWriterMTP(project, chapter.id, tone, isContextActive);
     
-    const userPrompt = `
-${Prompts.DRAFT_PROMPT(chapter.title, chapter.summary, chapter.beats, lang)}
-`.trim();
+    const beatsToUse = targetBeats && targetBeats.length > 0 
+      ? targetBeats 
+      : chapter.beats.map(b => b.text);
+    
+    const focusMode = !!(targetBeats && targetBeats.length > 0);
+
+    const userPrompt = Prompts.DRAFT_PROMPT(
+      chapter.title, 
+      chapter.summary, 
+      beatsToUse, 
+      previousContent,
+      lang,
+      focusMode
+    );
 
     const label = usePro ? 'Writer/Drafting:Reasoning' : 'Writer/Drafting:Fast';
+    const model = usePro ? AI_MODELS.REASONING : AI_MODELS.FAST;
+    const thinkingConfig = usePro ? { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM } : undefined;
 
-    const result = await withRetry(async () => {
-      return await ai.models.generateContentStream({
-        model: usePro ? AiModel.REASONING : AiModel.FAST,
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        config: { systemInstruction, safetySettings: getSafetySettings() }
-      });
-    }, 'Writer', this.logCallback);
+    const stream = this.client.stream({
+      model,
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      config: { 
+        systemInstruction, 
+        safetySettings: getSafetySettings(),
+        thinkingConfig,
+        maxOutputTokens: TOKEN_LIMITS.CHAPTER_DRAFT 
+      },
+      usageLabel: label,
+      onUsage: onUsage,
+      logCallback: logCallback
+    });
 
-    for await (const chunk of result) {
-      trackUsage(chunk, usePro ? AiModel.REASONING : AiModel.FAST, label, this.onUsage);
-      if (chunk.candidates?.[0]?.finishReason === 'SAFETY') throw new Error("SAFETY_BLOCK");
+    for await (const chunk of stream) {
       yield chunk;
     }
   }
 
-  async suggest(content: string, project: StoryProject, activeChapterId: string, isContextActive: boolean = true): Promise<string[]> {
-    const storyData = isContextActive ? PromptBuilder.buildStructuredStoryData(project, activeChapterId) : "No Bible Reference";
+  async suggest(content: string, project: StoryProject, activeChapterId: string, isContextActive: boolean = true, onUsage: UsageCallback, logCallback: LogCallback): Promise<string[]> {
+    const storyData = isContextActive 
+        ? PromptBuilder.buildFocalData(project, [], activeChapterId) 
+        : "No Bible Reference";
     const lang = project.meta.language || 'ja';
-    const userPrompt = `
-【STORY_DATA (JSON)】
-${storyData}
+    const userPrompt = `【STORY_DATA (JSON)】\n${storyData}\n\n${Prompts.NEXT_SENTENCE_PROMPT(content, lang)}`;
 
-${Prompts.NEXT_SENTENCE_PROMPT(content, lang)}
-`.trim();
-
-    return runGeminiRequest({
-      model: AiModel.FAST,
+    return this.client.request({
+      model: AI_MODELS.FAST,
       contents: userPrompt,
       config: { 
-        systemInstruction: `${Prompts.COPILOT_SOUL(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.COPILOT_SOUL(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
         responseSchema: Schemas.suggestionsSchema 
       },
       usageLabel: 'Writer/CopilotSuggestions',
-      onUsage: this.onUsage,
-      logCallback: this.logCallback,
-      mapper: (res) => safeJsonParse<string[]>(res.text, 'Copilot').value || Schemas.DEFAULT_RESPONSES.SUGGESTIONS
+      onUsage: onUsage,
+      logCallback: logCallback,
+      mapper: (res) => parseWithSchema<string[]>(res.text, z.array(z.string()), 'Copilot', Schemas.DEFAULT_RESPONSES.SUGGESTIONS)
     });
   }
 
-  async scanDraft(draft: string, project: StoryProject, activeChapterId: string, processOps: (json: any) => ExtractionResult): Promise<ExtractionResult> {
-    const storyData = PromptBuilder.buildStructuredStoryData(project, activeChapterId);
+  async scanDraft(draft: string, project: StoryProject, activeChapterId: string, processOps: (json: any) => ExtractionResult, onUsage: UsageCallback, logCallback: LogCallback): Promise<ExtractionResult> {
+    const storyData = PromptBuilder.buildFocalData(project, [], activeChapterId);
     const lang = project.meta.language || 'ja';
-    const userPrompt = `
-【STORY_DATA (JSON)】
-${storyData}
+    const userPrompt = `【STORY_DATA (JSON)】\n${storyData}\n\n${Prompts.DRAFT_SCAN_PROMPT(draft, lang)}`;
 
-${Prompts.DRAFT_SCAN_PROMPT(draft)}
-`.trim();
-
-    return runGeminiRequest({
-      model: AiModel.FAST,
+    return this.client.request({
+      model: AI_MODELS.FAST,
       contents: userPrompt,
       config: {
-        systemInstruction: `${Prompts.SYNC_EXTRACTOR_SOUL(lang)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.SYNC_EXTRACTOR_SOUL(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json",
         responseSchema: { type: Type.ARRAY, items: Schemas.getSyncOperationSchema(lang) }
       },
       usageLabel: 'Writer/DraftConsistencyScanner',
-      onUsage: this.onUsage,
-      logCallback: this.logCallback,
+      onUsage: onUsage,
+      logCallback: logCallback,
       mapper: (res) => processOps(res.text)
     });
   }
 
-  async generatePackage(project: StoryProject, chapter: ChapterLog): Promise<ChapterPackageResponse> {
-    const storyData = PromptBuilder.buildStructuredStoryData(project, chapter.id);
+  async generatePackage(project: StoryProject, chapter: ChapterLog, onUsage: UsageCallback, logCallback: LogCallback): Promise<ChapterPackageResponse> {
+    const storyData = PromptBuilder.buildFocalData(project, [], chapter.id);
     const lang = project.meta.language || 'ja';
     const persona = project.meta.preferences?.aiPersona;
-    
-    const userPrompt = `
-【STORY_DATA (JSON)】
-${storyData}
+    const userPrompt = `【STORY_DATA (JSON)】\n${storyData}\n\n${Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary, lang)}`;
 
-${Prompts.CHAPTER_PACKAGE_PROMPT(chapter.title, chapter.summary)}
-`.trim();
-
-    return runGeminiRequest({
-      model: AiModel.REASONING,
+    return this.client.request({
+      model: AI_MODELS.REASONING,
       contents: userPrompt,
       config: { 
-        systemInstruction: `${Prompts.ARCHITECT_MTP(lang, persona)}\n\n${Prompts.STRICT_JSON_ENFORCEMENT}`,
+        systemInstruction: `${Prompts.ARCHITECT_MTP(lang, persona)}\n\n${STRICT_JSON_ENFORCEMENT}`,
         responseMimeType: "application/json", 
-        responseSchema: Schemas.getChapterPackageSchema(lang)
+        responseSchema: Schemas.getChapterPackageSchema(lang),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM },
+        maxOutputTokens: TOKEN_LIMITS.DEFAULT_OUTPUT
       },
       usageLabel: 'Writer/PlotPackageGeneration',
-      onUsage: this.onUsage,
-      logCallback: this.logCallback,
-      mapper: (res) => safeJsonParse<ChapterPackageResponse>(res.text, 'Writer').value || Schemas.DEFAULT_RESPONSES.CHAPTER_PACKAGE
+      onUsage: onUsage,
+      logCallback: logCallback,
+      mapper: (res) => parseWithSchema<ChapterPackageResponse>(res.text, ChapterPackageZodSchema, 'Writer', Schemas.DEFAULT_RESPONSES.CHAPTER_PACKAGE)
     });
   }
 }

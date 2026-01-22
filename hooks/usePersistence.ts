@@ -3,8 +3,37 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { 
   StoryProject, ProjectAction, UIAction, ViewMode, UIState 
 } from '../types';
-import { loadLatestProject, saveProjectRevision, getPortrait, getLastOpenedProjectId, getSyncChannel, loadFullSnapshot, tabId, getHeadRev } from '../services/storageService';
+import { loadLatestProject, saveProjectRevision, getLastOpenedProjectId, loadFullSnapshot, tabId, getHeadRev, getSyncChannel } from '../services/storageService';
 import { normalizeProject } from '../services/bibleManager';
+
+/**
+ * Checks if there are meaningful changes between two project states.
+ * Uses reference equality for large objects (Immer guarantees refs change only on update)
+ * and shallow/limited comparison for Metadata.
+ */
+const hasMeaningfulChanges = (prev: StoryProject | null, next: StoryProject): boolean => {
+  if (!prev) return true;
+  if (prev === next) return false;
+
+  // 1. Heavy Objects Reference Check (Fastest)
+  // If these references are different, the content MUST have changed due to Immer.
+  if (prev.bible !== next.bible) return true;
+  if (prev.chapters !== next.chapters) return true;
+  if (prev.sync !== next.sync) return true;
+  // Assets removed from state
+
+  // 2. Metadata Check (Slower but small data size)
+  // We exclude volatile fields that shouldn't trigger a save on their own
+  if (prev.meta !== next.meta) {
+    const { tokenUsage: t1, updatedAt: u1, headRev: h1, ...meta1 } = prev.meta;
+    const { tokenUsage: t2, updatedAt: u2, headRev: h2, ...meta2 } = next.meta;
+    
+    // JSON.stringify on meta is cheap (~1KB) compared to full project (~MBs)
+    if (JSON.stringify(meta1) !== JSON.stringify(meta2)) return true;
+  }
+
+  return false;
+};
 
 export const usePersistence = (
   project: StoryProject,
@@ -23,14 +52,13 @@ export const usePersistence = (
   // Track the authoritative headRev for this tab instance to avoid queue-induced conflicts
   const currentHeadRevRef = useRef<number>(project.meta.headRev || 0);
   
-  // 保存に成功した直近のステート（Transient属性を除外して比較用）
-  const lastKnownStableStateRef = useRef<string>("");
-
-  const getComparableState = useCallback((proj: StoryProject) => {
-    // metadataのupdatedAtやtokenUsageなどは変更頻度が高く競合の本質ではないため除外
-    const { tokenUsage, updatedAt, headRev, ...meta } = proj.meta;
-    return JSON.stringify({ ...proj, meta });
-  }, []);
+  // Safety sync: Ensure ref catches up if state is ahead (e.g. after load)
+  if ((project.meta.headRev || 0) > currentHeadRevRef.current) {
+    currentHeadRevRef.current = project.meta.headRev || 0;
+  }
+  
+  // Store the last successfully saved project object for reference comparison
+  const lastSavedStateRef = useRef<StoryProject | null>(null);
 
   const performSave = useCallback(async (proj: StoryProject) => {
     if (hasConflict.current) return;
@@ -50,19 +78,38 @@ export const usePersistence = (
       // Update our authoritative headRev ref
       currentHeadRevRef.current = nextRev;
       
+      const updatedMeta = { ...proj.meta, headRev: nextRev };
       projectDispatch({ type: 'UPDATE_META', payload: { headRev: nextRev } });
       localStorage.setItem('duoscript_active_id', proj.meta.id);
       
-      // 保存成功時のスナップショットを記録
-      lastKnownStableStateRef.current = getComparableState({ ...proj, meta: { ...proj.meta, headRev: nextRev } });
+      // Update stable ref with the state that was just saved (including new rev)
+      lastSavedStateRef.current = { ...proj, meta: updatedMeta };
       
       uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
       setTimeout(() => uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
     } catch (err: any) {
       if (err.message === 'SAVE_CONFLICT') {
         hasConflict.current = true;
-        uiDispatch({ type: 'SET_CONFLICT', payload: true });
-        console.error("Conflict: IDB Head has moved while this tab was editing.");
+        
+        // Auto-resolve if we are saving from Rev 0 (likely Import or Overwrite of existing ID)
+        if (currentHeadRevRef.current === 0) {
+           console.warn("Auto-resolving conflict for initial save (Import/Overwrite).");
+           uiDispatch({ type: 'SET_FORCE_SAVE_REQUESTED', payload: true });
+        } else {
+           uiDispatch({ type: 'SET_CONFLICT', payload: true });
+           console.error("Conflict: IDB Head has moved while this tab was editing.");
+        }
+      } else if (err.message === 'STORAGE_QUOTA_EXCEEDED') {
+        console.error("Storage Quota Exceeded");
+        uiDispatch({ 
+          type: 'OPEN_DIALOG', 
+          payload: { 
+            isOpen: true, 
+            type: 'alert', 
+            title: '保存容量不足', 
+            message: 'ブラウザの保存容量がいっぱいです。これ以上保存できません。古いプロジェクトや画像を削除して容量を確保してください。' 
+          } 
+        });
       } else {
         console.error("Save failed:", err);
       }
@@ -75,7 +122,7 @@ export const usePersistence = (
         performSave(next);
       }
     }
-  }, [uiDispatch, projectDispatch, getComparableState]);
+  }, [uiDispatch, projectDispatch]);
 
   // Handle Force Save Request (Rebase Strategy)
   useEffect(() => {
@@ -99,7 +146,7 @@ export const usePersistence = (
           
           // 4. Update stable ref to prevent immediate auto-save trigger
           const rebasedProject = { ...project, meta: { ...project.meta, headRev: nextRev } };
-          lastKnownStableStateRef.current = getComparableState(rebasedProject);
+          lastSavedStateRef.current = rebasedProject;
 
           // 5. Reset Conflict Flags
           hasConflict.current = false;
@@ -108,10 +155,21 @@ export const usePersistence = (
           uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
           setTimeout(() => uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
 
-        } catch (e) {
+        } catch (e: any) {
           console.error("Force save failed", e);
           uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
           uiDispatch({ type: 'SET_FORCE_SAVE_REQUESTED', payload: false });
+          if (e.message === 'STORAGE_QUOTA_EXCEEDED') {
+             uiDispatch({ 
+                type: 'OPEN_DIALOG', 
+                payload: { 
+                  isOpen: true, 
+                  type: 'alert', 
+                  title: '保存容量不足', 
+                  message: '強制保存に失敗しました。容量が不足しています。' 
+                } 
+             });
+          }
           // Conflict remains active
         } finally {
           isSaving.current = false;
@@ -119,7 +177,7 @@ export const usePersistence = (
       };
       handleForceSave();
     }
-  }, [ui.forceSaveRequested, project, projectDispatch, uiDispatch, getComparableState]);
+  }, [ui.forceSaveRequested, project, projectDispatch, uiDispatch]);
 
   // プロジェクトのコンテキスト切り替え検知
   useEffect(() => {
@@ -135,9 +193,9 @@ export const usePersistence = (
       }
       
       currentHeadRevRef.current = project.meta.headRev || 0;
-      lastKnownStableStateRef.current = getComparableState(project);
+      lastSavedStateRef.current = project;
     }
-  }, [project.meta.id, project.meta.headRev, getComparableState, uiDispatch]);
+  }, [project.meta.id, project.meta.headRev, uiDispatch, project]);
 
   // 初期ロード
   useEffect(() => {
@@ -153,21 +211,12 @@ export const usePersistence = (
           if (storedData) {
             const norm = normalizeProject(storedData);
             
-            // 肖像画の復元（軽量化のためIDB参照）
-            const portraitResults = await Promise.all(norm.bible.characters.map(async (char) => {
-              const img = await getPortrait(char.id);
-              return img ? { id: char.id, img } : null;
-            }));
-            const foundPortraits = portraitResults.filter((r): r is {id: string, img: string} => r !== null);
-            if (foundPortraits.length > 0) {
-              norm.bible.characters = norm.bible.characters.map(c => {
-                const match = foundPortraits.find(f => f.id === c.id);
-                return match ? { ...c, imageUrl: match.img } : c;
-              });
-            }
+            // Optimization: Skip asset hydration. 
+            // Characters store the portrait ID, components will lazy load via usePortrait hook.
             
-            // ステート更新（useEffectの検知によりRef類は自動更新される）
+            // ステート更新
             projectDispatch({ type: 'LOAD_PROJECT', payload: norm });
+            // Ref will be updated by the context-switch useEffect
             uiDispatch({ type: 'SET_VIEW', payload: ViewMode.DASHBOARD });
           }
         } catch (e) {
@@ -194,7 +243,7 @@ export const usePersistence = (
       if (type === 'REVISION_SAVED' && projectId === project.meta.id) {
         if (currentHeadRevRef.current < rev) {
           // 自タブがDirty（未保存の変更がある）か判定
-          const isDirty = lastKnownStableStateRef.current !== getComparableState(project);
+          const isDirty = hasMeaningfulChanges(lastSavedStateRef.current, project);
           
           if (isDirty) {
             hasConflict.current = true;
@@ -212,19 +261,32 @@ export const usePersistence = (
     };
     channel.addEventListener('message', onMessage);
     return () => channel.removeEventListener('message', onMessage);
-  }, [project, projectDispatch, uiDispatch, getComparableState]);
+  }, [project, projectDispatch, uiDispatch]);
 
   // 自動保存サイクル
   useEffect(() => {
     if (isInitialLoad.current || !project.meta.id || hasConflict.current) return;
     
     const timer = setTimeout(() => {
-      const isDirty = lastKnownStableStateRef.current !== getComparableState(project);
-      if (isDirty) {
+      // High-performance dirty check using reference equality
+      if (hasMeaningfulChanges(lastSavedStateRef.current, project)) {
         performSave(project);
       }
-    }, 10000); 
+    }, 5000); 
 
     return () => clearTimeout(timer);
-  }, [project, performSave, getComparableState]);
+  }, [project, performSave]);
+
+  // Prevent accidental close if dirty
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasMeaningfulChanges(lastSavedStateRef.current, project) || isSaving.current) {
+        e.preventDefault(); 
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [project]);
 };

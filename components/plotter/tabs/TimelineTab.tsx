@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { Layers, Clock, GitBranch, Target, Link2, User, Search, AlertCircle, MessageSquare, Plus, Edit2, Trash2 } from 'lucide-react';
-import { useBible, useUIDispatch, useBibleDispatch } from '../../../contexts/StoryContext';
+import { useUIDispatch, useBibleDispatch, useManuscript, usePlotPlan, useCharacters, useGeography, useKnowledge } from '../../../contexts/StoryContext';
 import * as Actions from '../../../store/actions';
 import { Badge } from '../../ui/DesignSystem';
 import { ItemEditorModal, ItemType } from '../ItemEditorModal';
+import { WorldBible, BibleArrayKeys } from '../../../types';
 
 export const TimelineTab: React.FC = () => {
-  const bible = useBible();
+  const plot = usePlotPlan();
+  const characters = useCharacters();
+  const geography = useGeography();
+  const knowledge = useKnowledge();
   const bibleDispatch = useBibleDispatch();
   const uiDispatch = useUIDispatch();
+  const chapters = useManuscript();
 
   const [editor, setEditor] = useState<{ isOpen: boolean; type: ItemType; initialData?: any }>({
     isOpen: false,
@@ -16,13 +21,13 @@ export const TimelineTab: React.FC = () => {
   });
 
   const getEntityName = (id: string) => {
-    const char = bible.characters.find(c => c.id === id);
+    const char = characters?.find(c => c.id === id);
     if(char) return char.profile.name;
-    const item = bible.keyItems.find(i => i.id === id);
+    const item = knowledge?.keyItems.find(i => i.id === id);
     if(item) return item.name;
-    const loc = bible.locations.find(l => l.id === id);
+    const loc = geography?.locations.find(l => l.id === id);
     if(loc) return loc.name;
-    const org = bible.organizations.find(o => o.id === id);
+    const org = geography?.organizations.find(o => o.id === id);
     if(org) return org.name;
     return "Unknown Entity";
   };
@@ -46,42 +51,38 @@ export const TimelineTab: React.FC = () => {
       title: '項目の削除',
       message: `「${name}」を削除してもよろしいですか？`,
       onConfirm: () => {
-        const pathMap: Record<ItemType, string> = {
+        const pathMap: Record<ItemType, keyof WorldBible | ''> = {
           timeline: 'timeline', foreshadowing: 'foreshadowing', thread: 'storyThreads', structure: 'storyStructure',
-          law: '', location: '', organization: '', item: '', entry: '', race: '', bestiary: '', ability: '', volume: '', chapter: ''
+          law: '', location: '', organization: '', item: '', entry: '', race: '', bestiary: '', ability: '', volume: '', chapter: '', theme: ''
         };
         const path = pathMap[type];
         if (!path) return;
         
-        const list = (bible as any)[path];
-        const updated = list.filter((i: any) => i.id !== id);
-        bibleDispatch(Actions.updateBible({ [path]: updated }));
+        bibleDispatch(Actions.manipulateBibleList(path as BibleArrayKeys, 'delete', id));
         uiDispatch(Actions.closeDialog());
       }
     }));
   };
 
   const handleSave = (data: any) => {
-    const pathMap: Record<ItemType, string> = {
+    const pathMap: Record<ItemType, keyof WorldBible | ''> = {
         timeline: 'timeline', foreshadowing: 'foreshadowing', thread: 'storyThreads', structure: 'storyStructure',
-        law: '', location: '', organization: '', item: '', entry: '', race: '', bestiary: '', ability: '', volume: '', chapter: ''
+        law: '', location: '', organization: '', item: '', entry: '', race: '', bestiary: '', ability: '', volume: '', chapter: '', theme: ''
     };
     const path = pathMap[editor.type];
     if (!path) return;
 
-    const list = [...((bible as any)[path] || [])];
-    
     if (data.id) {
         // Update
-        const idx = list.findIndex((i: any) => i.id === data.id);
-        if (idx !== -1) list[idx] = { ...list[idx], ...data };
+        bibleDispatch(Actions.manipulateBibleList(path as BibleArrayKeys, 'update', data.id, undefined, data));
     } else {
         // Create
-        list.push({ ...data, id: crypto.randomUUID() });
+        const newItem = { ...data, id: crypto.randomUUID() };
+        bibleDispatch(Actions.manipulateBibleList(path as BibleArrayKeys, 'add', undefined, newItem));
     }
-    
-    bibleDispatch(Actions.updateBible({ [path]: list }));
   };
+
+  if (!plot) return null;
 
   return (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
@@ -92,10 +93,10 @@ export const TimelineTab: React.FC = () => {
                 <button onClick={() => openEditor('structure')} className="p-1.5 bg-stone-800 hover:bg-orange-600 hover:text-white text-stone-500 rounded-lg transition-all"><Plus size={14}/></button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {bible.storyStructure.length === 0 ? (
+                {plot.storyStructure.length === 0 ? (
                     <div className="col-span-full p-6 border border-dashed border-stone-800 rounded-2xl text-center text-stone-600 text-[10px]">構成はまだ定義されていません。</div>
                 ) : (
-                    bible.storyStructure.map((phase) => (
+                    plot.storyStructure.map((phase) => (
                         <div key={phase.id} className="p-4 bg-stone-900/40 border border-white/5 rounded-2xl space-y-2 relative group hover:border-orange-500/20 transition-all">
                             <div className="text-[10px] font-black text-orange-400 uppercase tracking-widest">{phase.name}</div>
                             <div className="text-[11px] text-stone-300 font-serif">{phase.summary}</div>
@@ -118,10 +119,10 @@ export const TimelineTab: React.FC = () => {
                     <button onClick={() => openEditor('timeline')} className="p-1.5 bg-stone-800 hover:bg-orange-600 hover:text-white text-stone-500 rounded-lg transition-all"><Plus size={14}/></button>
                 </div>
                 <div className="relative border-l border-white/10 ml-3 space-y-6 pl-6 py-2">
-                    {bible.timeline.length === 0 ? (
+                    {plot.timeline.length === 0 ? (
                         <div className="text-stone-600 text-[10px] italic">イベントはありません。</div>
                     ) : (
-                        bible.timeline.map((event) => (
+                        plot.timeline.map((event) => (
                             <div key={event.id} className="relative group">
                                 <div className="absolute -left-[29px] top-1.5 w-3 h-3 rounded-full bg-stone-800 border-2 border-stone-950 group-hover:bg-orange-500 transition-colors"/>
                                 <div className="space-y-1 pr-12">
@@ -160,19 +161,53 @@ export const TimelineTab: React.FC = () => {
                         <button onClick={() => openEditor('thread')} className="p-1.5 bg-stone-800 hover:bg-orange-600 hover:text-white text-stone-500 rounded-lg transition-all"><Plus size={14}/></button>
                     </div>
                     <div className="space-y-2">
-                        {bible.storyThreads.map((thread) => (
-                            <div key={thread.id} className="p-3 bg-stone-900/40 border border-white/5 rounded-xl relative group">
-                                <div className="flex justify-between pr-8">
-                                    <span className="text-[10px] font-bold text-stone-300">{thread.title}</span>
-                                    <span className={`text-[8px] px-1 rounded uppercase ${thread.status === 'Resolved' ? 'text-emerald-500' : 'text-orange-500'}`}>{thread.status}</span>
+                        {plot.storyThreads.map((thread) => {
+                            // ビートを章順にソート（chapters配列のインデックスを利用）
+                            const sortedBeats = (thread.beats || []).sort((a, b) => {
+                                const idxA = chapters.findIndex(c => c.id === a.chapterId);
+                                const idxB = chapters.findIndex(c => c.id === b.chapterId);
+                                const safeA = idxA === -1 ? 9999 : idxA;
+                                const safeB = idxB === -1 ? 9999 : idxB;
+                                return safeA - safeB;
+                            });
+
+                            return (
+                                <div key={thread.id} className="p-3 bg-stone-900/40 border border-white/5 rounded-xl relative group hover:bg-stone-900/60 transition-all">
+                                    <div className="flex justify-between pr-8 mb-1">
+                                        <span className="text-[10px] font-bold text-stone-300">{thread.title}</span>
+                                        <span className={`text-[8px] px-1 rounded uppercase ${thread.status === 'Resolved' ? 'text-emerald-500' : 'text-orange-500'}`}>{thread.status}</span>
+                                    </div>
+                                    <p className="text-[9px] text-stone-500 font-serif leading-tight">{thread.shortSummary}</p>
+                                    
+                                    {sortedBeats.length > 0 && (
+                                        <div className="mt-3 space-y-1.5 border-t border-white/5 pt-2">
+                                            {sortedBeats.map((beat, i) => {
+                                                const chapterIndex = chapters.findIndex(c => c.id === beat.chapterId);
+                                                const chapterTitle = chapterIndex !== -1 ? chapters[chapterIndex].title : "未割当";
+                                                
+                                                return (
+                                                    <div key={i} className="flex gap-2 items-start text-[9px] group/beat">
+                                                        <span className="px-1.5 py-0.5 bg-stone-800 rounded text-stone-500 shrink-0 font-mono">
+                                                            {chapterIndex !== -1 ? `Ch.${chapterIndex + 1}` : '---'}
+                                                        </span>
+                                                        <div className="flex flex-col min-w-0">
+                                                            {chapterIndex !== -1 && <span className="text-[8px] text-stone-600 truncate">{chapterTitle}</span>}
+                                                            <span className="text-stone-400 font-serif leading-tight group-hover/beat:text-stone-200 transition-colors">{beat.eventDescription}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                        <button onClick={() => openEditor('thread', thread)} className="p-1 bg-stone-800 text-stone-500 hover:text-white rounded"><Edit2 size={10}/></button>
+                                        <button onClick={() => handleDelete('thread', thread.id, thread.title)} className="p-1 bg-stone-800 text-stone-500 hover:text-rose-400 rounded"><Trash2 size={10}/></button>
+                                    </div>
                                 </div>
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                    <button onClick={() => openEditor('thread', thread)} className="p-1 bg-stone-800 text-stone-500 hover:text-white rounded"><Edit2 size={10}/></button>
-                                    <button onClick={() => handleDelete('thread', thread.id, thread.title)} className="p-1 bg-stone-800 text-stone-500 hover:text-rose-400 rounded"><Trash2 size={10}/></button>
-                                </div>
-                            </div>
-                        ))}
-                        {bible.storyThreads.length === 0 && <div className="text-stone-600 text-[10px] italic">スレッドはありません。</div>}
+                            );
+                        })}
+                        {plot.storyThreads.length === 0 && <div className="text-stone-600 text-[10px] italic">スレッドはありません。</div>}
                     </div>
                  </div>
 
@@ -182,7 +217,7 @@ export const TimelineTab: React.FC = () => {
                         <button onClick={() => openEditor('foreshadowing')} className="p-1.5 bg-stone-800 hover:bg-orange-600 hover:text-white text-stone-500 rounded-lg transition-all"><Plus size={14}/></button>
                     </div>
                     <div className="space-y-3">
-                        {bible.foreshadowing.map((item) => (
+                        {plot.foreshadowing.map((item) => (
                             <div key={item.id} className="p-3 bg-stone-900/40 border border-white/5 rounded-xl space-y-2 group relative">
                                 <div className="flex justify-between items-start pr-12">
                                     <span className="text-[10px] font-bold text-stone-300">{item.title}</span>
@@ -248,7 +283,7 @@ export const TimelineTab: React.FC = () => {
                                 )}
                             </div>
                         ))}
-                        {bible.foreshadowing.length === 0 && <div className="text-stone-600 text-[10px] italic">伏線リストはありません。</div>}
+                        {plot.foreshadowing.length === 0 && <div className="text-stone-600 text-[10px] italic">伏線リストはありません。</div>}
                     </div>
                  </div>
             </div>

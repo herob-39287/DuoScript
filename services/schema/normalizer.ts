@@ -1,9 +1,17 @@
 
-import { StoryProject, TransmissionScope, SafetyPreset, StoryProjectMetadata, WorldBible, ChapterLog, SyncState, Theme, AppLanguage, AiPersona } from '../../types';
+import { StoryProject, TransmissionScope, SafetyPreset, StoryProjectMetadata, WorldBible, ChapterLog, SyncState, Theme, AppLanguage, AiPersona, EditorSettings } from '../../types';
 
 export const normalizeProject = (data: any): StoryProject => {
   const now = Date.now();
   
+  const defaultEditorSettings: EditorSettings = {
+    fontSize: 16,
+    lineHeight: 2.5,
+    fontFamily: 'serif',
+    paperFilter: 'none',
+    verticalMode: false
+  };
+
   const savedPrefs = localStorage.getItem('duoscript_prefs');
   const defaultPrefs = savedPrefs ? JSON.parse(savedPrefs) : {
     uiLanguage: 'ja' as AppLanguage,
@@ -12,11 +20,88 @@ export const normalizeProject = (data: any): StoryProject => {
     aiPersona: AiPersona.STANDARD,
     allowSearch: true,
     whisperSensitivity: 50,
-    disabledLinterRules: []
+    disabledLinterRules: [],
+    editorSettings: defaultEditorSettings
   };
 
-  // Convert old string Laws to Array format if needed
-  let normalizedLaws = Array.isArray(data?.bible?.laws) ? data.bible.laws : [];
+  // Safe access helper
+  const safeArray = (arr: any) => Array.isArray(arr) ? arr : [];
+  const safeString = (str: any, def: string = '') => typeof str === 'string' || typeof str === 'number' ? String(str) : def;
+
+  // --- PASS 1: Identify & ID Assignment ---
+  
+  // Helper to ensure ID exists
+  const ensureId = (item: any) => {
+      if (!item) return { id: crypto.randomUUID() };
+      // Handle legacy string array case if any
+      if (typeof item === 'string') return { id: crypto.randomUUID(), concept: item, name: item }; 
+      return { ...item, id: item.id || crypto.randomUUID() };
+  };
+
+  // Pre-process collections that can be referenced
+  const rawChars = safeArray(data?.bible?.characters).map(ensureId);
+  const rawLocs = safeArray(data?.bible?.locations).map(ensureId);
+  const rawOrgs = safeArray(data?.bible?.organizations).map(ensureId);
+  const rawItems = safeArray(data?.bible?.keyItems).map(ensureId);
+  const rawThemes = safeArray(data?.bible?.themes).map((t: any) => {
+      if (typeof t === 'string') return { id: crypto.randomUUID(), concept: t };
+      return { ...t, id: t.id || crypto.randomUUID() };
+  });
+  const rawForeshadowing = safeArray(data?.bible?.foreshadowing).map(ensureId);
+  const rawThreads = safeArray(data?.bible?.storyThreads).map(ensureId);
+
+  // Build ID/Name Map for Resolution
+  const refMap = new Map<string, string>();
+  const register = (id: string, ...names: (string|undefined|null)[]) => {
+      if (!id) return;
+      refMap.set(id, id); // Self reference
+      names.forEach(n => {
+          if (n && typeof n === 'string') refMap.set(n.trim(), id);
+      });
+  };
+
+  rawChars.forEach((c: any) => register(c.id, c.name, c.profile?.name));
+  rawLocs.forEach((l: any) => register(l.id, l.name));
+  rawOrgs.forEach((o: any) => register(o.id, o.name));
+  rawItems.forEach((i: any) => register(i.id, i.name));
+  rawThemes.forEach((t: any) => register(t.id, t.concept));
+  rawForeshadowing.forEach((f: any) => register(f.id, f.title));
+  rawThreads.forEach((t: any) => register(t.id, t.title));
+
+  // Resolver Helper
+  const resolve = (ref: any): string => {
+      if (!ref || typeof ref !== 'string') return ref;
+      return refMap.get(ref.trim()) || ref; // Fallback to original if not found
+  };
+  const resolveArray = (refs: any[]): string[] => {
+      return safeArray(refs).map(resolve).filter((r: any) => typeof r === 'string' && r.length > 0);
+  };
+
+  // --- PASS 2: Object Reconstruction with Resolution ---
+
+  // Meta
+  const meta: StoryProjectMetadata = {
+    id: data?.id || data?.meta?.id || crypto.randomUUID(),
+    title: safeString(data?.title || data?.meta?.title, '無題の物語'),
+    author: safeString(data?.author || data?.meta?.author, '不明な著者'),
+    genre: safeString(data?.genre || data?.meta?.genre, '一般'),
+    createdAt: data?.createdAt || data?.meta?.createdAt || now,
+    updatedAt: data?.updatedAt || data?.meta?.updatedAt || now,
+    schemaVersion: 4, 
+    language: (data?.language || data?.meta?.language || 'ja') as AppLanguage,
+    tokenUsage: safeArray(data?.tokenUsage || data?.meta?.tokenUsage),
+    violationCount: data?.violationCount || data?.meta?.violationCount || 0,
+    violationHistory: safeArray(data?.violationHistory || data?.meta?.violationHistory),
+    headRev: typeof data?.rev === 'number' ? data.rev : (data?.headRev || data?.meta?.headRev),
+    preferences: { 
+      ...defaultPrefs, 
+      ...data?.meta?.preferences,
+      editorSettings: { ...defaultEditorSettings, ...(data?.meta?.preferences?.editorSettings || defaultPrefs.editorSettings || {}) }
+    }
+  };
+
+  // Bible
+  let normalizedLaws = safeArray(data?.bible?.laws).map(ensureId);
   if (typeof data?.bible?.laws === 'string' && data.bible.laws.trim().length > 0) {
     normalizedLaws = [{
       id: crypto.randomUUID(),
@@ -27,107 +112,91 @@ export const normalizeProject = (data: any): StoryProject => {
     }];
   }
 
-  // Normalize Themes
-  let normalizedThemes: Theme[] = [];
-  if (Array.isArray(data?.bible?.themes)) {
-    normalizedThemes = data.bible.themes.map((t: any) => {
-      if (typeof t === 'string') {
-        return {
-          id: crypto.randomUUID(),
-          concept: t,
-          description: '',
-          motifs: [],
-          associatedCharacterIds: []
-        };
-      }
-      return {
-        ...t,
-        id: t.id || crypto.randomUUID(),
-        motifs: Array.isArray(t.motifs) ? t.motifs : [],
-        associatedCharacterIds: Array.isArray(t.associatedCharacterIds) ? t.associatedCharacterIds : []
-      };
-    });
-  }
-
-  const meta: StoryProjectMetadata = {
-    id: data?.id || data?.meta?.id || crypto.randomUUID(),
-    title: String(data?.title || data?.meta?.title || '無題の物語'),
-    author: String(data?.author || data?.meta?.author || '不明な著者'),
-    genre: String(data?.genre || data?.meta?.genre || '一般'),
-    createdAt: data?.createdAt || data?.meta?.createdAt || now,
-    updatedAt: data?.updatedAt || data?.meta?.updatedAt || now,
-    schemaVersion: 4, 
-    language: (data?.language || data?.meta?.language || 'ja') as AppLanguage,
-    tokenUsage: Array.isArray(data?.tokenUsage) ? data.tokenUsage : 
-                Array.isArray(data?.meta?.tokenUsage) ? data.meta.tokenUsage : [],
-    violationCount: data?.violationCount || data?.meta?.violationCount || 0,
-    violationHistory: data?.violationHistory || data?.meta?.violationHistory || [],
-    preferences: { ...defaultPrefs, ...(data?.meta?.preferences || {}) }
-  };
-
   const bible: WorldBible = {
     version: data?.bible?.version || 1,
-    setting: String(data?.bible?.setting || data?.setting || ''),
-    laws: normalizedLaws.map((l: any) => ({ ...l, id: l.id || crypto.randomUUID() })),
-    grandArc: String(data?.bible?.grandArc || data?.grandArc || ''),
-    storyStructure: (Array.isArray(data?.bible?.storyStructure) ? data.bible.storyStructure : []).map((s: any) => ({ ...s, id: s.id || crypto.randomUUID() })),
-    locations: (Array.isArray(data?.bible?.locations) ? data.bible.locations : []).map((l: any) => ({ 
+    setting: safeString(data?.bible?.setting || data?.setting),
+    laws: normalizedLaws,
+    grandArc: safeString(data?.bible?.grandArc || data?.grandArc),
+    storyStructure: safeArray(data?.bible?.storyStructure).map(ensureId),
+    
+    locations: rawLocs.map((l: any) => ({ 
       ...l, 
-      id: l.id || crypto.randomUUID(),
-      connections: Array.isArray(l.connections) ? l.connections : [] 
+      connections: safeArray(l.connections).map((c: any) => ({
+          ...c,
+          targetLocationId: resolve(c.targetLocationId)
+      }))
     })),
-    organizations: (Array.isArray(data?.bible?.organizations) ? data.bible.organizations : []).map((o: any) => ({ 
+    
+    organizations: rawOrgs.map((o: any) => ({ 
       ...o, 
-      id: o.id || crypto.randomUUID(),
-      relations: Array.isArray(o.relations) ? o.relations : []
+      relations: safeArray(o.relations).map((r: any) => ({
+          ...r,
+          targetOrganizationId: resolve(r.targetOrganizationId)
+      }))
     })),
-    themes: normalizedThemes,
-    keyItems: (Array.isArray(data?.bible?.keyItems) ? data.bible.keyItems : []).map((k: any) => ({
-      ...k,
-      id: k.id || crypto.randomUUID(),
-      history: Array.isArray(k.history) ? k.history : []
-    })),
-    storyThreads: (Array.isArray(data?.bible?.storyThreads) ? data.bible.storyThreads : []).map((t: any) => ({
+    
+    themes: rawThemes.map((t: any) => ({
       ...t,
-      id: t.id || crypto.randomUUID(),
-      beats: Array.isArray(t.beats) ? t.beats : []
+      motifs: safeArray(t.motifs),
+      associatedCharacterIds: resolveArray(t.associatedCharacterIds)
     })),
-    races: (Array.isArray(data?.bible?.races) ? data.bible.races : []).map((r: any) => ({
+    
+    keyItems: rawItems.map((k: any) => ({
+      ...k,
+      history: safeArray(k.history),
+      currentOwnerId: resolve(k.currentOwnerId),
+      currentLocationId: resolve(k.currentLocationId)
+    })),
+    
+    storyThreads: rawThreads.map((t: any) => ({
+      ...t,
+      beats: safeArray(t.beats),
+      involvedCharacterIds: resolveArray(t.involvedCharacterIds)
+    })),
+    
+    races: safeArray(data?.bible?.races).map((r: any) => ({
       ...r,
       id: r.id || crypto.randomUUID(),
-      traits: Array.isArray(r.traits) ? r.traits : [],
-      locations: Array.isArray(r.locations) ? r.locations : []
+      traits: safeArray(r.traits),
+      locations: safeArray(r.locations).map(resolve)
     })),
-    bestiary: (Array.isArray(data?.bible?.bestiary) ? data.bible.bestiary : []).map((b: any) => ({
+    
+    bestiary: safeArray(data?.bible?.bestiary).map((b: any) => ({
       ...b,
       id: b.id || crypto.randomUUID(),
-      dropItems: Array.isArray(b.dropItems) ? b.dropItems : []
+      dropItems: safeArray(b.dropItems)
     })),
-    abilities: (Array.isArray(data?.bible?.abilities) ? data.bible.abilities : []).map((a: any) => ({
+    
+    abilities: safeArray(data?.bible?.abilities).map((a: any) => ({
       ...a,
       id: a.id || crypto.randomUUID()
     })),
 
-    tone: String(data?.bible?.tone || 'ニュートラル'),
-    volumes: (Array.isArray(data?.bible?.volumes) ? data.bible.volumes : []).map((v: any) => ({
-      ...v,
-      id: v.id || crypto.randomUUID()
-    })),
+    tone: safeString(data?.bible?.tone, 'ニュートラル'),
+    volumes: safeArray(data?.bible?.volumes).map(ensureId),
     
-    characters: (Array.isArray(data?.bible?.characters) ? data.bible.characters : []).map((c: any) => {
+    characters: rawChars.map((c: any) => {
+      // Preserve original logic for profile/state vs legacy structure
+      const base = { ...c };
       if (c.profile && c.state) {
+        if (c.relationships) {
+            base.relationships = safeArray(c.relationships).map((r: any) => ({
+                ...r,
+                targetId: resolve(r.targetCharacterId || r.targetId)
+            }));
+        }
         return {
-          ...c,
-          id: c.id || crypto.randomUUID(),
-          history: Array.isArray(c.history) ? c.history : []
+          ...base,
+          history: safeArray(c.history)
         };
       } else {
+        // Legacy/Simplified object conversion
         const linguisticProfile = c.linguisticProfile || { firstPerson: '私', secondPerson: 'あなた', speechStyle: 'Casual', catchphrases: [], forbiddenWords: [] };
         return {
-          id: c.id || crypto.randomUUID(),
+          id: c.id, // ID is already ensured
           profile: {
              name: c.name || "名無しの権兵衛",
-             aliases: Array.isArray(c.aliases) ? c.aliases : [],
+             aliases: safeArray(c.aliases),
              role: c.role || 'Supporting',
              description: c.description || '',
              shortSummary: c.shortSummary || c.summary || '',
@@ -135,7 +204,7 @@ export const normalizeProject = (data: any): StoryProject => {
              personality: c.personality || '',
              background: c.description || '', 
              voice: linguisticProfile,
-             traits: Array.isArray(c.traits) ? c.traits : [],
+             traits: safeArray(c.traits),
              motivation: c.motivation || '',
              flaw: c.flaw || '',
              arc: c.arc || ''
@@ -147,13 +216,13 @@ export const normalizeProject = (data: any): StoryProject => {
              health: c.status?.health || '良好',
              socialStanding: c.status?.socialStanding || ''
           },
-          relationships: Array.isArray(c.relationships) ? c.relationships.map((r: any) => ({
-              targetId: r.targetCharacterId || r.targetId,
+          relationships: safeArray(c.relationships).map((r: any) => ({
+              targetId: resolve(r.targetCharacterId || r.targetId),
               type: r.type || 'Other',
               description: r.description || '',
               strength: r.sentiment || 0,
               lastChangedAt: 'Initial'
-          })) : [],
+          })),
           history: [],
           imageUrl: c.imageUrl,
           isPrivate: c.isPrivate || false
@@ -161,72 +230,86 @@ export const normalizeProject = (data: any): StoryProject => {
       }
     }),
 
-    timeline: (Array.isArray(data?.bible?.timeline) ? data.bible.timeline : []).map((t: any) => ({
+    timeline: safeArray(data?.bible?.timeline).map((t: any) => ({
       ...t,
       id: t.id || crypto.randomUUID(),
-      foreshadowingLinks: Array.isArray(t.foreshadowingLinks) ? t.foreshadowingLinks : [],
+      foreshadowingLinks: safeArray(t.foreshadowingLinks).map((l: any) => ({
+          ...l,
+          foreshadowingId: resolve(l.foreshadowingId)
+      })),
       status: t.status || 'Canon', 
-      relatedThreadId: t.relatedThreadId
+      relatedThreadId: resolve(t.relatedThreadId),
+      involvedCharacterIds: resolveArray(t.involvedCharacterIds)
     })),
-    foreshadowing: (Array.isArray(data?.bible?.foreshadowing) ? data.bible.foreshadowing : []).map((f: any) => ({
+    
+    foreshadowing: rawForeshadowing.map((f: any) => ({
       ...f,
-      id: f.id || crypto.randomUUID(),
-      relatedThreadId: f.relatedThreadId,
-      relatedThemeId: f.relatedThemeId,
-      relatedEntityIds: Array.isArray(f.relatedEntityIds) ? f.relatedEntityIds : [],
-      clues: Array.isArray(f.clues) ? f.clues : [],
-      redHerrings: Array.isArray(f.redHerrings) ? f.redHerrings : []
+      relatedThreadId: resolve(f.relatedThreadId),
+      relatedThemeId: resolve(f.relatedThemeId),
+      relatedEntityIds: resolveArray(f.relatedEntityIds),
+      clues: safeArray(f.clues),
+      redHerrings: safeArray(f.redHerrings),
+      status: f.status || 'Open',
+      priority: f.priority || 'Medium'
     })),
-    entries: (Array.isArray(data?.bible?.entries) ? data.bible.entries : []).map((e: any) => ({
+    
+    entries: safeArray(data?.bible?.entries).map((e: any) => ({
       ...e,
       id: e.id || crypto.randomUUID(),
       isPrivate: e.isPrivate || false,
       isSecret: e.isSecret ?? false, 
-      aliases: Array.isArray(e.aliases) ? e.aliases : [],
-      tags: Array.isArray(e.tags) ? e.tags : [],
-      linkedIds: Array.isArray(e.linkedIds) ? e.linkedIds : []
+      aliases: safeArray(e.aliases),
+      tags: safeArray(e.tags),
+      linkedIds: resolveArray(e.linkedIds)
     })),
-    nexusBranches: (Array.isArray(data?.bible?.nexusBranches) ? data.bible.nexusBranches : []).map((b: any) => ({
+    
+    nexusBranches: safeArray(data?.bible?.nexusBranches).map((b: any) => ({
       ...b,
       id: b.id || crypto.randomUUID(),
       timestamp: b.timestamp || now
     })),
-    integrityIssues: (Array.isArray(data?.bible?.integrityIssues) ? data.bible.integrityIssues : []).map((i: any) => ({
+    integrityIssues: safeArray(data?.bible?.integrityIssues).map((i: any) => ({
       ...i,
       id: i.id || crypto.randomUUID()
     })),
-    summaryBuffer: String(data?.bible?.summaryBuffer || ''),
+    summaryBuffer: safeString(data?.bible?.summaryBuffer),
     lastSummaryUpdate: data?.bible?.lastSummaryUpdate || 0
   };
 
+  // Manuscript
   const chapters: ChapterLog[] = Array.isArray(data?.chapters) && data.chapters.length > 0 
     ? data.chapters.map((c: any) => ({
         ...c,
         id: c.id || crypto.randomUUID(),
-        title: String(c.title || ''),
-        summary: String(c.summary || ''),
-        content: String(c.content || ''),
-        wordCount: typeof c.wordCount === 'number' ? c.wordCount : (c.content?.length || 0),
+        title: safeString(c.title),
+        summary: safeString(c.summary),
+        content: c.content || undefined, // Keep undefined if not present to trigger lazy load
+        wordCount: typeof c.wordCount === 'number' ? c.wordCount : (safeString(c.content).length || 0),
         draftVersion: c.draftVersion || 0,
-        scenes: Array.isArray(c.scenes) ? c.scenes : [],
+        scenes: safeArray(c.scenes),
         strategy: {
-          milestones: Array.isArray(c.strategy?.milestones) ? c.strategy.milestones : [],
-          forbiddenResolutions: Array.isArray(c.strategy?.forbiddenResolutions) ? c.strategy.forbiddenResolutions : [],
-          characterArcProgress: String(c.strategy?.characterArcProgress || ''),
-          pacing: String(c.strategy?.pacing || ''),
-          povCharacterId: c.strategy?.povCharacterId
+          milestones: safeArray(c.strategy?.milestones),
+          forbiddenResolutions: safeArray(c.strategy?.forbiddenResolutions),
+          characterArcProgress: safeString(c.strategy?.characterArcProgress),
+          pacing: safeString(c.strategy?.pacing),
+          povCharacterId: resolve(c.strategy?.povCharacterId)
         },
-        beats: Array.isArray(c.beats) ? c.beats.map((b: any) => ({ ...b, id: b.id || crypto.randomUUID() })) : [],
+        beats: safeArray(c.beats).map((b: any) => ({ ...b, id: b.id || crypto.randomUUID() })),
         status: c.status || 'Idea',
         updatedAt: c.updatedAt || now,
-        involvedCharacterIds: Array.isArray(c.involvedCharacterIds) ? c.involvedCharacterIds : [],
-        foreshadowingLinks: Array.isArray(c.foreshadowingLinks) ? c.foreshadowingLinks : []
+        involvedCharacterIds: resolveArray(c.involvedCharacterIds),
+        foreshadowingLinks: safeArray(c.foreshadowingLinks).map((l: any) => ({
+            ...l,
+            foreshadowingId: resolve(l.foreshadowingId)
+        })),
+        relevantEntityIds: resolveArray(c.relevantEntityIds)
       }))
     : [{ 
         id: crypto.randomUUID(), 
         title: '序章', 
         summary: '', 
-        content: '', 
+        // content undefined means empty start or needs fetch. For new project, it is empty.
+        content: '',
         scenes: [],
         strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, 
         beats: [], 
@@ -239,28 +322,24 @@ export const normalizeProject = (data: any): StoryProject => {
       }];
 
   const sync: SyncState = {
-    chatHistory: Array.isArray(data?.chatHistory) ? data.chatHistory : 
-                 Array.isArray(data?.sync?.chatHistory) ? data.sync.chatHistory : [],
-    archivedChat: Array.isArray(data?.sync?.archivedChat) ? data.sync.archivedChat : [],
-    conversationMemory: String(data?.sync?.conversationMemory || ''),
-    pendingChanges: (Array.isArray(data?.pendingChanges) ? data.pendingChanges : 
-                    Array.isArray(data?.sync?.pendingChanges) ? data.sync.pendingChanges : []).map((p: any) => ({
-                      ...p,
-                      id: p.id || crypto.randomUUID()
-                    })),
-    quarantine: (Array.isArray(data?.quarantine) ? data.quarantine :
-                Array.isArray(data?.sync?.quarantine) ? data.sync.quarantine : []).map((q: any) => ({
-                  ...q,
-                  id: q.id || crypto.randomUUID()
-                })),
-    history: (Array.isArray(data?.history) ? data.history : 
-             Array.isArray(data?.sync?.history) ? data.sync.history : []).map((h: any) => ({
-               ...h,
-               id: h.id || crypto.randomUUID()
-             }))
+    chatHistory: safeArray(data?.chatHistory || data?.sync?.chatHistory),
+    archivedChat: safeArray(data?.sync?.archivedChat),
+    conversationMemory: safeString(data?.sync?.conversationMemory),
+    pendingChanges: safeArray(data?.pendingChanges || data?.sync?.pendingChanges).map((p: any) => ({
+      ...p,
+      id: p.id || crypto.randomUUID(),
+      targetId: resolve(p.targetId) // Try to resolve pending op target IDs too
+    })),
+    quarantine: safeArray(data?.quarantine || data?.sync?.quarantine).map((q: any) => ({
+      ...q,
+      id: q.id || crypto.randomUUID()
+    })),
+    history: safeArray(data?.history || data?.sync?.history).map((h: any) => ({
+      ...h,
+      id: h.id || crypto.randomUUID(),
+      targetId: resolve(h.targetId)
+    }))
   };
 
-  const assets = data?.assets || {};
-
-  return { meta, bible, chapters, sync, assets };
+  return { meta, bible, chapters, sync };
 };

@@ -1,4 +1,14 @@
 
+import { 
+  StoryProject, StoryProjectMetadata, AppPreferences, 
+  TokenUsageEntry, SafetyViolation, ChapterLog, UsagePayload 
+} from './project';
+import { WorldBible, Character } from './bible';
+import { 
+  SyncState, ChatMessage, SyncOperation, HistoryEntry, 
+  QuarantineItem 
+} from './sync';
+
 export enum ViewMode {
   WELCOME = 'WELCOME',
   DASHBOARD = 'DASHBOARD',
@@ -55,17 +65,8 @@ export interface UIState {
   forceSaveRequested: boolean; 
   isContextActive: boolean;
   thinkingPhase: string | null; // AIの思考プロセスを表示するための状態
+  isOnline: boolean; // ネットワーク接続状態
 }
-
-import { 
-  StoryProject, StoryProjectMetadata, AppPreferences, 
-  TokenUsageEntry, SafetyViolation, ChapterLog, UsagePayload 
-} from './project';
-import { WorldBible } from './bible';
-import { 
-  SyncState, ChatMessage, SyncOperation, HistoryEntry, 
-  QuarantineItem 
-} from './sync';
 
 export type MetaAction = 
   | { type: 'LOAD_META'; payload: StoryProjectMetadata }
@@ -75,9 +76,23 @@ export type MetaAction =
   | { type: 'RECORD_VIOLATION'; payload: SafetyViolation }
   | { type: 'RESET_VIOLATIONS' };
 
+// Helper type to extract only array properties from WorldBible
+export type BibleArrayKeys = {
+  [K in keyof WorldBible & string]: WorldBible[K] extends Array<any> ? K : never
+}[keyof WorldBible & string];
+
 export type BibleAction = 
   | { type: 'LOAD_BIBLE'; payload: WorldBible }
   | { type: 'UPDATE_BIBLE'; payload: Partial<WorldBible> }
+  | { type: 'UPDATE_CHARACTER_DATA'; id: string; updates: Partial<Character> }
+  | { 
+      type: 'MANIPULATE_BIBLE_LIST'; 
+      path: BibleArrayKeys; 
+      op: 'add' | 'update' | 'delete'; 
+      id?: string; 
+      item?: any; 
+      updates?: any;
+    }
   | { type: 'APPLY_SYNC_OP'; payload: { nextBible: WorldBible; nextChapters: ChapterLog[]; historyEntry: HistoryEntry } }
   | { type: 'UNDO_BIBLE'; payload: { nextBible: WorldBible; nextChapters: ChapterLog[] } };
 
@@ -113,7 +128,8 @@ export type UIAction =
   | { type: 'SET_CONFLICT'; payload: boolean }
   | { type: 'SET_FORCE_SAVE_REQUESTED'; payload: boolean } 
   | { type: 'TOGGLE_CONTEXT_ACTIVE'; payload: boolean }
-  | { type: 'SET_THINKING_PHASE'; payload: string | null };
+  | { type: 'SET_THINKING_PHASE'; payload: string | null }
+  | { type: 'SET_ONLINE_STATUS'; payload: boolean };
 
 export type ProjectAction = 
   | MetaAction

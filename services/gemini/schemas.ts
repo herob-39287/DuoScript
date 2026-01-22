@@ -1,4 +1,3 @@
-
 import { Type } from "@google/genai";
 import { AppLanguage } from "../../types";
 
@@ -51,6 +50,7 @@ export const getSyncOperationSchema = (lang: AppLanguage) => ({
         lifespan: { type: Type.STRING },
         cost: { type: Type.STRING },
         mechanics: { type: Type.STRING },
+        definition: { type: Type.STRING },
       }
     },
     rationale: { type: Type.STRING, description: `Reason for this change. MUST be in ${getLangLabel(lang)}.` },
@@ -169,21 +169,239 @@ export const getNexusSchema = (lang: AppLanguage) => ({
   required: ["impactOnCanon", "impactOnState", "alternateTimeline"]
 });
 
-export const getProjectGenSchema = (lang: AppLanguage) => ({
+/**
+ * プロジェクト生成 (Bible) スキーマ
+ */
+export const getGenesisBibleSchema = (lang: AppLanguage) => ({
   type: Type.OBJECT,
   properties: {
-    title: { type: Type.STRING, description: `In ${getLangLabel(lang)}` },
-    genre: { type: Type.STRING, description: `In ${getLangLabel(lang)}` },
+    title: { type: Type.STRING, description: `Title in ${getLangLabel(lang)}` },
+    genre: { type: Type.STRING },
     bible: {
       type: Type.OBJECT,
       properties: {
-        setting: { type: Type.STRING, description: `In ${getLangLabel(lang)}` },
-        grandArc: { type: Type.STRING, description: `In ${getLangLabel(lang)}` }
+        setting: { type: Type.STRING, description: `Detailed world setting in ${getLangLabel(lang)}` },
+        grandArc: { type: Type.STRING, description: `Overall story plot in ${getLangLabel(lang)}` },
+        tone: { type: Type.STRING, description: "Atmosphere/Tone" },
+        laws: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              description: { type: Type.STRING },
+              type: { type: Type.STRING },
+              importance: { type: Type.STRING }
+            }
+          }
+        },
+        characters: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              role: { type: Type.STRING },
+              description: { type: Type.STRING },
+              personality: { type: Type.STRING },
+              motivation: { type: Type.STRING },
+              appearance: { type: Type.STRING },
+              traits: { type: Type.ARRAY, items: { type: Type.STRING } },
+              relationships: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    targetId: { type: Type.STRING, description: "Use Character Name here for generation, will be resolved later" },
+                    type: { type: Type.STRING },
+                    description: { type: Type.STRING }
+                  }
+                }
+              }
+            }
+          }
+        },
+        locations: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              type: { type: Type.STRING },
+              description: { type: Type.STRING }
+            }
+          }
+        },
+        organizations: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              type: { type: Type.STRING },
+              description: { type: Type.STRING }
+            }
+          }
+        },
+        keyItems: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              type: { type: Type.STRING },
+              description: { type: Type.STRING }
+            }
+          }
+        },
+        themes: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              concept: { type: Type.STRING },
+              description: { type: Type.STRING }
+            }
+          }
+        },
+        entries: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              category: { type: Type.STRING },
+              definition: { type: Type.STRING, description: "Content of the entry" }
+            }
+          }
+        },
+        races: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              description: { type: Type.STRING }
+            }
+          }
+        },
+        bestiary: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              description: { type: Type.STRING },
+              dangerLevel: { type: Type.STRING }
+            }
+          }
+        },
+        abilities: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              description: { type: Type.STRING },
+              type: { type: Type.STRING }
+            }
+          }
+        }
       },
-      required: ["setting", "grandArc"]
+      required: ["setting", "grandArc", "characters", "laws", "locations"]
     }
   },
   required: ["title", "genre", "bible"]
+});
+
+/**
+ * プロジェクト生成 (Chapters) スキーマ
+ */
+export const getInitialChaptersSchema = (lang: AppLanguage) => ({
+  type: Type.OBJECT,
+  properties: {
+    chapters: {
+      type: Type.ARRAY,
+      description: "Proposed chapter list (Plot outline)",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: `Chapter title in ${getLangLabel(lang)}` },
+          summary: { type: Type.STRING, description: `Chapter summary/plot in ${getLangLabel(lang)}` }
+        },
+        required: ["title", "summary"]
+      }
+    },
+    timeline: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          timeLabel: { type: Type.STRING },
+          event: { type: Type.STRING },
+          importance: { type: Type.STRING }
+        }
+      }
+    },
+    storyStructure: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          summary: { type: Type.STRING },
+          goal: { type: Type.STRING }
+        }
+      }
+    },
+    volumes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          order: { type: Type.INTEGER },
+          summary: { type: Type.STRING }
+        }
+      }
+    }
+  },
+  required: ["chapters"]
+});
+
+/**
+ * プロジェクト生成 (Foreshadowing) スキーマ
+ */
+export const getInitialForeshadowingSchema = (lang: AppLanguage) => ({
+  type: Type.OBJECT,
+  properties: {
+    foreshadowing: {
+      type: Type.ARRAY,
+      description: "Proposed initial foreshadowing (Mysteries, Omens)",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          clues: { type: Type.ARRAY, items: { type: Type.STRING } },
+          redHerrings: { type: Type.ARRAY, items: { type: Type.STRING } }
+        },
+        required: ["title", "description", "clues", "redHerrings"]
+      }
+    },
+    storyThreads: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          shortSummary: { type: Type.STRING },
+          status: { type: Type.STRING }
+        }
+      }
+    }
+  },
+  required: ["foreshadowing"]
 });
 
 export const DEFAULT_RESPONSES = {
@@ -191,5 +409,5 @@ export const DEFAULT_RESPONSES = {
   SUGGESTIONS: ["...", "...", "..."],
   CHAPTER_PACKAGE: { strategy: { milestones: ["Intro", "Development", "Climax"], pacing: "Normal" }, beats: [{ text: "Situation" }], draft: "" },
   NEXUS: { impactOnCanon: "None", impactOnState: "Maintained", alternateTimeline: ["No Change"] },
-  PROJECT_GEN: { title: "Untitled", genre: "Fantasy", bible: { setting: "...", grandArc: "..." } }
+  PROJECT_GEN: { title: "Untitled", genre: "Fantasy", bible: { setting: "...", grandArc: "...", characters: [], laws: [], locations: [] }, chapters: [] }
 };
