@@ -37,14 +37,14 @@ export default defineConfig(({ mode }) => {
           description: "AIと共に物語を紡ぐ、執筆のためのアトリエ。",
           icons: [
             {
-              src: "https://cdn-icons-png.flaticon.com/512/2921/2921222.png",
+              src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 24 24' fill='none' stroke='%23ea580c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z'/%3E%3Cline x1='16' y1='8' x2='2' y2='22'/%3E%3Cline x1='17.5' y1='15' x2='9' y2='15'/%3E%3C/svg%3E",
               sizes: "192x192",
-              type: "image/png"
+              type: "image/svg+xml"
             },
             {
-              src: "https://cdn-icons-png.flaticon.com/512/2921/2921222.png",
+              src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 24 24' fill='none' stroke='%23ea580c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z'/%3E%3Cline x1='16' y1='8' x2='2' y2='22'/%3E%3Cline x1='17.5' y1='15' x2='9' y2='15'/%3E%3C/svg%3E",
               sizes: "512x512",
-              type: "image/png"
+              type: "image/svg+xml"
             }
           ]
         },
