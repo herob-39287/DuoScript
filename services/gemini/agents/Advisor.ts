@@ -8,8 +8,13 @@ import * as Schemas from "../schemas";
 import { WhisperZodSchema } from "../../validation/schemas";
 import { parseWithSchema } from "../utils";
 import { BaseAgent } from "./BaseAgent";
+import { GeminiClient } from "../core";
 
 export class AdvisorAgent extends BaseAgent {
+  constructor(client: GeminiClient) {
+    super(client);
+  }
+
   async whisper(chunk: string, project: StoryProject, activeChapterId: string, onUsage: UsageCallback, logCallback: LogCallback): Promise<WhisperAdvice | null> {
     const storyData = PromptBuilder.buildFocalData(project, [], activeChapterId);
     const lang = project.meta.language || 'ja';

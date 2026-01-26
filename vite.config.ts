@@ -5,9 +5,25 @@ import { VitePWA } from 'vite-plugin-pwa';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, (process as any).cwd(), '');
+  const isLocalBuild = process.env.BUILD_MODE === 'local';
+
   return {
     plugins: [
       react(),
+      {
+        name: 'html-transform',
+        transformIndexHtml(html) {
+          if (isLocalBuild) {
+            // Local Build: Remove CDN dependencies and import map
+            // Use regex to strip the tags identified by IDs or content
+            return html
+              .replace(/<script[^>]*id="tailwind-cdn"[^>]*>[\s\S]*?<\/script>/, '')
+              .replace(/<script[^>]*id="tailwind-config"[^>]*>[\s\S]*?<\/script>/, '')
+              .replace(/<script[^>]*id="import-map"[^>]*>[\s\S]*?<\/script>/, '');
+          }
+          return html;
+        },
+      },
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
@@ -36,20 +52,6 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           runtimeCaching: [
             {
-              urlPattern: /^https:\/\/cdn\.tailwindcss\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'tailwind-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
               options: {
@@ -76,32 +78,27 @@ export default defineConfig(({ mode }) => {
                   statuses: [0, 200]
                 }
               }
-            },
-            {
-              urlPattern: /^https:\/\/esm\.sh\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'esm-sh-cache',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
             }
           ]
         }
       })
     ],
     define: {
-      // コード内の process.env.API_KEY を、.env ファイルの API_KEY (または VITE_API_KEY) に置換
       'process.env.API_KEY': JSON.stringify(env.API_KEY || env.VITE_API_KEY),
     },
     build: {
-      outDir: 'dist',
-      sourcemap: false
+      outDir: isLocalBuild ? 'dist-local' : 'dist',
+      sourcemap: false,
+      rollupOptions: {
+        // CDNモードの場合は主要ライブラリをバンドルから除外し、HTMLのimportmapに任せる
+        // Localモードの場合は全てバンドルする
+        external: isLocalBuild ? [] : [
+          'react', 'react-dom', 'lucide-react', 'recharts', 'jszip', 
+          'zod', 'immer', '@google/genai', 'clsx', 'tailwind-merge', 
+          'class-variance-authority', 'vite-plugin-pwa', 'vite',
+          '@vitejs/plugin-react'
+        ]
+      }
     }
   };
 });

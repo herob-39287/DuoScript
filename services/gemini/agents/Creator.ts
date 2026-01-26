@@ -1,17 +1,22 @@
 
 import { AI_MODELS, TOKEN_LIMITS } from "../../../constants";
-import { StoryProject, UsageCallback, LogCallback } from "../../../types";
+import { CreatorContext, UsageCallback, LogCallback } from "../../../types";
 import * as Prompts from "../prompts";
 import { STRICT_JSON_ENFORCEMENT } from "../prompts/resources";
 import { BrainstormArraySchema } from "../../validation/schemas";
 import { parseWithSchema } from "../utils";
 import { Type } from "@google/genai";
 import { BaseAgent } from "./BaseAgent";
+import { GeminiClient } from "../core";
 
 export class CreatorAgent extends BaseAgent {
-  async genesisFill(project: StoryProject, currentProfile: any, fieldLabel: string, onUsage: UsageCallback, logCallback: LogCallback): Promise<string> {
-    const lang = project.meta.language || 'ja';
-    const worldContext = `Setting: ${project.bible.setting}\nTone: ${project.bible.tone}`;
+  constructor(client: GeminiClient) {
+    super(client);
+  }
+
+  async genesisFill(context: CreatorContext, currentProfile: any, fieldLabel: string, onUsage: UsageCallback, logCallback: LogCallback): Promise<string> {
+    const lang = context.meta.language || 'ja';
+    const worldContext = `Setting: ${context.bible.setting}\nTone: ${context.bible.tone}`;
     const profileStr = JSON.stringify(currentProfile, null, 2);
 
     return this.client.request({
@@ -25,9 +30,9 @@ export class CreatorAgent extends BaseAgent {
     });
   }
 
-  async autoFillItem(project: StoryProject, itemType: string, itemName: string, fieldLabel: string, currentItem: any, onUsage: UsageCallback, logCallback: LogCallback): Promise<string> {
-    const lang = project.meta.language || 'ja';
-    const worldContext = `Setting: ${project.bible.setting}\nTone: ${project.bible.tone}\nLaws: ${project.bible.laws.map(l => l.name).join(", ")}`;
+  async autoFillItem(context: CreatorContext, itemType: string, itemName: string, fieldLabel: string, currentItem: any, onUsage: UsageCallback, logCallback: LogCallback): Promise<string> {
+    const lang = context.meta.language || 'ja';
+    const worldContext = `Setting: ${context.bible.setting}\nTone: ${context.bible.tone}\nLaws: ${context.bible.laws.map(l => l.name).join(", ")}`;
     const itemStr = JSON.stringify(currentItem, null, 2);
 
     return this.client.request({
@@ -42,7 +47,7 @@ export class CreatorAgent extends BaseAgent {
   }
 
   async brainstorm(
-    project: StoryProject, 
+    context: CreatorContext, 
     itemType: string, 
     name: string | undefined, 
     currentData: any, 
@@ -51,8 +56,8 @@ export class CreatorAgent extends BaseAgent {
     logCallback: LogCallback, 
     count: number = 3
   ): Promise<any[]> {
-    const lang = project.meta.language || 'ja';
-    const worldContext = `Setting: ${project.bible.setting}\nTone: ${project.bible.tone}\nLaws: ${project.bible.laws.map(l => l.name).join(", ")}`;
+    const lang = context.meta.language || 'ja';
+    const worldContext = `Setting: ${context.bible.setting}\nTone: ${context.bible.tone}\nLaws: ${context.bible.laws.map(l => l.name).join(", ")}`;
     const currentJson = JSON.stringify(currentData);
 
     const taskDescription = name && name !== "Unknown" && name.trim().length > 0

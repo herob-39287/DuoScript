@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Sparkles, Loader2, ChevronRight, Rocket, Coffee, Feather, BookOpen, FileJson, Globe } from 'lucide-react';
+import { Sparkles, Loader2, ChevronRight, Rocket, Coffee, Feather, BookOpen, FileJson, Globe, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { StoryProject } from '../types';
 import { Button, Card, SectionHeader, Styles } from './ui/DesignSystem';
 import { t } from '../utils/i18n';
@@ -32,9 +32,15 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert }) => {
     handleFileUpload
   } = useWelcomeLogic({ onStart, showAlert });
 
+  const hasApiKey = !!process.env.API_KEY;
+
   return (
     <div className="fixed inset-0 bg-stone-900 flex flex-col items-center p-4 md:p-12 overflow-y-auto no-scrollbar pb-safe">
-      <div className="absolute top-4 right-4 z-50">
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${hasApiKey ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+           {hasApiKey ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
+           {hasApiKey ? 'API Ready' : 'Key Missing'}
+        </div>
         <button onClick={handleLangSwitch} className={`flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-800 text-stone-400 hover:text-white transition-all border border-white/5 ${Styles.text.label}`}>
           <Globe size={12} /> {lang === 'ja' ? 'English' : '日本語'}
         </button>

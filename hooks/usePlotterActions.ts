@@ -52,7 +52,12 @@ export const usePlotterActions = () => {
     setGeneratingCharId(charId);
     addLog('info', 'Artist', `${char.profile.name} の肖像画を描いています...`);
     try {
-      const base64 = await generateCharacterPortrait(char, { meta, bible } as any, (u) => metaDispatch(Actions.trackUsage(u)), addLog);
+      const base64 = await generateCharacterPortrait(
+        char, 
+        { bible: { tone: bible.tone } }, 
+        (u) => metaDispatch(Actions.trackUsage(u)), 
+        addLog
+      );
       
       // Save full image data to IndexedDB
       await savePortraitToDB(meta.id, char.id, base64);

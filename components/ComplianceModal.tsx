@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ShieldCheck, FileText, Database, Send, Lock, Zap, Globe, Sparkles, UserCheck } from 'lucide-react';
+import { ShieldCheck, FileText, Database, Send, Lock, Zap, Globe, Sparkles, UserCheck, Key, AlertTriangle } from 'lucide-react';
 import { AppPreferences, TransmissionScope, SafetyPreset, AiPersona } from '../types';
 import { t } from '../utils/i18n';
 
@@ -55,6 +55,21 @@ const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
               </button>
             </div>
           </section>
+
+          {/* API Key Security Warning */}
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex gap-3">
+             <div className="p-2 bg-amber-500/20 rounded-xl text-amber-500 shrink-0 h-fit">
+               <AlertTriangle size={20} />
+             </div>
+             <div className="space-y-1">
+               <h4 className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                 {t('comp.apikey_warning_title', lang)}
+               </h4>
+               <p className="text-[10px] md:text-[11px] text-amber-100/80 font-serif leading-relaxed">
+                 {t('comp.apikey_warning_desc', lang)}
+               </p>
+             </div>
+          </div>
 
           {/* AI Persona Section */}
           <section className="space-y-4">

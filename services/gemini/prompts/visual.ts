@@ -1,14 +1,15 @@
 
-import { getPrompts } from "./resources";
+import { getTemplate } from "./resources";
+import { PromptTemplate } from "../promptTemplate";
 
-// Visual prompting is usually done in English for better consistency with current models,
-// but we use the 'en' resource primarily. If localized visual prompting is needed, pass 'ja'.
-export const VISUAL_DESCRIPTION_PROMPT = (character: any, tone: string) => {
-  const p = getPrompts('en');
-  return p.visual.description(character.profile.name, tone);
+export const VISUAL_DESCRIPTION_PROMPT = (characterName: string, tone: string) => {
+  // Visual prompting is usually done in English for better model consistency
+  return PromptTemplate.from(getTemplate('visual.description', 'en')).format({ 
+    name: characterName, 
+    tone 
+  });
 };
 
 export const PORTRAIT_PROMPT = (desc: string) => {
-  const p = getPrompts('en');
-  return p.visual.portrait(desc);
+  return PromptTemplate.from(getTemplate('visual.portrait', 'en')).format({ desc });
 };

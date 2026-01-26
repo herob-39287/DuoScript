@@ -5,8 +5,13 @@ import * as Prompts from "../prompts";
 import { STRICT_JSON_ENFORCEMENT } from "../prompts/resources";
 import { Type } from "@google/genai";
 import { BaseAgent } from "./BaseAgent";
+import { GeminiClient } from "../core";
 
 export class MemoryAgent extends BaseAgent {
+  constructor(client: GeminiClient) {
+    super(client);
+  }
+
   async summarize(currentMemory: string, oldMessages: GeminiContent[], onUsage: UsageCallback, logCallback: LogCallback): Promise<string> {
     const prompt = Prompts.CHAT_SUMMARIZATION_PROMPT(currentMemory, oldMessages);
 

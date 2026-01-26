@@ -14,7 +14,7 @@ import { GeminiClient } from "../core";
 export class ExtractorAgent extends BaseAgent {
   private librarian: LibrarianAgent;
 
-  constructor(client?: GeminiClient) {
+  constructor(client: GeminiClient) {
     super(client);
     this.librarian = new LibrarianAgent(client);
   }

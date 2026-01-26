@@ -9,6 +9,7 @@ import {
   StoryThreadSyncSchema, StoryStructureSyncSchema, VolumeSyncSchema, ChapterSyncSchema, NexusBranchSyncSchema,
   StringOrNull
 } from '../../validation/schemas';
+import { isListLikeString } from '../../../utils/stringUtils';
 import { z } from 'zod';
 
 // Collection items usually have an ID and some content.
@@ -77,6 +78,17 @@ export class CollectionStrategy implements SyncStrategy {
 
     const namingField = mapping.naming;
     let targetName = StringOrNull.parse(op.targetName) || "対象項目";
+    
+    // Security Guard: Reject list-like strings in naming fields
+    // This prevents accidental pollution of the database with hallucinated lists
+    if (isListLikeString(targetName)) {
+        throw new Error(`Rejected apply: targetName contains list-like content.`);
+    }
+    const incomingName = incomingValue[namingField];
+    if (typeof incomingName === 'string' && isListLikeString(incomingName)) {
+        throw new Error(`Rejected apply: Naming field '${namingField}' contains list-like content.`);
+    }
+
     let oldVal: any = null;
     let newVal: any = null;
 

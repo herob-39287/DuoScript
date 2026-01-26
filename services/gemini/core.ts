@@ -29,14 +29,24 @@ export interface StreamConfig {
  * Wraps GoogleGenAI SDK to provide unified error handling, retry logic, and usage tracking.
  */
 export class GeminiClient {
-  private genAI: GoogleGenAI;
+  public genAI: GoogleGenAI;
+  private hasKey: boolean;
 
   constructor(apiKey: string) {
-    if (!apiKey) throw new Error("API Key is required for GeminiClient.");
-    this.genAI = new GoogleGenAI({ apiKey });
+    // プレビュー環境でのクラッシュを防ぐため、初期化時はキーの有無に関わらずインスタンスを作成する
+    // 実際のリクエスト時にキーの有無をチェックする
+    this.hasKey = !!apiKey;
+    this.genAI = new GoogleGenAI({ apiKey: apiKey || "dummy_key_for_init" });
+  }
+
+  private checkKey() {
+    if (!this.hasKey) {
+      throw new Error("API Key is missing. Please configure process.env.API_KEY.");
+    }
   }
 
   async embedText(text: string): Promise<number[]> {
+    this.checkKey();
     try {
       const response = await this.genAI.models.embedContent({
         model: AI_MODELS.EMBEDDING,
@@ -50,6 +60,7 @@ export class GeminiClient {
   }
 
   async request<T>(params: RequestConfig): Promise<T> {
+    this.checkKey();
     const { model, contents, config, usageLabel, onUsage, logCallback, mapper } = params;
     const normalizedContents = this.normalizeContents(contents);
 
@@ -99,6 +110,7 @@ export class GeminiClient {
   }
 
   async *stream(params: StreamConfig) {
+    this.checkKey();
     const { model, contents, config, usageLabel, onUsage, logCallback } = params;
     const normalizedContents = this.normalizeContents(contents);
 
@@ -185,27 +197,4 @@ export class GeminiClient {
     }
     return finalConfig;
   }
-}
-
-// Deprecated: For backward compatibility with workers/hooks if they use this direct export
-// Prefer dependency injection where possible.
-let defaultClient: GeminiClient | null = null;
-export const getClient = () => {
-  if (!defaultClient) {
-    defaultClient = new GeminiClient(process.env.API_KEY || "");
-  }
-  // Allow access to underlying genAI for specialized calls (like caching)
-  return (defaultClient as any).genAI; 
-};
-
-// Re-export for compatibility
-export const runGeminiRequest = async <T>(params: RequestConfig): Promise<T> => {
-  if (!defaultClient) defaultClient = new GeminiClient(process.env.API_KEY || "");
-  return defaultClient.request<T>(params);
-}
-
-export const runGeminiStream = async function* (params: StreamConfig) {
-  if (!defaultClient) defaultClient = new GeminiClient(process.env.API_KEY || "");
-  const stream = defaultClient.stream(params);
-  for await (const chunk of stream) yield chunk;
 }

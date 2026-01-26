@@ -1,16 +1,15 @@
 
 import { AppLanguage, AiPersona } from "../../../types";
-import { PERSONA_INSTRUCTIONS } from "./core";
-import { getPrompts } from "./resources";
+import { getTemplate } from "./resources";
+import { PromptTemplate } from "../promptTemplate";
 
 export const WRITER_MTP = (lang: AppLanguage, persona: AiPersona = AiPersona.STANDARD) => {
-  const p = getPrompts(lang);
-  return p.writer.mtp(PERSONA_INSTRUCTIONS[persona][lang]);
+  const personaText = getTemplate(`personas.${persona}`, lang);
+  return PromptTemplate.from(getTemplate('writer.mtp', lang)).format({ persona: personaText });
 };
 
 export const COPILOT_SOUL = (lang: AppLanguage) => {
-  const p = getPrompts(lang);
-  return p.writer.copilotSoul;
+  return getTemplate('writer.copilotSoul', lang);
 };
 
 export const DRAFT_PROMPT = (
@@ -21,26 +20,35 @@ export const DRAFT_PROMPT = (
   lang: AppLanguage,
   focusMode: boolean = false
 ) => {
-  const p = getPrompts(lang);
+  const baseTemplate = getTemplate('writer.draft.base', lang);
   
+  // Construct beats section
   const beatsSection = focusMode 
     ? `【TARGET BEAT (FOCUS)】\n${beats.map(b => `- ${b}`).join("\n")}`
     : `【CHAPTER OUTLINE】\n${beats.map(b => `- ${b}`).join("\n")}`;
 
-  return p.writer.draft(title, summary, beatsSection, previousContent, focusMode);
+  // Select mission text based on focus mode
+  const missionText = focusMode
+    ? getTemplate('writer.draft.missions.focus', lang)
+    : getTemplate('writer.draft.missions.outline', lang);
+
+  return PromptTemplate.from(baseTemplate).format({
+    title,
+    summary,
+    prev: previousContent,
+    mission: missionText,
+    beats: beatsSection
+  });
 };
 
 export const NEXT_SENTENCE_PROMPT = (content: string, lang: AppLanguage) => {
-  const p = getPrompts(lang);
-  return p.writer.nextSentence(content);
+  return PromptTemplate.from(getTemplate('writer.nextSentence', lang)).format({ content });
 };
 
 export const DRAFT_SCAN_PROMPT = (draft: string, lang: AppLanguage = 'ja') => {
-  const p = getPrompts(lang);
-  return p.writer.draftScan(draft);
+  return PromptTemplate.from(getTemplate('writer.draftScan', lang)).format({ draft });
 };
 
 export const CHAPTER_PACKAGE_PROMPT = (title: string, summary: string, lang: AppLanguage = 'ja') => {
-  const p = getPrompts(lang);
-  return p.writer.chapterPackage(title, summary);
+  return PromptTemplate.from(getTemplate('writer.chapterPackage', lang)).format({ title, summary });
 };

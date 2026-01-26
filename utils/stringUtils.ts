@@ -24,3 +24,23 @@ export const calculateSimilarity = (s1: string, s2: string): number => {
   const dist = dp[n1][n2];
   return 1 - dist / Math.max(n1, n2);
 };
+
+export const isListLikeString = (str: any): boolean => {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  
+  // 1. 改行を含まない場合はリストではないとみなす（単純化）
+  if (!trimmed.includes('\n')) return false;
+
+  const lines = trimmed.split('\n').filter(l => l.trim().length > 0);
+  
+  // 2. 行数が3行以上ある場合、名前フィールドとしては不適切とみなす
+  if (lines.length >= 3) return true;
+
+  // 3. リストマーカーで始まる行があるかチェック
+  // -, *, •, 1., (1) など
+  const listMarkerRegex = /^([-*•・]|\d+\.|\(\d+\))\s/;
+  if (lines.some(line => listMarkerRegex.test(line.trim()))) return true;
+
+  return false;
+};

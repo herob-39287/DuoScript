@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { Plus, X, Loader2, Wand2 } from 'lucide-react';
-import { FieldSchema, ItemType, SCHEMAS } from './schema';
+import { FieldSchema, ItemType, SCHEMAS } from '../../../services/schema/definitions';
 import { useMetadata } from '../../../contexts/StoryContext';
 import { t } from '../../../utils/i18n';
 

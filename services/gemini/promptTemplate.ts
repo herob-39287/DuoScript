@@ -2,6 +2,7 @@
 /**
  * Prompt Template Engine
  * Handles variable injection and section management for prompts.
+ * Enforces strict variable presence to prevent undefined placeholders.
  */
 
 export class PromptTemplate {
@@ -10,16 +11,20 @@ export class PromptTemplate {
   /**
    * Inject variables into the template.
    * Format: {{key}}
+   * Throws error if a placeholder exists in template but value is missing.
    */
-  format(values: Record<string, string | undefined | null>): string {
-    return this.template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+  format(values: Record<string, string | number | undefined | null>): string {
+    return this.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       const val = values[key];
-      return val !== undefined && val !== null ? val : `{{${key}}}`; // Leave missing keys or replace with empty? Leaving allows multi-pass.
+      if (val === undefined || val === null) {
+        throw new Error(`PromptTemplate Error: Missing value for variable "{{${key}}}"`);
+      }
+      return String(val);
     });
   }
 
   /**
-   * Clean up remaining placeholders.
+   * Clean up remaining placeholders (use with caution, mostly for optional sections).
    */
   clean(): string {
     return this.template.replace(/\{\{(\w+)\}\}/g, '');

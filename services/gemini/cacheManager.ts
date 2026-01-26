@@ -1,6 +1,6 @@
 
 import { StoryProject, LogCallback } from "../../types";
-import { getClient } from "./core";
+import { GeminiClient } from "./core";
 import { PromptBuilder } from "./promptBuilder";
 import { AI_MODELS } from "../../constants";
 
@@ -14,12 +14,17 @@ interface CacheEntry {
 /**
  * Manages Gemini Context Caching lifecycle for the Architect.
  */
-class CacheManager {
+export class CacheManager {
+  private client: GeminiClient;
   private activeCache: CacheEntry | null = null;
   // Cache TTL in seconds (e.g., 60 minutes).
   private readonly TTL_SECONDS = 3600;
   // The model compatible with the cache (must match generation model)
   private readonly MODEL_NAME = AI_MODELS.REASONING;
+
+  constructor(client: GeminiClient) {
+    this.client = client;
+  }
 
   /**
    * Retrieves an active cache name or creates a new one if stale/missing.
@@ -39,13 +44,11 @@ class CacheManager {
       return this.activeCache.name;
     }
 
-    const ai = getClient();
-
     // 2. Invalidate old cache if exists (Best effort)
     if (this.activeCache) {
       try {
         logCallback('info', 'System', '設定が更新されたため、コンテキスト・キャッシュを再構築します。');
-        await ai.caches.delete({ name: this.activeCache.name });
+        await this.client.genAI.caches.delete({ name: this.activeCache.name });
       } catch (e) {
         console.warn("Failed to delete old cache", e);
       }
@@ -58,7 +61,7 @@ class CacheManager {
     try {
       const systemContent = PromptBuilder.buildStaticArchitectContext(project);
       
-      const cacheResponse = await ai.caches.create({
+      const cacheResponse = await this.client.genAI.caches.create({
         model: this.MODEL_NAME,
         displayName: `duoscript-${projectId.slice(0, 8)}-v${currentVersion}`,
         contents: [
@@ -88,9 +91,8 @@ class CacheManager {
    */
   async clearCache() {
     if (this.activeCache) {
-      const ai = getClient();
       try {
-        await ai.caches.delete({ name: this.activeCache.name });
+        await this.client.genAI.caches.delete({ name: this.activeCache.name });
         this.activeCache = null;
       } catch (e) {
         console.warn("Failed to clear cache", e);
@@ -98,5 +100,3 @@ class CacheManager {
     }
   }
 }
-
-export const cacheManager = new CacheManager();

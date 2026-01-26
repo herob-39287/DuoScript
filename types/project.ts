@@ -57,3 +57,28 @@ export interface StoryProject {
   // Optional assets for export/backup purposes (not loaded in main state usually)
   assets?: Record<string, string>;
 }
+
+/**
+ * Minimal Context Interfaces for Agents
+ * Prevents unnecessary dependency on the full StoryProject and improves type safety.
+ */
+
+export interface AgentContextBase {
+  meta: {
+    language?: AppLanguage;
+  };
+}
+
+export interface CreatorContext extends AgentContextBase {
+  bible: {
+    setting: string;
+    tone: string;
+    laws: { name: string }[];
+  };
+}
+
+export interface VisualContext {
+  bible: {
+    tone: string;
+  };
+}

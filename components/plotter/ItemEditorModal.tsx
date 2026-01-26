@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Save, Sparkles, Loader2, PlusCircle, AlertTriangle } from 'lucide-react';
 import { Button, Card } from '../ui/DesignSystem';
-import { useBible, useMetadata, useManuscript, useNeuralSync, useNotificationDispatch, useMetadataDispatch, useUIDispatch } from '../../contexts/StoryContext';
+import { useBible, useMetadata, useManuscript, useNotificationDispatch, useMetadataDispatch, useUIDispatch } from '../../contexts/StoryContext';
 import { autoFillItem, brainstormItem } from '../../services/geminiService';
 import * as Actions from '../../store/actions';
 import { GenericItemForm, ContextData } from './forms/GenericItemForm';
-import { ItemType, ITEM_LABELS, SCHEMAS } from './forms/schema';
+import { ItemType, ITEM_LABELS, SCHEMAS } from '../../services/schema/definitions';
 
 // Export ItemType for consumers
 export type { ItemType };
@@ -29,7 +29,6 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, 
   const bible = useBible();
   const meta = useMetadata();
   const chapters = useManuscript();
-  const sync = useNeuralSync();
   const metaDispatch = useMetadataDispatch();
   const uiDispatch = useUIDispatch();
   const { addLog } = useNotificationDispatch();
@@ -76,6 +75,15 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, 
     }
   };
 
+  const getCreatorContext = () => ({
+    meta: { language: meta.language },
+    bible: {
+      setting: bible.setting,
+      tone: bible.tone,
+      laws: bible.laws.map(l => ({ name: l.name }))
+    }
+  });
+
   const handleAutoFill = async (fieldKey: string, fieldLabel: string) => {
     if (loadingField) return;
     const name = data.name || data.title || data.event || data.concept || "Unknown";
@@ -90,7 +98,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, 
 
     try {
       const generated = await autoFillItem(
-        { meta, bible, chapters, sync } as any,
+        getCreatorContext(),
         ITEM_LABELS[type],
         name,
         fieldLabel,
@@ -120,7 +128,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({ isOpen, type, 
 
     try {
       const results = await brainstormItem(
-        { meta, bible, chapters, sync } as any,
+        getCreatorContext(),
         ITEM_LABELS[type],
         data.name || data.title || data.concept,
         data,

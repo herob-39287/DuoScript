@@ -8,8 +8,13 @@ import { ragService } from "../../ragService";
 import { z } from "zod";
 import { AI_MODELS } from "../../../constants";
 import { BaseAgent } from "./BaseAgent";
+import { GeminiClient } from "../core";
 
 export class LibrarianAgent extends BaseAgent {
+  constructor(client: GeminiClient) {
+    super(client);
+  }
+
   async identifyRelevantEntities(text: string, project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback): Promise<string[]> {
     const textSnippet = text.slice(-2000);
     const lang = project.meta.language || 'ja';

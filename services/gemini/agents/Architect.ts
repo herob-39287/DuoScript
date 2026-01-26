@@ -3,17 +3,19 @@ import { StoryProject, GeminiContent, UsageCallback, LogCallback } from "../../.
 import { PromptBuilder } from "../promptBuilder";
 import { LibrarianAgent } from "./Librarian";
 import { getSafetySettings } from "../utils";
-import { cacheManager } from "../cacheManager";
+import { CacheManager } from "../cacheManager";
 import { AI_MODELS, TOKEN_LIMITS } from "../../../constants";
 import { BaseAgent } from "./BaseAgent";
 import { GeminiClient } from "../core";
 
 export class ArchitectAgent extends BaseAgent {
   private librarian: LibrarianAgent;
+  private cacheManager: CacheManager;
   
-  constructor(client?: GeminiClient) {
+  constructor(client: GeminiClient, cacheManager: CacheManager) {
     super(client);
     this.librarian = new LibrarianAgent(client);
+    this.cacheManager = cacheManager;
   }
 
   private async prepareContext(
@@ -39,7 +41,7 @@ export class ArchitectAgent extends BaseAgent {
 
     if (isContextActive) {
       try {
-        cacheName = await cacheManager.getArchitectCache(project, logCallback);
+        cacheName = await this.cacheManager.getArchitectCache(project, logCallback);
         useCache = !!cacheName;
       } catch (e) {
         console.warn("Cache failed, falling back to full context injection.");

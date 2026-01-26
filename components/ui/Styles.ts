@@ -1,8 +1,7 @@
-
 export const Styles = {
   text: {
     // Labels & Headers
-    label: "text-[10px] font-black uppercase tracking-widest text-stone-500",
+    label: "text-[10px] font-black uppercase tracking-widest text-muted-foreground",
     labelSm: "text-[8px] font-black uppercase tracking-widest text-stone-600",
     labelXxs: "text-[7px] font-black uppercase tracking-widest text-stone-600",
     section: "text-[11px] font-black uppercase tracking-widest text-stone-600",
@@ -10,7 +9,7 @@ export const Styles = {
     
     // Body text
     body: "text-[11px] md:text-xs text-stone-400 font-serif leading-relaxed",
-    bodySm: "text-[9px] md:text-[10px] text-stone-500 font-serif leading-relaxed",
+    bodySm: "text-[9px] md:text-[10px] text-muted-foreground font-serif leading-relaxed",
     
     // Data values
     value: "text-sm md:text-base font-bold text-stone-200",

@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Noto Serif JP', serif;
+  --font-display: 'Playfair Display', serif;
+}
+
+/* スクロールバーのカスタマイズ（デスクトップのみ） */
+@media (min-width: 1024px) {
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(214, 138, 109, 0.2); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(214, 138, 109, 0.4); }
+}
+
+body {
+  background-color: #1c1917;
+  background-image: 
+    radial-gradient(circle at 50% -20%, rgba(214, 138, 109, 0.15), transparent),
+    radial-gradient(circle at 0% 100%, rgba(120, 113, 108, 0.1), transparent),
+    url("https://www.transparenttextures.com/patterns/p6.png");
+  color: #f5f5f4;
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100dvh;
+  /* モバイルでの不要な選択を防止しつつ、原稿部分は許可する */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* 原稿やチャット、ログなどは選択可能にする */
+.prose-literary, 
+textarea, 
+input, 
+.selectable-text { 
+  user-select: text !important; 
+  -webkit-user-select: text !important; 
+}
+
+.font-serif { font-family: var(--font-serif); font-weight: 300; }
+.font-serif-bold { font-family: var(--font-serif); font-weight: 700; }
+.font-display { font-family: var(--font-display); }
+
+.prose-literary {
+  font-family: var(--font-serif);
+  line-height: 2.2;
+  letter-spacing: 0.05em;
+  font-weight: 400;
+  color: #e7e5e4;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (min-width: 768px) {
+  .prose-literary {
+     line-height: 2.5;
+     letter-spacing: 0.1em;
+  }
+}
+
+/* 縦書きモードの基本定義 */
+.writing-vertical {
+  writing-mode: vertical-rl;
+  -webkit-writing-mode: vertical-rl;
+  text-orientation: upright;
+  height: 85vh;
+  max-height: 1200px;
+  margin: auto;
+  padding: 2rem 1rem;
+  line-height: 2.8;
+}
+
+@media (max-width: 768px) {
+  .writing-vertical {
+    height: calc(100vh - 240px);
+    padding: 1rem 0.5rem;
+    line-height: 2.2;
+  }
+}
+
+.glass {
+  background: rgba(28, 25, 23, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-bright {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.px-safe { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(214, 138, 109, 0.2); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(214, 138, 109, 0.4); }
+
+/* モバイルでのボタン拡大 */
+@media (max-width: 640px) {
+  button, a {
+    min-height: 44px;
+  }
+  input, textarea, select {
+    font-size: 16px !important; /* iOSのズーム防止 */
+  }
+}

@@ -7,4 +7,4 @@
  */
 
 export * from './GenericItemForm';
-export * from './schema';
+export * from '../../../services/schema/definitions';

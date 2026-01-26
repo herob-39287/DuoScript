@@ -1,6 +1,4 @@
 
-import { ItemType } from '../../components/plotter/forms/schema';
-
 export type FieldType = 'text' | 'textarea' | 'select' | 'number' | 'array' | 'subform' | 'object';
 
 export interface FieldDefinition {
@@ -22,6 +20,33 @@ export interface FieldDefinition {
   isNaming?: boolean; // Is this the primary identifier field? (e.g. name, title)
   isContent?: boolean; // Is this the main content field? (e.g. description, summary)
 }
+
+// --- Item Types & Labels (Moved from components/plotter/forms/schema.ts) ---
+
+export type ItemType = 
+  | 'law' | 'location' | 'organization' | 'item' | 'entry' | 'theme'
+  | 'race' | 'bestiary' | 'ability' 
+  | 'timeline' | 'foreshadowing' | 'thread' | 'structure' | 'volume' | 'chapter';
+
+export type FieldSchema = FieldDefinition;
+
+export const ITEM_LABELS: Record<ItemType, string> = {
+  law: 'World Law',
+  location: 'Location',
+  organization: 'Organization',
+  item: 'Key Item',
+  entry: 'Entry',
+  theme: 'Theme',
+  race: 'Race',
+  bestiary: 'Bestiary',
+  ability: 'Ability',
+  timeline: 'Timeline Event',
+  foreshadowing: 'Foreshadowing',
+  thread: 'Story Thread',
+  structure: 'Phase',
+  volume: 'Volume',
+  chapter: 'Chapter'
+};
 
 // Map ItemType to a generic model key
 export type ModelKey = ItemType | 'character';
@@ -165,6 +190,24 @@ export const MODEL_DEFINITIONS: Record<string, FieldDefinition[]> = {
     { key: 'targetId', labelKey: 'form.target_id', defaultLabel: '対象', type: 'text' },
     { key: 'updatedAt', labelKey: 'common.updated_at', defaultLabel: '更新日時', type: 'number' },
   ]
+};
+
+export const SCHEMAS: Record<ItemType, FieldDefinition[]> = {
+  law: MODEL_DEFINITIONS.law,
+  location: MODEL_DEFINITIONS.location,
+  organization: MODEL_DEFINITIONS.organization,
+  item: MODEL_DEFINITIONS.item,
+  entry: MODEL_DEFINITIONS.entry,
+  theme: MODEL_DEFINITIONS.theme,
+  race: MODEL_DEFINITIONS.race,
+  bestiary: MODEL_DEFINITIONS.bestiary,
+  ability: MODEL_DEFINITIONS.ability,
+  timeline: MODEL_DEFINITIONS.timeline,
+  foreshadowing: MODEL_DEFINITIONS.foreshadowing,
+  thread: MODEL_DEFINITIONS.thread,
+  structure: MODEL_DEFINITIONS.structure,
+  volume: MODEL_DEFINITIONS.volume,
+  chapter: MODEL_DEFINITIONS.chapter
 };
 
 // Helper Functions

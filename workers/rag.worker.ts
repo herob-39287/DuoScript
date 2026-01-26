@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "https://esm.sh/@google/genai@^1.33.0";
+import { GoogleGenAI } from "https://esm.sh/@google/genai@^1.38.0";
 import { getProjectVectors, saveVectors, deleteVectors } from "../services/storageService";
 import { normalizeJapanese, calculateSimilarity } from "../utils/stringUtils";
 import { StoryProject, VectorEntry } from "../types";

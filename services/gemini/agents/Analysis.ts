@@ -10,8 +10,12 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 import { AI_MODELS, TOKEN_LIMITS } from "../../../constants";
 import { BaseAgent } from "./BaseAgent";
+import { GeminiClient } from "../core";
 
 export class AnalysisAgent extends BaseAgent {
+  constructor(client: GeminiClient) {
+    super(client);
+  }
   
   async scanIntegrity(project: StoryProject, onUsage: UsageCallback, logCallback: LogCallback, activeChapterId?: string): Promise<BibleIssue[]> {
     const bible = project.bible;

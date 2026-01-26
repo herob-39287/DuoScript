@@ -1,7 +1,7 @@
 
 import { useState, useCallback } from 'react';
 import { 
-  useBibleDispatch, useMetadataDispatch, useManuscript, useNeuralSync, useMetadata, 
+  useBibleDispatch, useMetadataDispatch, useManuscript, useNeuralSync, useMetadata, useWorldFoundation,
   useUIDispatch, useNotificationDispatch 
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
@@ -12,8 +12,7 @@ export const useCharacterActions = (character: Character) => {
   // Performance: Removed dependency on full 'bible' context to prevent re-renders of actions
   // when unrelated bible data changes.
   const meta = useMetadata();
-  const chapters = useManuscript();
-  const sync = useNeuralSync();
+  const foundation = useWorldFoundation(); // Use WorldFoundation instead of full Bible to access setting/tone/laws
   
   const bibleDispatch = useBibleDispatch();
   const metaDispatch = useMetadataDispatch();
@@ -53,14 +52,25 @@ export const useCharacterActions = (character: Character) => {
     label: string
   ): Promise<string | null> => {
     if (loadingField) return null;
+    if (!foundation) {
+        addLog('error', 'Genesis', '世界設定データがロードされていません。');
+        return null;
+    }
+
     setLoadingField(key as string);
     try {
-      // NOTE: We pass a minimal project context object constructed from available hooks
-      // Ideally 'bible' should be passed if we want full context awareness, 
-      // but for Genesis Fill, meta/chapters/sync + currentProfile is often enough.
-      // If full bible is needed, we should import useWorldFoundation etc. instead of full bible.
+      // Construct a valid CreatorContext
+      const creatorContext = {
+        meta: { language: meta.language },
+        bible: {
+          setting: foundation.setting,
+          tone: foundation.tone,
+          laws: foundation.laws.map(l => ({ name: l.name })) // Minimal mapping
+        }
+      };
+
       const generated = await genesisFill(
-        { meta, bible: { setting: "...", tone: "..." } /* Stub to avoid full dependency */, chapters, sync } as any, 
+        creatorContext,
         currentProfile, 
         label, 
         (u) => metaDispatch(Actions.trackUsage(u)),
@@ -74,7 +84,7 @@ export const useCharacterActions = (character: Character) => {
     } finally {
       setLoadingField(null);
     }
-  }, [meta, chapters, sync, loadingField, metaDispatch, addLog]);
+  }, [meta, foundation, loadingField, metaDispatch, addLog]);
 
   return {
     handleSave,

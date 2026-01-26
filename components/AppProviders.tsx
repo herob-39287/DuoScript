@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { 
   MetadataStateContext, 
   ManuscriptStateContext,
@@ -49,29 +49,100 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
   const notificationValue = useMemo(() => state.notification, [state.notification]);
 
   // Granular Bible Sub-States (Optimization)
-  // Use JSON.stringify for deep comparison simulation to ensure reference stability
-  // when the underlying content hasn't actually changed.
+  // Replaced JSON.stringify deep comparison with reference checks using refs to improve performance with large datasets.
   
   // 1. Characters (Full)
   const charactersValue = useMemo(() => state.bible.characters, [state.bible.characters]);
 
+  // Refs for Profile optimization
+  const prevProfilesSourceRef = useRef<any[]>([]);
+  const profilesCacheRef = useRef<any[]>([]);
+
   // 2. Character Profiles (Static - changes rarely)
-  // Extract only profile-related data. If 'state' changes, this string won't change.
-  const profilesHash = JSON.stringify(state.bible.characters.map(c => ({ 
-    id: c.id, 
-    ...c.profile, 
-    imageUrl: c.imageUrl, 
-    isPrivate: c.isPrivate 
-  })));
-  const characterProfilesValue = useMemo(() => JSON.parse(profilesHash), [profilesHash]);
+  const characterProfilesValue = useMemo(() => {
+    const source = state.bible.characters;
+    const prevSource = prevProfilesSourceRef.current;
+    const prevResult = profilesCacheRef.current;
+
+    let hasChanged = false;
+
+    // Check length change
+    if (source.length !== prevSource.length) {
+      hasChanged = true;
+    } else {
+      // Check individual items for profile-related changes
+      for (let i = 0; i < source.length; i++) {
+        // Immer ensures references change only if data changes.
+        // We compare relevant sub-objects.
+        if (
+          source[i].profile !== prevSource[i].profile ||
+          source[i].imageUrl !== prevSource[i].imageUrl ||
+          source[i].isPrivate !== prevSource[i].isPrivate ||
+          source[i].id !== prevSource[i].id
+        ) {
+          hasChanged = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasChanged && prevResult.length > 0) {
+      return prevResult;
+    }
+
+    // Generate new derived array
+    const newResult = source.map(c => ({ 
+      id: c.id, 
+      ...c.profile, 
+      imageUrl: c.imageUrl, 
+      isPrivate: c.isPrivate 
+    }));
+
+    // Update cache
+    prevProfilesSourceRef.current = source;
+    profilesCacheRef.current = newResult;
+    return newResult;
+  }, [state.bible.characters]);
+
+  // Refs for State optimization
+  const prevStatesSourceRef = useRef<any[]>([]);
+  const statesCacheRef = useRef<any[]>([]);
 
   // 3. Character States (Volatile - changes often)
-  // Extract only state-related data.
-  const statesHash = JSON.stringify(state.bible.characters.map(c => ({ 
-    id: c.id, 
-    ...c.state 
-  })));
-  const characterStatesValue = useMemo(() => JSON.parse(statesHash), [statesHash]);
+  const characterStatesValue = useMemo(() => {
+    const source = state.bible.characters;
+    const prevSource = prevStatesSourceRef.current;
+    const prevResult = statesCacheRef.current;
+
+    let hasChanged = false;
+
+    if (source.length !== prevSource.length) {
+      hasChanged = true;
+    } else {
+      for (let i = 0; i < source.length; i++) {
+        if (
+          source[i].state !== prevSource[i].state ||
+          source[i].id !== prevSource[i].id
+        ) {
+          hasChanged = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasChanged && prevResult.length > 0) {
+      return prevResult;
+    }
+
+    const newResult = source.map(c => ({ 
+      id: c.id, 
+      ...c.state 
+    }));
+
+    prevStatesSourceRef.current = source;
+    statesCacheRef.current = newResult;
+    return newResult;
+  }, [state.bible.characters]);
   
   // 4. World Foundation
   const worldFoundationValue = useMemo(() => ({

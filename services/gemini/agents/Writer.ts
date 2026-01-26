@@ -10,15 +10,19 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 import { AI_MODELS, TOKEN_LIMITS } from "../../../constants";
 import { BaseAgent } from "./BaseAgent";
+import { GeminiClient } from "../core";
 
 export class WriterAgent extends BaseAgent {
+  constructor(client: GeminiClient) {
+    super(client);
+  }
   
   async* streamDraft(
     chapter: ChapterLog, 
     tone: string, 
     usePro: boolean, 
     project: StoryProject, 
-    previousContent: string,
+    previousContent: string, 
     targetBeats: string[] | undefined,
     logCallback: LogCallback,
     isContextActive: boolean = true,
