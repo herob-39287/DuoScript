@@ -1,4 +1,3 @@
-
 import { StoryProject } from "../../types";
 import { initDB, STORE_HEADS, STORE_REVISIONS, STORE_CHAPTER_DATA, STORE_APP_STATE, STORE_PORTRAITS } from "./baseRepository";
 
@@ -10,12 +9,8 @@ export const getSyncChannel = () => syncChannel;
 
 export const getHeadRev = async (projectId: string): Promise<number> => {
   const db = await initDB();
-  return new Promise((resolve) => {
-    const transaction = db.transaction(STORE_HEADS, 'readonly');
-    const request = transaction.objectStore(STORE_HEADS).get(projectId);
-    request.onsuccess = () => resolve(request.result?.headRev || 0);
-    request.onerror = () => resolve(0);
-  });
+  const result = await db.get(STORE_HEADS, projectId);
+  return result?.headRev || 0;
 };
 
 const SCHEMA_VERSION = 1;
@@ -24,209 +19,163 @@ export const saveProjectRevision = async (project: StoryProject, expectedRev?: n
   const db = await initDB();
   const projectId = project.meta.id;
 
-  return new Promise((resolve, reject) => {
-    // Added STORE_PORTRAITS to transaction scope for asset restoration logic
-    const transaction = db.transaction([STORE_HEADS, STORE_REVISIONS, STORE_CHAPTER_DATA, STORE_APP_STATE, STORE_PORTRAITS], 'readwrite');
-    let nextRev = 0;
-    
-    transaction.oncomplete = () => {
-      if (nextRev > 0) {
-        garbageCollectRevisions(projectId, nextRev).catch(console.error);
-        syncChannel.postMessage({ type: 'REVISION_SAVED', projectId, rev: nextRev, sender: tabId });
-        resolve(nextRev);
-      }
-    };
-    
-    transaction.onerror = (event: any) => {
-      const error = transaction.error || event.target.error;
-      if (error && (error.name === 'QuotaExceededError' || error.code === 22)) {
-        reject(new Error('STORAGE_QUOTA_EXCEEDED'));
-      } else {
-        reject(error);
-      }
-    };
-    
-    const headStore = transaction.objectStore(STORE_HEADS);
-    const revStore = transaction.objectStore(STORE_REVISIONS);
-    const chapterStore = transaction.objectStore(STORE_CHAPTER_DATA);
-    
-    const headReq = headStore.get(projectId);
+  const tx = db.transaction(
+    [STORE_HEADS, STORE_REVISIONS, STORE_CHAPTER_DATA, STORE_APP_STATE, STORE_PORTRAITS],
+    'readwrite'
+  );
 
-    headReq.onsuccess = () => {
-      const currentRev = headReq.result?.headRev || 0;
+  try {
+    const headData = await tx.objectStore(STORE_HEADS).get(projectId);
+    const currentRev = headData?.headRev || 0;
 
-      if (expectedRev !== undefined && currentRev !== expectedRev) {
-         reject(new Error('SAVE_CONFLICT'));
-         transaction.abort();
-         return;
-      }
+    if (expectedRev !== undefined && currentRev !== expectedRev) {
+      tx.abort();
+      throw new Error('SAVE_CONFLICT');
+    }
 
-      nextRev = currentRev + 1;
+    const nextRev = currentRev + 1;
 
-      try {
-        const chapterHeaders = project.chapters.map((ch: any) => {
-          const { content, ...header } = ch;
-          
-          if (content !== undefined) {
-            // If content is loaded in memory, save it to the new revision
-            chapterStore.put({ projectId, chapterId: ch.id, rev: nextRev, content });
-          } else if (currentRev > 0) {
-            // Lazy Save: Content not in memory, copy from previous revision
-            const prevContentReq = chapterStore.get([projectId, ch.id, currentRev]);
-            prevContentReq.onsuccess = () => {
-              if (prevContentReq.result) {
-                chapterStore.put({ ...prevContentReq.result, rev: nextRev });
-              }
-            };
-          }
-          
-          return header;
-        });
-
-        revStore.put({
-          projectId,
-          rev: nextRev,
-          schemaVersion: SCHEMA_VERSION,
-          meta: { ...project.meta, headRev: nextRev, schemaVersion: SCHEMA_VERSION },
-          bible: project.bible,
-          sync: project.sync,
-          chapterHeaders,
-          timestamp: Date.now()
-        });
-
-        headStore.put({ projectId, headRev: nextRev }, projectId);
-      } catch (e: any) {
-        // Catch synchronous errors during put (though mostly async errors go to transaction.onerror)
-        if (e.name === 'QuotaExceededError' || e.code === 22) {
-          reject(new Error('STORAGE_QUOTA_EXCEEDED'));
-          transaction.abort();
-        } else {
-          throw e;
+    const chapterHeaders = await Promise.all(project.chapters.map(async (ch: any) => {
+      const { content, ...header } = ch;
+      
+      if (content !== undefined) {
+        // If content is loaded in memory, save it to the new revision
+        await tx.objectStore(STORE_CHAPTER_DATA).put({ projectId, chapterId: ch.id, rev: nextRev, content });
+      } else if (currentRev > 0) {
+        // Lazy Save: Content not in memory, copy from previous revision
+        const prevContent = await tx.objectStore(STORE_CHAPTER_DATA).get([projectId, ch.id, currentRev]);
+        if (prevContent) {
+          await tx.objectStore(STORE_CHAPTER_DATA).put({ ...prevContent, rev: nextRev });
         }
       }
-    };
-  });
+      
+      return header;
+    }));
+
+    await tx.objectStore(STORE_REVISIONS).put({
+      projectId,
+      rev: nextRev,
+      schemaVersion: SCHEMA_VERSION,
+      meta: { ...project.meta, headRev: nextRev, schemaVersion: SCHEMA_VERSION },
+      bible: project.bible,
+      sync: project.sync,
+      chapterHeaders,
+      timestamp: Date.now()
+    });
+
+    await tx.objectStore(STORE_HEADS).put({ headRev: nextRev }, projectId);
+    
+    await tx.done;
+
+    garbageCollectRevisions(projectId, nextRev).catch(console.error);
+    syncChannel.postMessage({ type: 'REVISION_SAVED', projectId, rev: nextRev, sender: tabId });
+    return nextRev;
+
+  } catch (error: any) {
+    // Abort is implicitly handled by throwing unless we catch it here,
+    // but tx.done handles waiting for completion. If we manually aborted, tx.done will reject.
+    if (error.name === 'QuotaExceededError' || error.code === 22) {
+      throw new Error('STORAGE_QUOTA_EXCEEDED');
+    }
+    throw error;
+  }
 };
 
 export const getRevisionHistory = async (projectId: string): Promise<{ rev: number; timestamp: number; wordCount: number }[]> => {
   const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_REVISIONS, 'readonly');
-    const store = transaction.objectStore(STORE_REVISIONS);
-    // Key range for [projectId, 0] to [projectId, Infinity]
-    const range = IDBKeyRange.bound([projectId, 0], [projectId, Infinity]);
-    const request = store.openCursor(range, 'prev'); // Newest first
-    
-    const results: { rev: number; timestamp: number; wordCount: number }[] = [];
+  const tx = db.transaction(STORE_REVISIONS, 'readonly');
+  const store = tx.objectStore(STORE_REVISIONS);
+  
+  // IDBKeyRange.bound is standard API, can be used directly
+  const range = IDBKeyRange.bound([projectId, 0], [projectId, Infinity]);
+  
+  const results: { rev: number; timestamp: number; wordCount: number }[] = [];
+  let cursor = await store.openCursor(range, 'prev');
 
-    request.onsuccess = (event: any) => {
-      const cursor = event.target.result;
-      if (cursor) {
-        const val = cursor.value;
-        // Calculate rough word count from chapter headers to give context
-        const totalWords = (val.chapterHeaders || []).reduce((acc: number, ch: any) => acc + (ch.wordCount || 0), 0);
-        
-        results.push({
-          rev: val.rev,
-          timestamp: val.timestamp,
-          wordCount: totalWords
-        });
-        cursor.continue();
-      } else {
-        resolve(results);
-      }
-    };
-    request.onerror = () => reject(request.error);
-  });
+  while (cursor) {
+    const val = cursor.value;
+    const totalWords = (val.chapterHeaders || []).reduce((acc: number, ch: any) => acc + (ch.wordCount || 0), 0);
+    results.push({
+      rev: val.rev,
+      timestamp: val.timestamp,
+      wordCount: totalWords
+    });
+    cursor = await cursor.continue();
+  }
+  
+  await tx.done;
+  return results;
 };
 
-export const loadFullSnapshot = async (projectId: string, rev?: number): Promise<any | null> => {
+export const loadFullSnapshot = async (projectId: string, rev?: number): Promise<StoryProject | null> => {
   const db = await initDB();
   const targetRev = rev !== undefined ? rev : await getHeadRev(projectId);
   if (targetRev === 0) return null;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_REVISIONS], 'readonly');
-    const revStore = transaction.objectStore(STORE_REVISIONS);
+  const manifest = await db.get(STORE_REVISIONS, [projectId, targetRev]);
+  if (!manifest) return null;
 
-    const revReq = revStore.get([projectId, targetRev]);
-    revReq.onsuccess = () => {
-      const manifest = revReq.result;
-      if (!manifest) { resolve(null); return; }
+  const chapters = manifest.chapterHeaders || [];
+  // Explicitly set content to undefined to indicate it needs fetching
+  const lightChapters = chapters.map((c: any) => ({ ...c, content: undefined }));
 
-      // Optimization: Lazy Loading
-      // We only load metadata (headers). Content and Assets are loaded on demand by hooks.
-      // This massively reduces initial load time and memory usage.
-      const chapters = manifest.chapterHeaders || [];
-      
-      // Explicitly set content to undefined to indicate it needs fetching
-      // unless it was saved as empty string in header (which shouldn't happen usually)
-      const lightChapters = chapters.map((c: any) => ({ ...c, content: undefined }));
-
-      resolve({ ...manifest, chapters: lightChapters });
-    };
-    revReq.onerror = () => reject(revReq.error);
-  });
+  // manifest contains meta, bible, sync. We overwrite chapters with lightChapters.
+  // Cast to StoryProject to enforce type.
+  return { ...manifest, chapters: lightChapters } as StoryProject;
 };
 
-export const loadLatestProject = async (projectId: string): Promise<any | null> => {
+export const loadLatestProject = async (projectId: string): Promise<StoryProject | null> => {
   const headRev = await getHeadRev(projectId);
   return loadFullSnapshot(projectId, headRev);
 };
 
 export const saveChapterContent = async (projectId: string, chapterId: string, rev: number, content: string): Promise<void> => {
   const db = await initDB();
-  const transaction = db.transaction(STORE_CHAPTER_DATA, 'readwrite');
-  transaction.objectStore(STORE_CHAPTER_DATA).put({ projectId, chapterId, rev, content });
+  await db.put(STORE_CHAPTER_DATA, { projectId, chapterId, rev, content });
 };
 
 export const loadChapterContent = async (projectId: string, chapterId: string, rev: number): Promise<string | null> => {
   const db = await initDB();
-  return new Promise((resolve) => {
-    const transaction = db.transaction(STORE_CHAPTER_DATA, 'readonly');
-    const request = transaction.objectStore(STORE_CHAPTER_DATA).get([projectId, chapterId, rev]);
-    request.onsuccess = () => resolve(request.result?.content || "");
-    request.onerror = () => resolve("");
-  });
+  const result = await db.get(STORE_CHAPTER_DATA, [projectId, chapterId, rev]);
+  return result?.content || "";
 };
 
 export const getAllProjects = async (): Promise<StoryProject[]> => {
   const db = await initDB();
-  return new Promise((resolve) => {
-    const transaction = db.transaction(STORE_HEADS, 'readonly');
-    const request = transaction.objectStore(STORE_HEADS).getAll();
-    request.onsuccess = async () => {
-      const heads = request.result || [];
-      const projects = await Promise.all(heads.map((h: any) => loadLatestProject(h.projectId)));
-      resolve(projects.filter(Boolean));
-    };
-  });
+  const keys = await db.getAllKeys(STORE_HEADS);
+  
+  const projects = await Promise.all(keys.map(async (key) => {
+    return loadLatestProject(key as string);
+  }));
+  
+  return projects.filter((p): p is StoryProject => !!p);
 };
 
 const garbageCollectRevisions = async (projectId: string, currentRev: number) => {
   const db = await initDB();
   const threshold = currentRev - KEEP_REVISIONS;
   if (threshold <= 0) return;
-  const transaction = db.transaction([STORE_REVISIONS, STORE_CHAPTER_DATA], 'readwrite');
-  
-  // Cleanup Revisions Manifests
-  transaction.objectStore(STORE_REVISIONS).delete(IDBKeyRange.bound([projectId, 0], [projectId, threshold]));
 
-  // Cleanup Chapter Data Content
-  const chapterStore = transaction.objectStore(STORE_CHAPTER_DATA);
-  const request = chapterStore.openCursor(IDBKeyRange.lowerBound([projectId]));
+  const tx = db.transaction([STORE_REVISIONS, STORE_CHAPTER_DATA], 'readwrite');
   
-  request.onsuccess = (event: any) => {
-    const cursor = event.target.result;
-    if (cursor) {
-      const key = cursor.key; 
-      if (key[0] !== projectId) return;
+  // Delete old revisions
+  // IDBKeyRange.bound([projectId, 0], [projectId, threshold]) covers revisions 0 to threshold
+  await tx.objectStore(STORE_REVISIONS).delete(IDBKeyRange.bound([projectId, 0], [projectId, threshold]));
 
-      const rev = key[2];
-      if (typeof rev === 'number' && rev <= threshold) {
-        cursor.delete();
-      }
-      cursor.continue();
+  // Delete old chapter data
+  // Iterate and delete is safer for compound keys
+  let cursor = await tx.objectStore(STORE_CHAPTER_DATA).openCursor(IDBKeyRange.lowerBound([projectId]));
+  
+  while (cursor) {
+    const key = cursor.key as [string, string, number];
+    if (key[0] !== projectId) break; // Optimization if sorted by projectId
+
+    const rev = key[2];
+    if (rev <= threshold) {
+      await cursor.delete();
     }
-  };
+    cursor = await cursor.continue();
+  }
+  
+  await tx.done;
 };

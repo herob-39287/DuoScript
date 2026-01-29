@@ -2,7 +2,6 @@
 import { StoryProject, ExtractionResult, SyncOperation, QuarantineItem } from "../../types";
 import { safeJsonParse } from "../gemini/utils";
 import { validateSyncOperation, findMatchCandidates } from "./utils";
-import { isListLikeString } from "../../utils/stringUtils";
 
 // Stage 1: Parse
 // JSON文字列をパースし、構造エラーがあればキャッチする
@@ -37,28 +36,6 @@ const validationStage = (rawOps: any[], source: string, project: StoryProject, i
       timestamp,
       isHypothetical
     };
-
-    // リスト状の長文チェック（汚染データ防止）
-    // AIが名前フィールドにリストや説明文を入れてしまうハルシネーションを検知して隔離する
-    const suspectValues = [
-      opCandidate.targetName,
-      opCandidate.value?.name,
-      opCandidate.value?.title,
-      opCandidate.value?.event,
-      opCandidate.value?.concept
-    ];
-
-    if (suspectValues.some(v => isListLikeString(v))) {
-       quarantineItems.push({
-        id: crypto.randomUUID(),
-        timestamp,
-        rawText: JSON.stringify(raw),
-        error: "Detected list-like content in naming field. Potential AI hallucination.",
-        stage: 'SEMANTIC',
-        partialOp: raw
-      });
-      return; // Skip adding to validOps
-    }
 
     // Zodスキーマによる検証
     const errors = validateSyncOperation(opCandidate as any);

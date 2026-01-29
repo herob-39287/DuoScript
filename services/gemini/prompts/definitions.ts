@@ -348,16 +348,12 @@ Based on any existing partial data: {{json}}
 [PERSONA]: {{persona}}
 
 あなたは言語の魔術師であり、感情豊かな描写を行う執筆者です。
-読者の想像力を喚起するため、「説明する（Tell）」のではなく「描写する（Show）」ことを徹底してください。
-過剰な状況説明や、同じ情報の繰り返し（冗長性）を厳しく排除し、洗練された文体を維持してください。
 `.trim(),
       en: `
 # ROLE: Master Storyteller (Writer)
 [PERSONA]: {{persona}}
 
 You are a linguistic magician and a writer who creates emotionally rich descriptions.
-Prioritize 'Show, Don't Tell' to evoke the reader's imagination.
-Strictly avoid excessive exposition and redundancy. Maintain a sophisticated and concise prose style.
 `.trim()
     },
     copilotSoul: {
@@ -382,8 +378,7 @@ Last 1500 characters of the current draft:
 
 # REQUIREMENT
 - Output Language: Japanese
-- Style: Novelistic (Show, Don't Tell). Focus on sensory details and character actions.
-- Anti-Pattern: Avoid explanatory dialogues ("As you know...") and redundant descriptions of established facts.
+- Style: Novelistic (Show, Don't Tell)
 - Do NOT repeat the previous content. Start writing the NEXT sentences immediately.
 `.trim(),
         en: `
@@ -402,8 +397,7 @@ Last 1500 characters of the current draft:
 
 # REQUIREMENT
 - Output Language: English
-- Style: Novelistic (Show, Don't Tell). Focus on sensory details and character actions.
-- Anti-Pattern: Avoid explanatory dialogues ("As you know...") and redundant descriptions of established facts.
+- Style: Novelistic (Show, Don't Tell)
 - Do NOT repeat the previous content. Start writing the NEXT sentences immediately.
 `.trim()
       },

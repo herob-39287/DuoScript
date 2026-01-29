@@ -1,3 +1,4 @@
+
 import { z } from "zod";
 
 // --- Primitives & Helpers ---
@@ -674,21 +675,97 @@ export const SyncPathSchema = z.enum([
 export type SyncPath = z.infer<typeof SyncPathSchema>;
 
 /**
+ * Sync Operation Value Schema (Comprehensive)
+ * 
+ * Defines the comprehensive union of all possible fields for an extraction value.
+ * Used to generate the JSON Schema for the AI.
+ */
+export const SyncValueExtractionSchema = z.object({
+  // Basic Naming
+  name: z.string().optional().describe("Name of the entity, item, or location"),
+  title: z.string().optional().describe("Title of the event, chapter, or thread"),
+  concept: z.string().optional().describe("Theme concept"),
+  event: z.string().optional().describe("Event name for timeline"),
+  
+  // Description & Content
+  description: z.string().optional().describe("Detailed description"),
+  summary: z.string().optional().describe("Short summary"),
+  definition: z.string().optional().describe("Definition for encyclopedia"),
+  content: z.string().optional().describe("Content body"),
+  shortSummary: z.string().optional().describe("One-line summary"),
+  
+  // Categorization
+  type: z.string().optional().describe("Type/Category (e.g. Guild, Magic, City)"),
+  category: z.string().optional().describe("Category for encyclopedia"),
+  tags: z.array(z.string()).optional().describe("Tags"),
+  
+  // Character Specific
+  role: z.string().optional().describe("Role (Protagonist, Antagonist, etc)"),
+  appearance: z.string().optional().describe("Visual appearance"),
+  personality: z.string().optional().describe("Personality traits"),
+  background: z.string().optional().describe("Background story"),
+  motivation: z.string().optional().describe("Motivation"),
+  flaw: z.string().optional().describe("Fatal flaw"),
+  arc: z.string().optional().describe("Character arc"),
+  traits: z.array(z.string()).optional().describe("Traits"),
+  aliases: z.array(z.string()).optional().describe("Aliases"),
+  
+  // State
+  location: z.string().optional().describe("Current location"),
+  internalState: z.string().optional().describe("Current emotional state"),
+  currentGoal: z.string().optional().describe("Current goal"),
+  health: z.string().optional().describe("Health status"),
+  socialStanding: z.string().optional().describe("Social standing"),
+  status: z.string().optional().describe("Status (Open, Resolved, Canon, etc)"),
+  priority: z.string().optional().describe("Priority"),
+  importance: z.string().optional().describe("Importance"),
+  
+  // World Properties
+  mechanics: z.string().optional().describe("Mechanics or magic effect"),
+  cost: z.string().optional().describe("Cost or price"),
+  habitat: z.string().optional().describe("Habitat"),
+  dangerLevel: z.string().optional().describe("Danger level"),
+  lifespan: z.string().optional().describe("Lifespan"),
+  
+  // Time & Sequence
+  timeLabel: z.string().optional().describe("Time label (e.g. 1999, Era of Fire)"),
+  order: z.number().optional().describe("Order index"),
+  goal: z.string().optional().describe("Goal of the phase"),
+  
+  // Relations & Lists
+  clues: z.array(z.string()).optional().describe("Clues for mystery"),
+  redHerrings: z.array(z.string()).optional().describe("Red herrings / Misleads"),
+  dropItems: z.array(z.string()).optional().describe("Dropped items"),
+  relatedEntityIds: z.array(z.string()).optional().describe("IDs of related entities"),
+  involvedCharacterIds: z.array(z.string()).optional().describe("IDs of involved characters"),
+  
+  // Nested Objects (Simplified)
+  profile: CharacterProfileSchema.partial().optional().describe("Full profile update object"),
+  state: CharacterStateSchema.partial().optional().describe("Full state update object"),
+  
+  // Nexus
+  hypothesis: z.string().optional().describe("What-if hypothesis"),
+  impactOnCanon: z.string().optional().describe("Impact on canon history"),
+  impactOnState: z.string().optional().describe("Impact on character states"),
+  alternateTimeline: z.array(z.string()).optional().describe("Alternate timeline events")
+});
+
+/**
  * Sync Operation Schemas (Extraction & Internal)
  */
 
 // Extraction Schema (AI Output Target)
 export const SyncOperationZodSchema = z.object({
-  op: z.enum(['add', 'update', 'delete', 'merge', 'rename', 'set', 'addAlias']).default('update'),
-  path: SyncPathSchema,
-  targetId: z.string().optional(),
-  targetName: z.string().optional(),
-  field: z.string().optional(),
-  value: z.any(), // Validated in Strategies using specific schemas
-  rationale: StringOrNull,
-  evidence: StringOrNull,
-  confidence: z.number().default(0.8),
-  isHypothetical: z.boolean().optional()
+  op: z.enum(['add', 'update', 'delete', 'merge', 'rename', 'set', 'addAlias']).default('update').describe("Operation type"),
+  path: SyncPathSchema.describe("Target path (collection name)"),
+  targetId: z.string().optional().describe("Target ID (if known)"),
+  targetName: z.string().optional().describe("Target Name (for lookup)"),
+  field: z.string().optional().describe("Specific field to update (optional)"),
+  value: SyncValueExtractionSchema.describe("Data to apply. All strings MUST be in the requested language."),
+  rationale: StringOrNull.describe("Reason for this change"),
+  evidence: StringOrNull.describe("Evidence from text"),
+  confidence: z.number().default(0.8).describe("Confidence level (0.0-1.0)"),
+  isHypothetical: z.boolean().optional().describe("True if this is a simulation")
 });
 
 export const SyncOperationArraySchema = z.array(SyncOperationZodSchema);
@@ -754,24 +831,24 @@ export type SyncCandidate = z.infer<typeof SyncCandidateSchema>;
  * Detection Schema (Architect/Detector)
  */
 export const DetectionZodSchema = z.object({
-  hasChangeIntent: z.boolean().default(false),
-  isHypothetical: z.boolean().default(false),
-  domains: z.array(z.string()).default([]),
+  hasChangeIntent: z.boolean().default(false).describe("True if the user intends to change settings"),
+  isHypothetical: z.boolean().default(false).describe("True if the user is asking a 'what-if' question"),
+  domains: z.array(z.string()).default([]).describe("Domains affected (ENTITIES, FOUNDATION, etc)"),
   categories: z.array(z.string()).default([]),
-  instructionSummary: StringOrNull
+  instructionSummary: StringOrNull.describe("Summary of the user's intent")
 });
 
 /**
  * Whisper/Advice Schema (Architect/Whisper)
  */
 export const WhisperZodSchema = z.object({
-  ruleId: StringOrNull,
-  text: StringOrNull,
-  type: z.string().default('info'),
+  ruleId: StringOrNull.describe("ID of the rule triggered"),
+  text: StringOrNull.describe("Advice text"),
+  type: z.string().default('info').describe("Type of advice (alert, info)"),
   citations: z.array(z.object({
     label: StringOrNull,
     textSnippet: StringOrNull
-  })).default([])
+  })).default([]).describe("Evidence citations")
 });
 
 /**
@@ -782,8 +859,8 @@ export const IntegrityScanZodSchema = z.object({
     ruleId: StringOrNull,
     type: z.string().default('Unknown'),
     targetType: z.string().optional(),
-    description: StringOrNull,
-    suggestion: StringOrNull,
+    description: StringOrNull.describe("Description of the issue"),
+    suggestion: StringOrNull.describe("Suggestion to fix"),
     severity: z.string().default('Low'),
     citations: z.array(z.object({
       sourceId: z.string().optional(),
@@ -797,9 +874,9 @@ export const IntegrityScanZodSchema = z.object({
  * Nexus Simulation Schema (Analyst/Nexus)
  */
 export const NexusSimulationZodSchema = z.object({
-  impactOnCanon: StringOrNull,
-  impactOnState: StringOrNull,
-  alternateTimeline: StringArray
+  impactOnCanon: StringOrNull.describe("Description of changes to the main history"),
+  impactOnState: StringOrNull.describe("Description of changes to character states"),
+  alternateTimeline: StringArray.describe("List of events in the new timeline")
 });
 
 /**
@@ -814,8 +891,8 @@ export const ChapterPackageZodSchema = z.object({
   }).default({ milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }),
   beats: z.array(z.object({
     text: StringOrNull
-  })).default([]),
-  draft: StringOrNull
+  })).default([]).describe("List of plot beats"),
+  draft: StringOrNull.describe("Draft text if requested")
 });
 
 /**
