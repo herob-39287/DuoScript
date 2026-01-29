@@ -78,6 +78,7 @@ const resolutionStage = (ops: SyncOperation[], project: StoryProject): SyncOpera
         if (candidates.length > 0 && candidates[0].confidence >= 0.95) {
           op.targetId = candidates[0].id;
           op.targetName = candidates[0].name;
+          op.confidence = Math.max(op.confidence, candidates[0].confidence);
         } else {
           op.status = 'needs_resolution';
           op.candidates = candidates;
