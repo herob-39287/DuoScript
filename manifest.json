@@ -8,14 +8,9 @@
   "description": "AIと共に物語を紡ぐ、執筆のためのアトリエ。",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2921/2921222.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://cdn-icons-png.flaticon.com/512/2921/2921222.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }
