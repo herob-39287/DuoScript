@@ -63,7 +63,12 @@ export function repairTruncatedJson(text: string): { repairedText: string; repai
   }
 
   // 2. 制御文字などの除去
-  repaired = repaired.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+  repaired = Array.from(repaired)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return !(code <= 0x1f || (code >= 0x7f && code <= 0x9f));
+    })
+    .join('');
 
   // 3. Stack-based repair for structure (Robust against truncation)
   const stack: string[] = [];

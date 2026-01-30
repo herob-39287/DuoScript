@@ -134,7 +134,7 @@ export class ExtractorAgent extends BaseAgent {
     results.forEach((res) => {
       res.readyOps.forEach((op) => {
         const normName = normalizeJapanese(op.targetName || (op.value as any)?.name || '').trim();
-        let uniqueKey = op.targetId
+        const uniqueKey = op.targetId
           ? `${op.path}:${op.targetId}`
           : normName
             ? `${op.path}:NAME:${normName}`

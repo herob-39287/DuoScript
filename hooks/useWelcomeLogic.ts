@@ -37,7 +37,9 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
       try {
         const p = JSON.parse(prefs);
         if (p.uiLanguage) setLang(p.uiLanguage);
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Failed to parse language preferences', e);
+      }
     }
 
     // Load projects
