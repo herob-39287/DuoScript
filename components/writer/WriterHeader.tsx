@@ -1,13 +1,5 @@
 import React from 'react';
-import {
-  ChevronLeft,
-  AlignLeft,
-  Maximize2,
-  BookOpen,
-  Zap,
-  Cloud,
-  Settings2,
-} from 'lucide-react';
+import { ChevronLeft, AlignLeft, Maximize2, BookOpen, Zap, Cloud, Settings2 } from 'lucide-react';
 import { ChapterLog } from '../../types';
 import { useUI } from '../../contexts/StoryContext';
 

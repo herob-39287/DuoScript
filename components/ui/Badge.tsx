@@ -20,7 +20,8 @@ const badgeVariants = cva(`px-2 py-0.5 rounded ${Styles.text.labelSm}`, {
 });
 
 export interface BadgeProps
-  extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'color'>,
+  extends
+    Omit<React.HTMLAttributes<HTMLSpanElement>, 'color'>,
     VariantProps<typeof badgeVariants> {}
 
 export const Badge: React.FC<BadgeProps> = ({ color, children, className, ...props }) => {
