@@ -1,8 +1,7 @@
-
-import { GoogleGenAI } from "@google/genai";
-import { getProjectVectors, saveVectors, deleteVectors } from "../services/storageService";
-import { normalizeJapanese, calculateSimilarity } from "../utils/stringUtils";
-import { StoryProject, VectorEntry } from "../types";
+import { GoogleGenAI } from '@google/genai';
+import { getProjectVectors, saveVectors, deleteVectors } from '../services/storageService';
+import { normalizeJapanese, calculateSimilarity } from '../utils/stringUtils';
+import { StoryProject, VectorEntry } from '../types';
 
 // --- Types ---
 
@@ -15,12 +14,16 @@ type RAGProjectData = {
   bible: StoryProject['bible'];
 };
 
-type WorkerMessage = 
+type WorkerMessage =
   | { type: 'INIT'; payload: { apiKey: string } }
-  | { id: string; type: 'SEARCH'; payload: { query: string; project: RAGProjectData; limit: number } }
+  | {
+      id: string;
+      type: 'SEARCH';
+      payload: { query: string; project: RAGProjectData; limit: number };
+    }
   | { id: string; type: 'MAINTAIN'; payload: { project: RAGProjectData } };
 
-type WorkerResponse = 
+type WorkerResponse =
   | { id: string; type: 'SEARCH_RESULT'; payload: any[] }
   | { id: string; type: 'MAINTAIN_DONE' }
   | { id: string; type: 'ERROR'; payload: string }
@@ -32,15 +35,15 @@ let ai: GoogleGenAI | null = null;
 // --- Helper Functions ---
 
 async function embedText(text: string): Promise<number[]> {
-  if (!ai) throw new Error("Worker not initialized with API Key");
+  if (!ai) throw new Error('Worker not initialized with API Key');
   try {
     const response = await ai.models.embedContent({
       model: 'text-embedding-004',
-      contents: [{ parts: [{ text }] }]
+      contents: [{ parts: [{ text }] }],
     });
     return response.embedding?.values || [];
   } catch (e) {
-    console.error("Embedding API error in Worker:", e);
+    console.error('Embedding API error in Worker:', e);
     return [];
   }
 }
@@ -62,15 +65,15 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
 }
 
 function generateEntityText(item: any, type: string): string {
-  let text = `[${type}] ${item.name || item.title || "NoName"}\n`;
+  let text = `[${type}] ${item.name || item.title || 'NoName'}\n`;
   if (item.profile?.description) text += item.profile.description;
   else if (item.description) text += item.description;
   else if (item.content) text += item.content;
   else if (item.definition) text += item.definition;
-  
+
   if (item.profile?.role) text += `\nRole: ${item.profile.role}`;
   if (item.profile?.personality) text += `\nPersonality: ${item.profile.personality}`;
-  
+
   return text.slice(0, 1000);
 }
 
@@ -79,8 +82,8 @@ function generateEntityText(item: any, type: string): string {
 async function handleMaintainIndex(project: RAGProjectData) {
   const projectId = project.meta.id;
   const existingVectors = await getProjectVectors(projectId);
-  const vectorMap = new Map(existingVectors.map(v => [v.id, v]));
-  
+  const vectorMap = new Map(existingVectors.map((v) => [v.id, v]));
+
   const updates: VectorEntry[] = [];
   const currentIds = new Set<string>();
 
@@ -89,7 +92,7 @@ async function handleMaintainIndex(project: RAGProjectData) {
   const checkAndQueue = async (item: any, type: string, updatedAt: number) => {
     currentIds.add(item.id);
     const existing = vectorMap.get(item.id);
-    
+
     // 更新条件: 存在しない OR タイムスタンプが古い
     if (!existing || existing.updatedAt < updatedAt) {
       const textChunk = generateEntityText(item, type);
@@ -106,13 +109,13 @@ async function handleMaintainIndex(project: RAGProjectData) {
           id: item.id,
           projectId,
           type: type as any,
-          name: item.name || item.title || "NoName",
+          name: item.name || item.title || 'NoName',
           textChunk,
           embedding,
-          updatedAt
+          updatedAt,
         });
         // APIレート制限回避のための微小待機
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise((r) => setTimeout(r, 200));
       } catch (e) {
         console.error(`Failed to embed ${item.id}`, e);
       }
@@ -120,19 +123,22 @@ async function handleMaintainIndex(project: RAGProjectData) {
   };
 
   // 各コレクションを走査
-  for (const c of project.bible.characters) await checkAndQueue(c, 'character', project.meta.updatedAt);
-  for (const l of project.bible.locations) await checkAndQueue(l, 'location', project.meta.updatedAt);
-  for (const o of project.bible.organizations) await checkAndQueue(o, 'organization', project.meta.updatedAt);
+  for (const c of project.bible.characters)
+    await checkAndQueue(c, 'character', project.meta.updatedAt);
+  for (const l of project.bible.locations)
+    await checkAndQueue(l, 'location', project.meta.updatedAt);
+  for (const o of project.bible.organizations)
+    await checkAndQueue(o, 'organization', project.meta.updatedAt);
   for (const e of project.bible.entries) await checkAndQueue(e, 'entry', project.meta.updatedAt);
   for (const k of project.bible.keyItems) await checkAndQueue(k, 'item', project.meta.updatedAt);
   for (const l of project.bible.laws) await checkAndQueue(l, 'law', project.meta.updatedAt);
 
   // 削除されたアイテムのクリーンアップ
-  const idsToDelete = existingVectors.filter(v => !currentIds.has(v.id)).map(v => v.id);
-  
+  const idsToDelete = existingVectors.filter((v) => !currentIds.has(v.id)).map((v) => v.id);
+
   if (idsToDelete.length > 0) await deleteVectors(idsToDelete);
   if (updates.length > 0) await saveVectors(updates);
-  
+
   if (idsToDelete.length > 0 || updates.length > 0) {
     postLog(`RAG Index updated: ${updates.length} updated, ${idsToDelete.length} deleted.`);
   }
@@ -144,15 +150,15 @@ async function handleHybridSearch(query: string, project: RAGProjectData, limit:
 
   // 1. Lexical Search
   const scanList = [
-    ...project.bible.characters.map(c => ({ id: c.id, name: c.profile.name, type: 'character' })),
-    ...project.bible.entries.map(e => ({ id: e.id, name: e.title, type: 'entry' })),
-    ...project.bible.locations.map(l => ({ id: l.id, name: l.name, type: 'location' })),
-    ...project.bible.organizations.map(o => ({ id: o.id, name: o.name, type: 'organization' })),
-    ...project.bible.keyItems.map(k => ({ id: k.id, name: k.name, type: 'item' })),
-    ...project.bible.laws.map(l => ({ id: l.id, name: l.name, type: 'law' })),
+    ...project.bible.characters.map((c) => ({ id: c.id, name: c.profile.name, type: 'character' })),
+    ...project.bible.entries.map((e) => ({ id: e.id, name: e.title, type: 'entry' })),
+    ...project.bible.locations.map((l) => ({ id: l.id, name: l.name, type: 'location' })),
+    ...project.bible.organizations.map((o) => ({ id: o.id, name: o.name, type: 'organization' })),
+    ...project.bible.keyItems.map((k) => ({ id: k.id, name: k.name, type: 'item' })),
+    ...project.bible.laws.map((l) => ({ id: l.id, name: l.name, type: 'law' })),
   ];
 
-  scanList.forEach(item => {
+  scanList.forEach((item) => {
     const normName = normalizeJapanese(item.name);
     if (normQuery.includes(normName)) {
       candidates.set(item.id, { ...item, score: 1.0, reason: 'Exact' });
@@ -165,23 +171,23 @@ async function handleHybridSearch(query: string, project: RAGProjectData, limit:
   try {
     const queryEmbedding = await embedText(query);
     const vectors = await getProjectVectors(project.meta.id);
-    
-    vectors.forEach(vec => {
+
+    vectors.forEach((vec) => {
       const score = cosineSimilarity(queryEmbedding, vec.embedding);
-      if (score > 0.65) { 
+      if (score > 0.65) {
         if (!candidates.has(vec.id) || candidates.get(vec.id).score < score) {
           candidates.set(vec.id, {
             id: vec.id,
             name: vec.name,
             type: vec.type,
             score,
-            reason: 'Semantic'
+            reason: 'Semantic',
           });
         }
       }
     });
   } catch (e) {
-    console.error("Vector search failed in worker", e);
+    console.error('Vector search failed in worker', e);
   }
 
   return Array.from(candidates.values())

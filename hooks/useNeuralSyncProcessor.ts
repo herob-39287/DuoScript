@@ -1,8 +1,12 @@
-
 import { useState, useEffect, useRef } from 'react';
-import { 
-  useNeuralSync, useMetadata, useBible, useManuscript, 
-  useNeuralSyncDispatch, useMetadataDispatch, useNotificationDispatch 
+import {
+  useNeuralSync,
+  useMetadata,
+  useBible,
+  useManuscript,
+  useNeuralSyncDispatch,
+  useMetadataDispatch,
+  useNotificationDispatch,
 } from '../contexts/StoryContext';
 import { PromptBuilder } from '../services/gemini/promptBuilder';
 import { detectSettingChange, extractSettingsFromChat } from '../services/geminiService';
@@ -43,7 +47,7 @@ export const useNeuralSyncProcessor = (isTyping: boolean) => {
     // Determine pending messages
     let startIndex = 0;
     if (lastSyncedId) {
-      const idx = chatHistory.findIndex(m => m.id === lastSyncedId);
+      const idx = chatHistory.findIndex((m) => m.id === lastSyncedId);
       if (idx !== -1) startIndex = idx + 1;
     }
 
@@ -51,7 +55,7 @@ export const useNeuralSyncProcessor = (isTyping: boolean) => {
     if (startIndex >= chatHistory.length) return;
 
     const pendingMessages = chatHistory.slice(startIndex);
-    const userMessages = pendingMessages.filter(m => m.role === 'user');
+    const userMessages = pendingMessages.filter((m) => m.role === 'user');
 
     // If no user messages in the pending batch (e.g. only system/AI messages), just advance cursor
     if (userMessages.length === 0) {
@@ -61,7 +65,10 @@ export const useNeuralSyncProcessor = (isTyping: boolean) => {
 
     const runBackgroundSync = async () => {
       const currentBatchLastId = pendingMessages[pendingMessages.length - 1].id;
-      const combinedInput = userMessages.map(m => m.content).join("\n").trim();
+      const combinedInput = userMessages
+        .map((m) => m.content)
+        .join('\n')
+        .trim();
 
       if (!combinedInput) {
         setLastSyncedId(currentBatchLastId);
@@ -71,40 +78,50 @@ export const useNeuralSyncProcessor = (isTyping: boolean) => {
       setIsSyncing(true);
       try {
         // Create a snapshot of history up to the point we are processing
-        const targetHistoryIndex = chatHistory.findIndex(m => m.id === currentBatchLastId);
+        const targetHistoryIndex = chatHistory.findIndex((m) => m.id === currentBatchLastId);
         const processingHistory = chatHistory.slice(0, targetHistoryIndex + 1);
-        
-        const historyContent: GeminiContent[] = PromptBuilder.buildCompressedHistory({ ...sync, chatHistory: processingHistory });
+
+        const historyContent: GeminiContent[] = PromptBuilder.buildCompressedHistory({
+          ...sync,
+          chatHistory: processingHistory,
+        });
 
         // 1. Detect Intent
         // Background process, so no visual thinking phase update for user to avoid distraction
-        const detection = await detectSettingChange(combinedInput, (u) => metaDispatch(Actions.trackUsage(u)), addLog);
+        const detection = await detectSettingChange(
+          combinedInput,
+          (u) => metaDispatch(Actions.trackUsage(u)),
+          addLog,
+        );
 
         if (detection.hasChangeIntent) {
           addLog('info', 'NeuralSync', 'バックグラウンドで設定抽出を実行中...');
-          
+
           // 2. Extract Settings
           const extraction = await extractSettingsFromChat(
-            historyContent, 
-            { meta, bible, chapters, sync } as any, 
-            conversationMemory || "", 
-            detection, 
-            (u) => metaDispatch(Actions.trackUsage(u)), 
-            addLog
+            historyContent,
+            { meta, bible, chapters, sync } as any,
+            conversationMemory || '',
+            detection,
+            (u) => metaDispatch(Actions.trackUsage(u)),
+            addLog,
           );
-          
+
           if (extraction.readyOps.length > 0) {
             syncDispatch(Actions.addPendingOps(extraction.readyOps));
-            addLog('success', 'NeuralSync', `${extraction.readyOps.length}件の変更提案を抽出しました。`);
+            addLog(
+              'success',
+              'NeuralSync',
+              `${extraction.readyOps.length}件の変更提案を抽出しました。`,
+            );
             if (window.innerWidth < 1280) setShowSyncPanel(true);
           }
         }
-        
+
         // 3. Update Cursor
         setLastSyncedId(currentBatchLastId);
-
       } catch (e: any) {
-        console.error("Background Sync Failed", e);
+        console.error('Background Sync Failed', e);
         // Even on error, we advance cursor to prevent infinite retry loops on bad input
         setLastSyncedId(currentBatchLastId);
       } finally {
@@ -113,12 +130,24 @@ export const useNeuralSyncProcessor = (isTyping: boolean) => {
     };
 
     runBackgroundSync();
-
-  }, [chatHistory, isTyping, isSyncing, lastSyncedId, sync, meta, bible, chapters, conversationMemory, metaDispatch, syncDispatch, addLog]);
+  }, [
+    chatHistory,
+    isTyping,
+    isSyncing,
+    lastSyncedId,
+    sync,
+    meta,
+    bible,
+    chapters,
+    conversationMemory,
+    metaDispatch,
+    syncDispatch,
+    addLog,
+  ]);
 
   return {
     isSyncing,
     showSyncPanel,
-    setShowSyncPanel
+    setShowSyncPanel,
   };
 };

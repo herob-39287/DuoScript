@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -29,7 +28,7 @@ export const usePWA = () => {
 
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    
+
     if (outcome === 'accepted') {
       setDeferredPrompt(null);
       setIsInstallable(false);

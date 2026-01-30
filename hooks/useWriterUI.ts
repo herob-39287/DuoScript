@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useUIDispatch } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
@@ -6,9 +5,9 @@ import { ViewMode } from '../types';
 
 export const useWriterUI = () => {
   const uiDispatch = useUIDispatch();
-  
+
   const [isZenMode, setIsZenMode] = useState(false);
-  const [isVertical, setIsVertical] = useState(false); 
+  const [isVertical, setIsVertical] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<'plot' | 'bible'>('plot');
   const [mobileTab, setMobileTab] = useState<'none' | 'chapters' | 'rightPanel'>('none');
@@ -29,6 +28,6 @@ export const useWriterUI = () => {
     toggleSettings,
     setRightPanelTab,
     setMobileTab,
-    navigateBack
+    navigateBack,
   };
 };

@@ -1,7 +1,6 @@
-
-import { AppLanguage, AiPersona } from "../../../types";
-import { getTemplate } from "./resources";
-import { PromptTemplate } from "../promptTemplate";
+import { AppLanguage, AiPersona } from '../../../types';
+import { getTemplate } from './resources';
+import { PromptTemplate } from '../promptTemplate';
 
 export const WRITER_MTP = (lang: AppLanguage, persona: AiPersona = AiPersona.STANDARD) => {
   const personaText = getTemplate(`personas.${persona}`, lang);
@@ -13,19 +12,19 @@ export const COPILOT_SOUL = (lang: AppLanguage) => {
 };
 
 export const DRAFT_PROMPT = (
-  title: string, 
-  summary: string, 
-  beats: string[], 
-  previousContent: string, 
+  title: string,
+  summary: string,
+  beats: string[],
+  previousContent: string,
   lang: AppLanguage,
-  focusMode: boolean = false
+  focusMode: boolean = false,
 ) => {
   const baseTemplate = getTemplate('writer.draft.base', lang);
-  
+
   // Construct beats section
-  const beatsSection = focusMode 
-    ? `【TARGET BEAT (FOCUS)】\n${beats.map(b => `- ${b}`).join("\n")}`
-    : `【CHAPTER OUTLINE】\n${beats.map(b => `- ${b}`).join("\n")}`;
+  const beatsSection = focusMode
+    ? `【TARGET BEAT (FOCUS)】\n${beats.map((b) => `- ${b}`).join('\n')}`
+    : `【CHAPTER OUTLINE】\n${beats.map((b) => `- ${b}`).join('\n')}`;
 
   // Select mission text based on focus mode
   const missionText = focusMode
@@ -37,7 +36,7 @@ export const DRAFT_PROMPT = (
     summary,
     prev: previousContent,
     mission: missionText,
-    beats: beatsSection
+    beats: beatsSection,
   });
 };
 
@@ -49,6 +48,10 @@ export const DRAFT_SCAN_PROMPT = (draft: string, lang: AppLanguage = 'ja') => {
   return PromptTemplate.from(getTemplate('writer.draftScan', lang)).format({ draft });
 };
 
-export const CHAPTER_PACKAGE_PROMPT = (title: string, summary: string, lang: AppLanguage = 'ja') => {
+export const CHAPTER_PACKAGE_PROMPT = (
+  title: string,
+  summary: string,
+  lang: AppLanguage = 'ja',
+) => {
   return PromptTemplate.from(getTemplate('writer.chapterPackage', lang)).format({ title, summary });
 };

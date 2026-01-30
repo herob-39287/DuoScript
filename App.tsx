@@ -1,14 +1,9 @@
-
 import React, { useReducer, useState, useCallback, useMemo, useEffect } from 'react';
 import ComplianceModal from './components/ComplianceModal';
 import { AppProviders } from './components/AppProviders';
 import AppShell from './components/AppShell';
-import { 
-  StoryProject, AppPreferences
-} from './types/project';
-import { 
-  ViewMode, SystemLog, UIState
-} from './types/ui';
+import { StoryProject, AppPreferences } from './types/project';
+import { ViewMode, SystemLog, UIState } from './types/ui';
 import { normalizeProject } from './services/bibleManager';
 import { projectReducer, uiReducer, notificationReducer } from './store/reducers';
 import { usePersistence } from './hooks/usePersistence';
@@ -17,9 +12,9 @@ import * as Actions from './store/actions';
 
 const App: React.FC = () => {
   const emptyProject = normalizeProject(null);
-  
+
   const [project, projectDispatch] = useReducer(projectReducer, emptyProject);
-  
+
   const initialUIState: UIState = {
     view: ViewMode.WELCOME,
     plotterTab: 'grandArc',
@@ -33,15 +28,20 @@ const App: React.FC = () => {
     forceSaveRequested: false, // Initialize forceSave flag
     isContextActive: true, // Story context activation flag
     thinkingPhase: null, // AIの思考プロセスを表示するための状態
-    isOnline: navigator.onLine // 初期オンライン状態
+    isOnline: navigator.onLine, // 初期オンライン状態
   };
   const [ui, uiDispatch] = useReducer(uiReducer, initialUIState);
-  
-  const [notifState, notifDispatch] = useReducer(notificationReducer, { logs: [], notifications: [] });
-  
+
+  const [notifState, notifDispatch] = useReducer(notificationReducer, {
+    logs: [],
+    notifications: [],
+  });
+
   const { loadFullProject } = useProjectLoader(projectDispatch);
 
-  const [hasAgreed, setHasAgreed] = useState(localStorage.getItem('duoscript_agreed_v2') === 'true');
+  const [hasAgreed, setHasAgreed] = useState(
+    localStorage.getItem('duoscript_agreed_v2') === 'true',
+  );
 
   usePersistence(project, ui, projectDispatch, uiDispatch);
 
@@ -59,9 +59,15 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const addLog = useCallback((type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
-    notifDispatch({ type: 'ADD_LOG', payload: { id: crypto.randomUUID(), timestamp: Date.now(), type, source, message, details } });
-  }, []);
+  const addLog = useCallback(
+    (type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => {
+      notifDispatch({
+        type: 'ADD_LOG',
+        payload: { id: crypto.randomUUID(), timestamp: Date.now(), type, source, message, details },
+      });
+    },
+    [],
+  );
 
   const handleCompleteSetup = (prefs: AppPreferences) => {
     localStorage.setItem('duoscript_agreed_v2', 'true');
@@ -73,13 +79,11 @@ const App: React.FC = () => {
   const notificationDispatch = useMemo(() => ({ addLog, dispatch: notifDispatch }), [addLog]);
 
   if (!hasAgreed) {
-    return (
-      <ComplianceModal onAccept={handleCompleteSetup} />
-    );
+    return <ComplianceModal onAccept={handleCompleteSetup} />;
   }
 
   return (
-    <AppProviders 
+    <AppProviders
       state={{ ...project, ui, notification: notifState }}
       dispatchers={{ project: projectDispatch, ui: uiDispatch, notification: notificationDispatch }}
     >

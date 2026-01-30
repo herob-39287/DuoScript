@@ -1,11 +1,11 @@
-import { VectorEntry } from "../../types";
-import { initDB, STORE_VECTORS } from "./baseRepository";
+import { VectorEntry } from '../../types';
+import { initDB, STORE_VECTORS } from './baseRepository';
 
 export const saveVectors = async (entries: VectorEntry[]): Promise<void> => {
   if (entries.length === 0) return;
   const db = await initDB();
   const tx = db.transaction(STORE_VECTORS, 'readwrite');
-  await Promise.all(entries.map(entry => tx.store.put(entry)));
+  await Promise.all(entries.map((entry) => tx.store.put(entry)));
   await tx.done;
 };
 
@@ -18,6 +18,6 @@ export const deleteVectors = async (ids: string[]): Promise<void> => {
   if (ids.length === 0) return;
   const db = await initDB();
   const tx = db.transaction(STORE_VECTORS, 'readwrite');
-  await Promise.all(ids.map(id => tx.store.delete(id)));
+  await Promise.all(ids.map((id) => tx.store.delete(id)));
   await tx.done;
 };

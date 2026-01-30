@@ -1,9 +1,11 @@
-
 import { produce } from 'immer';
 import { StoryProjectMetadata, MetaAction } from '../../types';
 
-export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): StoryProjectMetadata => {
-  return produce(state, draft => {
+export const metaReducer = (
+  state: StoryProjectMetadata,
+  action: MetaAction,
+): StoryProjectMetadata => {
+  return produce(state, (draft) => {
     switch (action.type) {
       case 'LOAD_META':
         return action.payload;
@@ -17,7 +19,11 @@ export const metaReducer = (state: StoryProjectMetadata, action: MetaAction): St
         break;
       case 'TRACK_USAGE':
         if (!draft.tokenUsage) draft.tokenUsage = [];
-        draft.tokenUsage.unshift({ id: crypto.randomUUID(), timestamp: Date.now(), ...action.payload });
+        draft.tokenUsage.unshift({
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          ...action.payload,
+        });
         if (draft.tokenUsage.length > 500) draft.tokenUsage.length = 500;
         draft.updatedAt = Date.now();
         break;

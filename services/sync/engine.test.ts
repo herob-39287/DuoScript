@@ -26,7 +26,7 @@ const createMockBible = (): WorldBible => ({
   nexusBranches: [],
   integrityIssues: [],
   summaryBuffer: '',
-  lastSummaryUpdate: 0
+  lastSummaryUpdate: 0,
 });
 
 const createMockOp = (path: string, value: any): SyncOperation => ({
@@ -41,7 +41,7 @@ const createMockOp = (path: string, value: any): SyncOperation => ({
   confidence: 1.0,
   status: 'proposal',
   baseVersion: 1,
-  timestamp: Date.now()
+  timestamp: Date.now(),
 });
 
 describe('calculateSyncResult', () => {
@@ -73,7 +73,7 @@ describe('calculateSyncResult', () => {
     const bible = createMockBible();
     const chapters: ChapterLog[] = [];
     const op = createMockOp('invalidPath' as any, 'someVal');
-    
+
     expect(() => calculateSyncResult(bible, chapters, op, [])).toThrow();
   });
 });

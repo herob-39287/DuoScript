@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Clock, RotateCcw, X, Check } from 'lucide-react';
 import { t } from '../utils/i18n';
@@ -21,7 +20,15 @@ interface Props {
   isLoading: boolean;
 }
 
-export const HistoryModal: React.FC<Props> = ({ isOpen, history, currentRev, onClose, onRestore, lang, isLoading }) => {
+export const HistoryModal: React.FC<Props> = ({
+  isOpen,
+  history,
+  currentRev,
+  onClose,
+  onRestore,
+  lang,
+  isLoading,
+}) => {
   if (!isOpen) return null;
 
   return (
@@ -31,36 +38,59 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, history, currentRev, onC
           <div className="flex items-center gap-2">
             <Clock size={16} className="text-orange-400" />
             <div>
-              <span className="text-sm font-black text-stone-200 uppercase tracking-widest block">{t('history.title', lang)}</span>
-              <span className="text-[9px] text-stone-500 font-serif">{t('history.subtitle', lang)}</span>
+              <span className="text-sm font-black text-stone-200 uppercase tracking-widest block">
+                {t('history.title', lang)}
+              </span>
+              <span className="text-[9px] text-stone-500 font-serif">
+                {t('history.subtitle', lang)}
+              </span>
             </div>
           </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-white transition-colors"><X size={18} /></button>
+          <button onClick={onClose} className="text-stone-500 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
           {isLoading ? (
-            <div className="text-center py-8 text-stone-600 text-[10px] italic">{t('common.loading', lang)}</div>
+            <div className="text-center py-8 text-stone-600 text-[10px] italic">
+              {t('common.loading', lang)}
+            </div>
           ) : history.length === 0 ? (
-            <div className="text-center py-8 text-stone-600 text-[10px] italic">{t('history.empty', lang)}</div>
+            <div className="text-center py-8 text-stone-600 text-[10px] italic">
+              {t('history.empty', lang)}
+            </div>
           ) : (
             history.map((item) => {
               const isCurrent = item.rev === currentRev;
               return (
-                <div key={item.rev} className={`p-3 rounded-xl border flex items-center justify-between group transition-all ${isCurrent ? 'bg-orange-500/10 border-orange-500/30' : 'bg-stone-950/40 border-white/5 hover:border-white/20'}`}>
+                <div
+                  key={item.rev}
+                  className={`p-3 rounded-xl border flex items-center justify-between group transition-all ${isCurrent ? 'bg-orange-500/10 border-orange-500/30' : 'bg-stone-950/40 border-white/5 hover:border-white/20'}`}
+                >
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${isCurrent ? 'text-orange-400' : 'text-stone-300'}`}>
+                      <span
+                        className={`text-[10px] font-black uppercase tracking-widest ${isCurrent ? 'text-orange-400' : 'text-stone-300'}`}
+                      >
                         Rev.{item.rev}
                       </span>
-                      {isCurrent && <span className="text-[8px] bg-orange-500 text-stone-900 px-1.5 rounded-full font-bold">{t('history.current', lang)}</span>}
+                      {isCurrent && (
+                        <span className="text-[8px] bg-orange-500 text-stone-900 px-1.5 rounded-full font-bold">
+                          {t('history.current', lang)}
+                        </span>
+                      )}
                     </div>
-                    <span className={Styles.text.mono}>{new Date(item.timestamp).toLocaleString(lang === 'ja' ? 'ja-JP' : 'en-US')}</span>
-                    <span className="text-[9px] text-stone-600 mt-0.5">Approx. {item.wordCount.toLocaleString()} words</span>
+                    <span className={Styles.text.mono}>
+                      {new Date(item.timestamp).toLocaleString(lang === 'ja' ? 'ja-JP' : 'en-US')}
+                    </span>
+                    <span className="text-[9px] text-stone-600 mt-0.5">
+                      Approx. {item.wordCount.toLocaleString()} words
+                    </span>
                   </div>
-                  
+
                   {!isCurrent && (
-                    <button 
+                    <button
                       onClick={() => onRestore(item.rev)}
                       className="p-2 bg-stone-800 text-stone-500 hover:bg-stone-700 hover:text-white rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                       title={t('history.restore', lang)}
@@ -74,11 +104,9 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, history, currentRev, onC
             })
           )}
         </div>
-        
+
         <div className="p-3 border-t border-white/5 bg-stone-900/50 rounded-b-2xl shrink-0 text-center">
-           <span className="text-[9px] text-stone-600">
-             Only the last 10 revisions are kept.
-           </span>
+          <span className="text-[9px] text-stone-600">Only the last 10 revisions are kept.</span>
         </div>
       </div>
     </div>

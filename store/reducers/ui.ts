@@ -1,9 +1,8 @@
-
 import { produce } from 'immer';
 import { UIState, UIAction } from '../../types';
 
 export const uiReducer = (state: UIState, action: UIAction): UIState => {
-  return produce(state, draft => {
+  return produce(state, (draft) => {
     switch (action.type) {
       case 'SET_VIEW':
         draft.view = action.payload;

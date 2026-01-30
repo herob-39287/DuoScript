@@ -1,18 +1,17 @@
-
 import { produce } from 'immer';
 import { WorldBible, BibleAction } from '../../types';
 
 export const bibleReducer = (state: WorldBible, action: BibleAction): WorldBible => {
-  return produce(state, draft => {
+  return produce(state, (draft) => {
     switch (action.type) {
       case 'LOAD_BIBLE':
         return action.payload;
       case 'UPDATE_BIBLE':
         Object.assign(draft, action.payload);
         break;
-      
+
       case 'UPDATE_CHARACTER_DATA': {
-        const char = draft.characters.find(c => c.id === action.id);
+        const char = draft.characters.find((c) => c.id === action.id);
         if (char) {
           // Merge updates deeply if needed, or spread top-level
           // Assumes updates contains keys like profile, state, relationships
@@ -20,10 +19,10 @@ export const bibleReducer = (state: WorldBible, action: BibleAction): WorldBible
           if (action.updates.state) Object.assign(char.state, action.updates.state);
           if (action.updates.relationships) char.relationships = action.updates.relationships;
           if (action.updates.imageUrl) char.imageUrl = action.updates.imageUrl;
-          
+
           char.history.push({
             timestamp: Date.now(),
-            diff: 'Manual Edit'
+            diff: 'Manual Edit',
           });
         }
         break;

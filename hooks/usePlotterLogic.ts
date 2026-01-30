@@ -1,7 +1,11 @@
-
 import { useState, useMemo } from 'react';
-import { 
-  useNeuralSync, useUI, useUIDispatch, useManuscript, useBible, useMetadata
+import {
+  useNeuralSync,
+  useUI,
+  useUIDispatch,
+  useManuscript,
+  useBible,
+  useMetadata,
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
 import { useNeuralSyncProcessor } from './useNeuralSyncProcessor';
@@ -15,25 +19,29 @@ export const usePlotterLogic = () => {
   const bible = useBible();
   const ui = useUI();
   const uiDispatch = useUIDispatch();
-  const { preferences: { uiLanguage: lang } } = useMetadata();
-  
+  const {
+    preferences: { uiLanguage: lang },
+  } = useMetadata();
+
   const { plotterTab: activeTab, thinkingPhase } = ui;
   const { pendingChanges } = sync;
 
   // --- Sub Hooks ---
-  
+
   const chat = useArchitectChat();
   const plotterActions = usePlotterActions();
   const syncProcessor = useNeuralSyncProcessor(chat.isTyping);
 
   // --- UI Local State ---
-  
+
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
   // --- Derived State ---
 
   const sortedPendingChanges = useMemo(() => {
-    return [...pendingChanges].sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+    return [...pendingChanges].sort(
+      (a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0),
+    );
   }, [pendingChanges]);
 
   // --- Handlers ---
@@ -56,14 +64,14 @@ export const usePlotterLogic = () => {
       input: chat.input,
       isTyping: chat.isTyping,
       displayHistory: chat.displayHistory,
-      generatingCharId: plotterActions.generatingCharId
+      generatingCharId: plotterActions.generatingCharId,
     },
     data: {
       sync,
       chapters,
       bible,
       sortedPendingChanges,
-      pendingChanges
+      pendingChanges,
     },
     actions: {
       setTab,
@@ -74,7 +82,7 @@ export const usePlotterLogic = () => {
       applyOp: plotterActions.handleApplyOp,
       genPortrait: plotterActions.handleGenPortrait,
       closeMobileChat: () => setIsMobileChatOpen(false),
-      closeSyncPanel: () => syncProcessor.setShowSyncPanel(false)
-    }
+      closeSyncPanel: () => syncProcessor.setShowSyncPanel(false),
+    },
   };
 };

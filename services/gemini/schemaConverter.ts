@@ -1,6 +1,5 @@
-
-import { Type, Schema } from "@google/genai";
-import { z } from "zod";
+import { Type, Schema } from '@google/genai';
+import { z } from 'zod';
 
 /**
  * Converts a Zod schema to a Google GenAI Schema (Type).
@@ -46,7 +45,7 @@ export function zodToGeminiSchema(schema: z.ZodTypeAny): Schema {
     return {
       type: Type.STRING,
       enum: Object.values(schema._def.values),
-      description
+      description,
     };
   }
 
@@ -55,7 +54,7 @@ export function zodToGeminiSchema(schema: z.ZodTypeAny): Schema {
     return {
       type: Type.ARRAY,
       items: zodToGeminiSchema(schema.element),
-      description
+      description,
     };
   }
 
@@ -68,7 +67,7 @@ export function zodToGeminiSchema(schema: z.ZodTypeAny): Schema {
     for (const key in shape) {
       const fieldSchema = shape[key];
       properties[key] = zodToGeminiSchema(fieldSchema);
-      
+
       // Determine required status
       // ZodOptional/Nullable/Default are optional.
       if (
@@ -84,11 +83,14 @@ export function zodToGeminiSchema(schema: z.ZodTypeAny): Schema {
       type: Type.OBJECT,
       properties,
       required: required.length > 0 ? required : undefined,
-      description
+      description,
     };
   }
 
   // Fallback
-  console.warn("Unsupported Zod type for Gemini Schema conversion, defaulting to STRING:", schema.constructor.name);
+  console.warn(
+    'Unsupported Zod type for Gemini Schema conversion, defaulting to STRING:',
+    schema.constructor.name,
+  );
   return { type: Type.STRING, description };
 }

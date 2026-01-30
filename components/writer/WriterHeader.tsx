@@ -1,6 +1,13 @@
-
 import React from 'react';
-import { ChevronLeft, AlignLeft, Maximize2, BookOpen, Zap, CloudCheck, Settings2 } from 'lucide-react';
+import {
+  ChevronLeft,
+  AlignLeft,
+  Maximize2,
+  BookOpen,
+  Zap,
+  CloudCheck,
+  Settings2,
+} from 'lucide-react';
 import { ChapterLog } from '../../types';
 import { useUI } from '../../contexts/StoryContext';
 
@@ -25,21 +32,21 @@ export const WriterHeader: React.FC<WriterHeaderProps> = ({
   onNavigateBack,
   onOpenChapters,
   onOpenPlot,
-  onOpenSettings
+  onOpenSettings,
 }) => {
   const { saveStatus } = useUI();
 
   return (
     <header className="h-16 border-b border-white/5 flex items-center px-4 md:px-8 justify-between bg-stone-900/60 backdrop-blur-md shrink-0 z-50">
       <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
-        <button 
-          onClick={onNavigateBack} 
+        <button
+          onClick={onNavigateBack}
           className="p-2 hover:bg-stone-800 rounded-lg text-stone-500 transition-colors"
           title="ダッシュボードに戻る"
         >
           <ChevronLeft size={20} />
         </button>
-        
+
         {/* Mobile: Chapter List Toggle */}
         <button
           onClick={onOpenChapters}
@@ -54,11 +61,20 @@ export const WriterHeader: React.FC<WriterHeaderProps> = ({
             {activeChapter?.title || '無題の章'}
           </h2>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-stone-600 font-mono">{(wordCount || 0).toLocaleString()} c</span>
+            <span className="text-[9px] text-stone-600 font-mono">
+              {(wordCount || 0).toLocaleString()} c
+            </span>
             <div className="hidden sm:block w-1 h-1 rounded-full bg-stone-700" />
-            <span className="text-[9px] text-stone-600 font-mono hidden sm:inline">V{activeChapter?.draftVersion || 0}</span>
+            <span className="text-[9px] text-stone-600 font-mono hidden sm:inline">
+              V{activeChapter?.draftVersion || 0}
+            </span>
             {saveStatus !== 'idle' && (
-               <CloudCheck size={10} className={saveStatus === 'saved' ? 'text-orange-400' : 'text-stone-500 animate-pulse'} />
+              <CloudCheck
+                size={10}
+                className={
+                  saveStatus === 'saved' ? 'text-orange-400' : 'text-stone-500 animate-pulse'
+                }
+              />
             )}
           </div>
         </div>
@@ -74,7 +90,7 @@ export const WriterHeader: React.FC<WriterHeaderProps> = ({
           <Zap size={18} />
         </button>
 
-        <button 
+        <button
           onClick={onOpenSettings}
           className="p-2 md:p-2.5 rounded-xl bg-stone-800 text-stone-500 hover:text-stone-300 transition-all"
           title="表示設定"
@@ -85,7 +101,7 @@ export const WriterHeader: React.FC<WriterHeaderProps> = ({
         <button
           onClick={onToggleVertical}
           className={`hidden sm:flex p-2 md:p-2.5 rounded-xl transition-all ${isVertical ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/20' : 'bg-stone-800 text-stone-500 hover:text-stone-300'}`}
-          title={isVertical ? "横書きモードに切り替え" : "縦書きモードに切り替え"}
+          title={isVertical ? '横書きモードに切り替え' : '縦書きモードに切り替え'}
         >
           <AlignLeft size={18} className={isVertical ? 'rotate-90' : ''} />
         </button>

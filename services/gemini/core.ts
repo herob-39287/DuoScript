@@ -1,9 +1,8 @@
-
-import { GoogleGenAI } from "@google/genai";
-import { UsageCallback, LogCallback } from "../../types";
-import { trackUsage } from "./utils";
-import { AI_MODELS, TOKEN_LIMITS } from "../../constants";
-import { executeWithFallback } from "./geminiExecution";
+import { GoogleGenAI } from '@google/genai';
+import { UsageCallback, LogCallback } from '../../types';
+import { trackUsage } from './utils';
+import { AI_MODELS, TOKEN_LIMITS } from '../../constants';
+import { executeWithFallback } from './geminiExecution';
 
 export interface RequestConfig {
   model: string;
@@ -36,12 +35,12 @@ export class GeminiClient {
     // プレビュー環境でのクラッシュを防ぐため、初期化時はキーの有無に関わらずインスタンスを作成する
     // 実際のリクエスト時にキーの有無をチェックする
     this.hasKey = !!apiKey;
-    this.genAI = new GoogleGenAI({ apiKey: apiKey || "dummy_key_for_init" });
+    this.genAI = new GoogleGenAI({ apiKey: apiKey || 'dummy_key_for_init' });
   }
 
   private checkKey() {
     if (!this.hasKey) {
-      throw new Error("API Key is missing. Please configure process.env.API_KEY.");
+      throw new Error('API Key is missing. Please configure process.env.API_KEY.');
     }
   }
 
@@ -50,11 +49,11 @@ export class GeminiClient {
     try {
       const response = await this.genAI.models.embedContent({
         model: AI_MODELS.EMBEDDING,
-        contents: [{ parts: [{ text }] }]
+        contents: [{ parts: [{ text }] }],
       });
       return response.embedding?.values || [];
     } catch (e) {
-      console.error("Embedding API error:", e);
+      console.error('Embedding API error:', e);
       return [];
     }
   }
@@ -67,22 +66,31 @@ export class GeminiClient {
     const primaryOp = async (attempt: number) => {
       const currentContents = [...normalizedContents];
       if (attempt > 1) {
-        currentContents.push({ role: 'user', parts: [{ text: "Previous response was invalid JSON. Please correct the format to match the schema exactly." }] });
+        currentContents.push({
+          role: 'user',
+          parts: [
+            {
+              text: 'Previous response was invalid JSON. Please correct the format to match the schema exactly.',
+            },
+          ],
+        });
       }
 
       const res = await this.genAI.models.generateContent({
         model: model,
         contents: currentContents,
-        config: this.normalizeConfig(model, config)
+        config: this.normalizeConfig(model, config),
       });
 
       trackUsage(res, model, usageLabel, onUsage);
-      
+
       if (res.candidates?.[0]?.finishReason === 'SAFETY') {
-        throw new Error(`SAFETY_BLOCK:${res.candidates[0].safetyRatings?.[0]?.category || 'UNKNOWN'}`);
+        throw new Error(
+          `SAFETY_BLOCK:${res.candidates[0].safetyRatings?.[0]?.category || 'UNKNOWN'}`,
+        );
       }
 
-      return mapper({ text: res.text || "", candidates: res.candidates });
+      return mapper({ text: res.text || '', candidates: res.candidates });
     };
 
     const fallbackOp = async () => {
@@ -91,17 +99,17 @@ export class GeminiClient {
       const res = await this.genAI.models.generateContent({
         model: flashModel,
         contents: normalizedContents,
-        config: this.normalizeConfig(flashModel, flashConfig)
+        config: this.normalizeConfig(flashModel, flashConfig),
       });
 
       trackUsage(res, flashModel, `${usageLabel}(Fallback)`, onUsage);
-      return mapper({ text: res.text || "", candidates: res.candidates });
+      return mapper({ text: res.text || '', candidates: res.candidates });
     };
 
     try {
       return await executeWithFallback(primaryOp, fallbackOp, {
         source: usageLabel,
-        logCallback: logCallback
+        logCallback: logCallback,
       });
     } catch (error: any) {
       logCallback('error', usageLabel as any, `AIエラー: ${error?.message || 'Unknown Error'}`);
@@ -118,7 +126,7 @@ export class GeminiClient {
       return await this.genAI.models.generateContentStream({
         model: targetModel,
         contents: normalizedContents,
-        config: this.normalizeConfig(targetModel, config)
+        config: this.normalizeConfig(targetModel, config),
       });
     };
 
@@ -130,12 +138,17 @@ export class GeminiClient {
       try {
         stream = await createStream(model);
       } catch (e: any) {
-        const msg = e.message || "";
+        const msg = e.message || '';
         const status = e.status || e.error?.code;
-        const isAuthError = status === 403 || status === 404 || msg.includes('403') || msg.includes('404');
-        
+        const isAuthError =
+          status === 403 || status === 404 || msg.includes('403') || msg.includes('404');
+
         if (isAuthError && model !== AI_MODELS.FAST) {
-          logCallback('info', usageLabel as any, `ストリーム接続エラー(${status})。高速モデルへ切り替えます。`);
+          logCallback(
+            'info',
+            usageLabel as any,
+            `ストリーム接続エラー(${status})。高速モデルへ切り替えます。`,
+          );
           currentModel = AI_MODELS.FAST;
           stream = await createStream(currentModel);
         } else {
@@ -145,31 +158,32 @@ export class GeminiClient {
 
       for await (const chunk of stream) {
         if (chunk.usageMetadata) finalUsageMetadata = chunk.usageMetadata;
-        
+
         if (chunk.candidates?.[0]?.finishReason === 'SAFETY') {
-          throw new Error(`SAFETY_BLOCK:${chunk.candidates[0].safetyRatings?.[0]?.category || 'UNKNOWN'}`);
+          throw new Error(
+            `SAFETY_BLOCK:${chunk.candidates[0].safetyRatings?.[0]?.category || 'UNKNOWN'}`,
+          );
         }
 
         yield {
-          text: chunk.text || "",
-          sources: chunk.candidates?.[0]?.groundingMetadata?.groundingChunks?.map((c: any) => ({ 
-            title: c.web?.title || "Ref", 
-            uri: c.web?.uri || "" 
-          })) || []
+          text: chunk.text || '',
+          sources:
+            chunk.candidates?.[0]?.groundingMetadata?.groundingChunks?.map((c: any) => ({
+              title: c.web?.title || 'Ref',
+              uri: c.web?.uri || '',
+            })) || [],
         };
       }
-
     } catch (error: any) {
-      logCallback('error', usageLabel as any, `ストリームエラー: ${error?.message || '中断されました'}`);
+      logCallback(
+        'error',
+        usageLabel as any,
+        `ストリームエラー: ${error?.message || '中断されました'}`,
+      );
       throw error;
     } finally {
       if (finalUsageMetadata && onUsage) {
-        trackUsage(
-          { usageMetadata: finalUsageMetadata } as any, 
-          currentModel, 
-          usageLabel, 
-          onUsage
-        );
+        trackUsage({ usageMetadata: finalUsageMetadata } as any, currentModel, usageLabel, onUsage);
       }
     }
   }
@@ -186,14 +200,17 @@ export class GeminiClient {
   private normalizeConfig(model: string, config: any = {}) {
     const finalConfig = { ...config };
     if (finalConfig.thinkingConfig?.thinkingBudget > 0) {
-      if (!finalConfig.maxOutputTokens || finalConfig.maxOutputTokens < TOKEN_LIMITS.DEFAULT_OUTPUT) {
+      if (
+        !finalConfig.maxOutputTokens ||
+        finalConfig.maxOutputTokens < TOKEN_LIMITS.DEFAULT_OUTPUT
+      ) {
         finalConfig.maxOutputTokens = TOKEN_LIMITS.DEFAULT_OUTPUT;
       }
     }
     if (model.includes('flash') && finalConfig.thinkingConfig) {
-       if (finalConfig.thinkingConfig.thinkingBudget > TOKEN_LIMITS.THINKING_FLASH_LIMIT) {
-           finalConfig.thinkingConfig.thinkingBudget = TOKEN_LIMITS.THINKING_FLASH_LIMIT;
-       }
+      if (finalConfig.thinkingConfig.thinkingBudget > TOKEN_LIMITS.THINKING_FLASH_LIMIT) {
+        finalConfig.thinkingConfig.thinkingBudget = TOKEN_LIMITS.THINKING_FLASH_LIMIT;
+      }
     }
     return finalConfig;
   }

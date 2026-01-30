@@ -1,4 +1,3 @@
-
 import { WorldBible, ChapterLog, HistoryEntry, SyncOperation } from '../../../types';
 
 export interface SyncContext {
@@ -8,14 +7,20 @@ export interface SyncContext {
 }
 
 export interface SyncStrategy {
-  apply(ctx: SyncContext, op: SyncOperation): {
+  apply(
+    ctx: SyncContext,
+    op: SyncOperation,
+  ): {
     nextBible: WorldBible;
     nextChapters: ChapterLog[];
     targetName: string;
     oldValue: any;
     newValue: any;
   };
-  revert(ctx: SyncContext, history: HistoryEntry): {
+  revert(
+    ctx: SyncContext,
+    history: HistoryEntry,
+  ): {
     nextBible: WorldBible;
     nextChapters: ChapterLog[];
   };

@@ -1,5 +1,4 @@
-
-import { AppLanguage, AiPersona } from "../../../types";
+import { AppLanguage, AiPersona } from '../../../types';
 
 // Type definition for the prompt structure to ensure consistency
 export type PromptDefinitions = typeof PROMPT_DEFINITIONS;
@@ -14,26 +13,26 @@ Do not use English even if the input text contains English terms. Translate them
       en: `
 [LANGUAGE CONSTRAINT]: All string values in the JSON output (especially 'rationale', 'targetName', and content inside 'value') MUST be in English.
 Do not use Japanese. Output exclusively in English.
-`.trim()
-    }
+`.trim(),
+    },
   },
   personas: {
     [AiPersona.STANDARD]: {
-      ja: "あなたは知的な伴走者として、作家のアイデアを広げ、設定の整合性を守る存在です。バランスの取れた視点で提案を行います。",
-      en: "You are an intelligent companion who expands the writer's ideas and maintains the consistency of the setting. You provide balanced proposals."
+      ja: 'あなたは知的な伴走者として、作家のアイデアを広げ、設定の整合性を守る存在です。バランスの取れた視点で提案を行います。',
+      en: "You are an intelligent companion who expands the writer's ideas and maintains the consistency of the setting. You provide balanced proposals.",
     },
     [AiPersona.STRICT]: {
-      ja: "あなたは厳格な編集者です。論理的な矛盾や設定の甘さを鋭く指摘し、作品の品質を高めるために妥協しません。",
-      en: "You are a strict editor. You sharply point out logical contradictions and weak settings, refusing to compromise to improve the quality of the work."
+      ja: 'あなたは厳格な編集者です。論理的な矛盾や設定の甘さを鋭く指摘し、作品の品質を高めるために妥協しません。',
+      en: 'You are a strict editor. You sharply point out logical contradictions and weak settings, refusing to compromise to improve the quality of the work.',
     },
     [AiPersona.GENTLE]: {
-      ja: "あなたは優しく受容的なミューズです。作家のどんな小さなアイデアも肯定し、モチベーションを高めることを最優先します。",
-      en: "You are a gentle and receptive muse. You affirm even the smallest ideas of the writer and prioritize boosting motivation."
+      ja: 'あなたは優しく受容的なミューズです。作家のどんな小さなアイデアも肯定し、モチベーションを高めることを最優先します。',
+      en: 'You are a gentle and receptive muse. You affirm even the smallest ideas of the writer and prioritize boosting motivation.',
     },
     [AiPersona.CREATIVE]: {
-      ja: "あなたは常識にとらわれないアイデアマンです。整合性よりも「面白さ」や「意外性」を重視し、突飛な展開を積極的に提案します。",
-      en: "You are an unconventional idea generator. You prioritize 'fun' and 'surprise' over consistency, actively proposing wild developments."
-    }
+      ja: 'あなたは常識にとらわれないアイデアマンです。整合性よりも「面白さ」や「意外性」を重視し、突飛な展開を積極的に提案します。',
+      en: "You are an unconventional idea generator. You prioritize 'fun' and 'surprise' over consistency, actively proposing wild developments.",
+    },
   },
   architect: {
     mtp: {
@@ -56,7 +55,7 @@ Do not use Japanese. Output exclusively in English.
 - Do not perform narrative descriptions using ground text or dialogue; output only as structure proposals or settings.
 - When proposing story developments, restrict the format to "Plot", "Synopsis", or "Bullet points".
 - Even if the user asks you to "write", guide them by saying "I am an Architect, so I will propose the structure. Let's do the writing in the Writer tab," and present the plot.
-`.trim()
+`.trim(),
     },
     extractor: {
       entities: {
@@ -89,7 +88,7 @@ Extract changes related to "Entities" from the dialogue history and output them 
 1. **State (Temporary)**: Emotion, Location, Health. Update \`state\` object.
 2. **Evolution (Permanent)**: Loss of limbs, Growth. Update \`profile\`.
 3. **Reveal**: Identity revealed. Update \`profile\` and mark rationale as "Reveal".
-`.trim()
+`.trim(),
       },
       foundation: {
         ja: `
@@ -127,7 +126,7 @@ Extract changes related to "World Foundation" from the dialogue history and outp
 2. **Route Change**: New road or blockade. Update \`connections\`.
 3. **Item Transfer**: Change of owner. Update \`keyItems.currentOwnerId\`.
 4. **Entry Update**: New historical facts or definitions. Extend \`entries\`.
-`.trim()
+`.trim(),
       },
       narrative: {
         ja: `
@@ -175,7 +174,7 @@ Extract changes related to "Narrative Structure & Time" from the dialogue histor
 - **World Settings / Lore**: Detailed descriptions of locations, items, laws, or history MUST go to 'FOUNDATION' (entries, locations, laws), NOT 'grandArc'.
 - **Character Backstory**: Goes to 'ENTITIES' (characters), NOT 'grandArc'.
 - **Foreshadowing**: Do not extract here.
-`.trim()
+`.trim(),
       },
       foreshadowing: {
         ja: `
@@ -201,12 +200,12 @@ Extract changes related to "Foreshadowing" from the dialogue history and output 
 1. **Plant**: New mystery. status: 'Open'
 2. **Progress**: Clues or Red Herrings added.
 3. **Payoff**: Mystery resolved. status: 'Resolved'
-`.trim()
+`.trim(),
       },
       sync: {
         ja: `ROLE: Sync Extractor. Extract proposed changes to story settings in accurate JSON format.`,
-        en: `ROLE: Sync Extractor. Extract proposed changes to story settings in accurate JSON format.`
-      }
+        en: `ROLE: Sync Extractor. Extract proposed changes to story settings in accurate JSON format.`,
+      },
     },
     summarization: {
       ja: `
@@ -222,15 +221,15 @@ Overwrite and integrate with the current memory to maintain the latest state.
 
 【CURRENT MEMORY】
 {{memory}}
-`.trim()
+`.trim(),
     },
     whisperSoul: {
       ja: `ROLE: Inner Architect. Whisper advice about contradictions or completions for the current draft.`,
-      en: `ROLE: Inner Architect. Whisper advice about contradictions or completions for the current draft.`
+      en: `ROLE: Inner Architect. Whisper advice about contradictions or completions for the current draft.`,
     },
     whisperPrompt: {
       ja: `Analyze and return JSON only if advice is needed.`,
-      en: `Analyze and return JSON only if advice is needed.`
+      en: `Analyze and return JSON only if advice is needed.`,
     },
     genesisFill: {
       ja: `
@@ -268,7 +267,7 @@ Generate a creative and consistent description for the character's "**{{field}}*
 - Language: English.
 - Tone: Matches the world setting.
 - Length: Concise but evocative (1-3 sentences).
-`.trim()
+`.trim(),
     },
     autoFill: {
       ja: `
@@ -306,7 +305,7 @@ Generate a creative and consistent description for the "**{{field}}**" of the {{
 - Language: English.
 - Tone: Matches the world setting.
 - Length: Concise but evocative.
-`.trim()
+`.trim(),
     },
     brainstorm: {
       ja: `
@@ -338,8 +337,8 @@ Based on any existing partial data: {{json}}
 - Include these specific fields if applicable: {{hints}}
 - Add a "concept_note" field to each object explaining the concept briefly (e.g. "Tragic Hero").
 - Language: English.
-`.trim()
-    }
+`.trim(),
+    },
   },
   writer: {
     mtp: {
@@ -354,11 +353,11 @@ Based on any existing partial data: {{json}}
 [PERSONA]: {{persona}}
 
 You are a linguistic magician and a writer who creates emotionally rich descriptions.
-`.trim()
+`.trim(),
     },
     copilotSoul: {
       ja: `ROLE: Creative Copilot. Propose the next attractive sentences in Japanese.`,
-      en: `ROLE: Creative Copilot. Propose the next attractive sentences in English.`
+      en: `ROLE: Creative Copilot. Propose the next attractive sentences in English.`,
     },
     draft: {
       base: {
@@ -399,18 +398,18 @@ Last 1500 characters of the current draft:
 - Output Language: English
 - Style: Novelistic (Show, Don't Tell)
 - Do NOT repeat the previous content. Start writing the NEXT sentences immediately.
-`.trim()
+`.trim(),
       },
       missions: {
         focus: {
           ja: `Write the SPECIFIC SCENE defined by the Target Beat below. Connect naturally from the previous content.`,
-          en: `Write the SPECIFIC SCENE defined by the Target Beat below. Connect naturally from the previous content.`
+          en: `Write the SPECIFIC SCENE defined by the Target Beat below. Connect naturally from the previous content.`,
         },
         outline: {
           ja: `Continue writing the story based on the Chapter Outline. Move the plot forward naturally from the previous content.`,
-          en: `Continue writing the story based on the Chapter Outline. Move the plot forward naturally from the previous content.`
-        }
-      }
+          en: `Continue writing the story based on the Chapter Outline. Move the plot forward naturally from the previous content.`,
+        },
+      },
     },
     nextSentence: {
       ja: `
@@ -424,7 +423,7 @@ Current Draft:
 "{{content}}"
 
 Propose 3 natural and attractive candidate sentences that follow this text in English.
-`.trim()
+`.trim(),
     },
     draftScan: {
       ja: `
@@ -436,7 +435,7 @@ Draft:
 Extract elements from the following draft that are newly established (or contradict existing settings).
 Draft:
 "{{draft}}"
-`.trim()
+`.trim(),
     },
     chapterPackage: {
       ja: `
@@ -450,13 +449,13 @@ Title: {{title}}
 Summary: {{summary}}
 
 Construct a detailed strategy and plot beats for writing this chapter.
-`.trim()
-    }
+`.trim(),
+    },
   },
   analysis: {
     analystSoul: {
       ja: `ROLE: Story Integrity Analyst. あらすじと設定の乖離、および最新原稿と設定の矛盾を検出せよ。`,
-      en: `ROLE: Story Integrity Analyst. Detect discrepancies between summary and settings, and contradictions between the latest draft and settings.`
+      en: `ROLE: Story Integrity Analyst. Detect discrepancies between summary and settings, and contradictions between the latest draft and settings.`,
     },
     detectorSoul: {
       ja: `
@@ -478,11 +477,11 @@ Determine if there is an intent to change or add story settings from the user in
 - NARRATIVE: Timeline, Chapters, Threads, Grand Arc, Structure.
 - ENTITIES: Characters, Organizations, Races.
 - FOUNDATION: Locations, Laws, Items, Themes, Entries.
-`.trim()
+`.trim(),
     },
     detectorPrompt: {
       ja: `Input: "{{input}}"`,
-      en: `Input: "{{input}}"`
+      en: `Input: "{{input}}"`,
     },
     integrityScan: {
       ja: `
@@ -512,15 +511,15 @@ Output MUST be in JSON.
 All text fields (description, suggestion, etc.) MUST be in English.
 
 {{bible}}
-`.trim()
+`.trim(),
     },
     nexusSim: {
       ja: `Hypothesis: "{{hyp}}"\n\n【STORY_CONTEXT】\n{{ctx}}`,
-      en: `Hypothesis: "{{hyp}}"\n\n【STORY_CONTEXT】\n{{ctx}}`
+      en: `Hypothesis: "{{hyp}}"\n\n【STORY_CONTEXT】\n{{ctx}}`,
     },
     safetyAlternatives: {
       ja: `Propose 3 alternative expressions in Japanese.`,
-      en: `Propose 3 alternative expressions in English.`
+      en: `Propose 3 alternative expressions in English.`,
     },
     muse: {
       bible: {
@@ -565,7 +564,7 @@ Extrapolate, expand, and generate a COMPLETE Story Bible.
 
 # OUTPUT FORMAT:
 Return strictly a valid JSON object matching the requested schema.
-`.trim()
+`.trim(),
       },
       chapters: {
         ja: `
@@ -601,7 +600,7 @@ Based on the following World Settings (Bible), design the detailed story structu
 
 # OUTPUT FORMAT:
 Return strictly a valid JSON object with 'chapters', 'timeline', 'storyStructure', and 'volumes'.
-`.trim()
+`.trim(),
       },
       foreshadowing: {
         ja: `
@@ -639,24 +638,24 @@ You are a mystery writer. Based on the established World Settings and Chapter Pl
 
 # OUTPUT FORMAT:
 Return strictly a valid JSON object with 'foreshadowing' and 'storyThreads'.
-`.trim()
-      }
-    }
+`.trim(),
+      },
+    },
   },
   librarian: {
     soul: {
       ja: `ROLE: Story Librarian. あらすじや対話から関連する設定項目を抽出し、適切な情報を設計士に提供する専門家であれ。`,
-      en: `ROLE: Story Librarian. You are an expert who extracts relevant setting items from summaries and dialogues to provide appropriate information to the Architect.`
-    }
+      en: `ROLE: Story Librarian. You are an expert who extracts relevant setting items from summaries and dialogues to provide appropriate information to the Architect.`,
+    },
   },
   visual: {
     description: {
       ja: `Describe the visual appearance of character "{{name}}". Tone: {{tone}}`,
-      en: `Describe the visual appearance of character "{{name}}". Tone: {{tone}}`
+      en: `Describe the visual appearance of character "{{name}}". Tone: {{tone}}`,
     },
     portrait: {
       ja: `Illustration of: {{desc}}`,
-      en: `Illustration of: {{desc}}`
-    }
-  }
+      en: `Illustration of: {{desc}}`,
+    },
+  },
 };

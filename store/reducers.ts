@@ -1,4 +1,3 @@
-
 import { StoryProject, ProjectAction, MetaAction, BibleAction, SyncAction } from '../types';
 import { metaReducer } from './reducers/meta';
 import { bibleReducer } from './reducers/bible';
@@ -16,7 +15,7 @@ export const projectReducer = (state: StoryProject, action: ProjectAction): Stor
   if (action.type === 'LOAD_PROJECT') {
     return action.payload;
   }
-  
+
   return {
     meta: metaReducer(state.meta, action as MetaAction),
     bible: bibleReducer(state.bible, action as BibleAction),

@@ -1,5 +1,4 @@
-
-import { StoryProject } from "../types";
+import { StoryProject } from '../types';
 
 export interface SearchResult {
   id: string;
@@ -11,14 +10,17 @@ export interface SearchResult {
 
 class RAGServiceProxy {
   private worker: Worker;
-  private pendingRequests = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>();
+  private pendingRequests = new Map<
+    string,
+    { resolve: (val: any) => void; reject: (err: any) => void }
+  >();
   private logCallback: ((msg: string) => void) | null = null;
 
   constructor() {
     // Fix: Use window.location.origin as base to avoid "Invalid URL" error if import.meta.url is undefined
     const workerUrl = new URL('/workers/rag.worker.ts', window.location.origin);
     this.worker = new Worker(workerUrl, { type: 'module' });
-    
+
     // Pass API Key securely to worker
     this.worker.postMessage({ type: 'INIT', payload: { apiKey: process.env.API_KEY } });
 
@@ -55,15 +57,15 @@ class RAGServiceProxy {
     return {
       meta: {
         id: project.meta.id,
-        updatedAt: project.meta.updatedAt
+        updatedAt: project.meta.updatedAt,
       },
       bible: {
         ...project.bible,
         // キャラクターの画像データと履歴を除外
         characters: project.bible.characters.map(({ imageUrl, history, ...rest }) => rest),
         // アイテム履歴を除外
-        keyItems: project.bible.keyItems.map(({ history, ...rest }) => rest)
-      }
+        keyItems: project.bible.keyItems.map(({ history, ...rest }) => rest),
+      },
       // chapters, sync, assets はRAGインデックス作成には不要なため送信しない
     };
   }
@@ -84,7 +86,11 @@ class RAGServiceProxy {
   /**
    * ハイブリッド検索 (Web Worker)
    */
-  async hybridSearch(query: string, project: StoryProject, limit: number = 20): Promise<SearchResult[]> {
+  async hybridSearch(
+    query: string,
+    project: StoryProject,
+    limit: number = 20,
+  ): Promise<SearchResult[]> {
     const payload = this.minifyProject(project);
     return this.request<SearchResult[]>('SEARCH', { query, project: payload, limit });
   }

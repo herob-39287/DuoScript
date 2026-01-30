@@ -1,29 +1,22 @@
-
-import { z } from "zod";
+import { z } from 'zod';
 
 // --- Primitives & Helpers ---
 
 export const StringOrNull = z.preprocess(
-  (val) => (val === null || val === undefined ? "" : String(val)),
-  z.string()
+  (val) => (val === null || val === undefined ? '' : String(val)),
+  z.string(),
 );
 
-export const NumberOrZero = z.preprocess(
-  (val) => {
-    const num = Number(val);
-    return isNaN(num) ? 0 : num;
-  },
-  z.number()
-);
+export const NumberOrZero = z.preprocess((val) => {
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+}, z.number());
 
-export const StringArray = z.preprocess(
-  (val) => {
-    if (Array.isArray(val)) return val.map(String);
-    if (typeof val === 'string') return [val];
-    return [];
-  },
-  z.array(z.string())
-);
+export const StringArray = z.preprocess((val) => {
+  if (Array.isArray(val)) return val.map(String);
+  if (typeof val === 'string') return [val];
+  return [];
+}, z.array(z.string()));
 
 // --- Core ID & Time Types ---
 export const ID = z.string();
@@ -42,7 +35,7 @@ export const EditorSettingsSchema = z.object({
   lineHeight: z.number(),
   fontFamily: z.enum(['serif', 'sans']),
   paperFilter: z.enum(['none', 'sepia', 'dark']),
-  verticalMode: z.boolean()
+  verticalMode: z.boolean(),
 });
 
 export const AppPreferencesSchema = z.object({
@@ -53,7 +46,7 @@ export const AppPreferencesSchema = z.object({
   allowSearch: z.boolean(),
   whisperSensitivity: z.number(),
   disabledLinterRules: z.array(z.string()),
-  editorSettings: EditorSettingsSchema
+  editorSettings: EditorSettingsSchema,
 });
 
 export const TokenUsageEntrySchema = z.object({
@@ -63,13 +56,13 @@ export const TokenUsageEntrySchema = z.object({
   source: z.string(),
   input: z.number(),
   output: z.number(),
-  cached: z.number().optional()
+  cached: z.number().optional(),
 });
 
 export const SafetyViolationSchema = z.object({
   timestamp: Timestamp,
   category: z.string().optional(),
-  inputSnippet: z.string().optional()
+  inputSnippet: z.string().optional(),
 });
 
 export const StoryProjectMetadataSchema = z.object({
@@ -85,7 +78,7 @@ export const StoryProjectMetadataSchema = z.object({
   violationCount: z.number(),
   violationHistory: z.array(SafetyViolationSchema),
   headRev: z.number().optional(),
-  preferences: AppPreferencesSchema
+  preferences: AppPreferencesSchema,
 });
 
 export const AssetMetadataSchema = z.object({
@@ -95,14 +88,14 @@ export const AssetMetadataSchema = z.object({
   size: z.number(),
   mimeType: z.string(),
   createdAt: Timestamp,
-  lastUsedAt: Timestamp
+  lastUsedAt: Timestamp,
 });
 
 // --- Manuscript & Chapters ---
 
 export const PlotBeatSchema = z.object({
   id: ID,
-  text: z.string()
+  text: z.string(),
 });
 
 export const StorySceneSchema = z.object({
@@ -115,7 +108,7 @@ export const StorySceneSchema = z.object({
   content: z.string(),
   beats: z.array(PlotBeatSchema),
   wordCount: z.number(),
-  status: z.enum(['Idea', 'Drafting', 'Polished'])
+  status: z.enum(['Idea', 'Drafting', 'Polished']),
 });
 
 export const ChapterStrategySchema = z.object({
@@ -123,13 +116,13 @@ export const ChapterStrategySchema = z.object({
   forbiddenResolutions: z.array(z.string()),
   characterArcProgress: z.string(),
   pacing: z.string(),
-  povCharacterId: z.string().optional()
+  povCharacterId: z.string().optional(),
 });
 
 export const ForeshadowingLinkSchema = z.object({
   foreshadowingId: z.string(),
   action: z.enum(['Plant', 'Progress', 'Payoff', 'Twist', 'RedHerring']),
-  note: z.string()
+  note: z.string(),
 });
 
 export const ChapterLogSchema = z.object({
@@ -147,7 +140,7 @@ export const ChapterLogSchema = z.object({
   involvedCharacterIds: z.array(z.string()),
   foreshadowingLinks: z.array(ForeshadowingLinkSchema).optional(),
   relevantEntityIds: z.array(z.string()).optional(),
-  updatedAt: Timestamp
+  updatedAt: Timestamp,
 });
 
 // --- Bible Sub-Schemas ---
@@ -156,7 +149,7 @@ export const CitationSchema = z.object({
   sourceType: z.enum(['Bible', 'Manuscript']),
   sourceId: z.string().optional(),
   textSnippet: z.string(),
-  label: z.string()
+  label: z.string(),
 });
 
 export const BibleIssueSchema = z.object({
@@ -169,7 +162,7 @@ export const BibleIssueSchema = z.object({
   suggestion: z.string(),
   severity: z.enum(['Low', 'Medium', 'High']),
   citations: z.array(CitationSchema),
-  feedback: z.enum(['Useful', 'FalsePositive', 'Disabled']).optional()
+  feedback: z.enum(['Useful', 'FalsePositive', 'Disabled']).optional(),
 });
 
 export const WorldLawSchema = z.object({
@@ -178,7 +171,7 @@ export const WorldLawSchema = z.object({
   description: z.string(),
   shortSummary: z.string().optional(),
   type: z.enum(['Physics', 'Magic', 'Social', 'Divine', 'Taboo']),
-  importance: z.enum(['Absolute', 'Flexible', 'Conditional'])
+  importance: z.enum(['Absolute', 'Flexible', 'Conditional']),
 });
 
 export const LinguisticProfileSchema = z.object({
@@ -187,7 +180,7 @@ export const LinguisticProfileSchema = z.object({
   speechStyle: z.enum(['Polite', 'Casual', 'Rough', 'Archaic', 'Technical', 'Unique']),
   catchphrases: z.array(z.string()),
   forbiddenWords: z.array(z.string()),
-  toneSample: z.string().optional()
+  toneSample: z.string().optional(),
 });
 
 export const RelationshipSchema = z.object({
@@ -195,7 +188,7 @@ export const RelationshipSchema = z.object({
   type: z.enum(['Ally', 'Enemy', 'Romance', 'Family', 'Business', 'Other', 'Complex']),
   description: z.string(),
   strength: z.number(),
-  lastChangedAt: z.string().optional()
+  lastChangedAt: z.string().optional(),
 });
 
 export const CharacterProfileSchema = z.object({
@@ -211,7 +204,7 @@ export const CharacterProfileSchema = z.object({
   traits: z.array(z.string()),
   motivation: z.string(),
   flaw: z.string(),
-  arc: z.string()
+  arc: z.string(),
 });
 
 export const CharacterStateSchema = z.object({
@@ -219,13 +212,13 @@ export const CharacterStateSchema = z.object({
   internalState: z.string(),
   currentGoal: z.string(),
   health: z.string(),
-  socialStanding: z.string()
+  socialStanding: z.string(),
 });
 
 export const CharacterHistoryEventSchema = z.object({
   chapterId: z.string().optional(),
   timestamp: Timestamp,
-  diff: z.string()
+  diff: z.string(),
 });
 
 export const CharacterSchema = z.object({
@@ -236,13 +229,21 @@ export const CharacterSchema = z.object({
   history: z.array(CharacterHistoryEventSchema),
   imageUrl: z.string().optional(),
   voiceId: z.enum(['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr']).optional(),
-  isPrivate: z.boolean().optional()
+  isPrivate: z.boolean().optional(),
 });
 
 export const WorldEntrySchema = z.object({
   id: ID,
   parentId: z.string().optional(),
-  category: z.enum(['History', 'Culture', 'Technology', 'Magic', 'Geography', 'Lore', 'Terminology']),
+  category: z.enum([
+    'History',
+    'Culture',
+    'Technology',
+    'Magic',
+    'Geography',
+    'Lore',
+    'Terminology',
+  ]),
   title: z.string(),
   aliases: z.array(z.string()),
   content: z.string(),
@@ -253,14 +254,14 @@ export const WorldEntrySchema = z.object({
   isSecret: z.boolean(),
   tags: z.array(z.string()),
   linkedIds: z.array(z.string()),
-  isPrivate: z.boolean().optional()
+  isPrivate: z.boolean().optional(),
 });
 
 export const LocationConnectionSchema = z.object({
   targetLocationId: z.string(),
   travelTime: z.string(),
   method: z.string(),
-  dangerLevel: z.string()
+  dangerLevel: z.string(),
 });
 
 export const LocationSchema = z.object({
@@ -270,13 +271,13 @@ export const LocationSchema = z.object({
   type: z.enum(['Continent', 'Country', 'City', 'Region', 'Spot', 'Building']),
   description: z.string(),
   shortSummary: z.string().optional(),
-  connections: z.array(LocationConnectionSchema).optional()
+  connections: z.array(LocationConnectionSchema).optional(),
 });
 
 export const OrganizationRelationSchema = z.object({
   targetOrganizationId: z.string(),
   stance: z.enum(['Ally', 'Neutral', 'Hostile', 'Subordinate']),
-  description: z.string()
+  description: z.string(),
 });
 
 export const OrganizationSchema = z.object({
@@ -286,7 +287,7 @@ export const OrganizationSchema = z.object({
   shortSummary: z.string().optional(),
   type: z.enum(['Guild', 'Government', 'Cult', 'Party', 'Company']),
   memberIds: z.array(z.string()),
-  relations: z.array(OrganizationRelationSchema).optional()
+  relations: z.array(OrganizationRelationSchema).optional(),
 });
 
 export const ThemeSchema = z.object({
@@ -295,7 +296,7 @@ export const ThemeSchema = z.object({
   description: z.string(),
   shortSummary: z.string().optional(),
   motifs: z.array(z.string()),
-  associatedCharacterIds: z.array(z.string())
+  associatedCharacterIds: z.array(z.string()),
 });
 
 export const KeyItemSchema = z.object({
@@ -307,7 +308,7 @@ export const KeyItemSchema = z.object({
   currentOwnerId: z.string().nullable(),
   currentLocationId: z.string().nullable(),
   history: z.array(z.string()),
-  mechanics: z.string().optional()
+  mechanics: z.string().optional(),
 });
 
 export const StoryThreadSchema = z.object({
@@ -316,7 +317,7 @@ export const StoryThreadSchema = z.object({
   shortSummary: z.string().optional(),
   involvedCharacterIds: z.array(z.string()),
   status: z.enum(['Open', 'Resolved']),
-  beats: z.array(z.object({ chapterId: z.string(), eventDescription: z.string() }))
+  beats: z.array(z.object({ chapterId: z.string(), eventDescription: z.string() })),
 });
 
 export const RaceSchema = z.object({
@@ -325,7 +326,7 @@ export const RaceSchema = z.object({
   description: z.string(),
   traits: z.array(z.string()),
   lifespan: z.string().optional(),
-  locations: z.array(z.string()).optional()
+  locations: z.array(z.string()).optional(),
 });
 
 export const BestiarySchema = z.object({
@@ -335,7 +336,7 @@ export const BestiarySchema = z.object({
   description: z.string(),
   habitat: z.string(),
   dangerLevel: z.enum(['Safe', 'Caution', 'Deadly', 'Catastrophic']),
-  dropItems: z.array(z.string()).optional()
+  dropItems: z.array(z.string()).optional(),
 });
 
 export const AbilitySchema = z.object({
@@ -344,21 +345,21 @@ export const AbilitySchema = z.object({
   type: z.enum(['Magic', 'Skill', 'Tech', 'Divine']),
   description: z.string(),
   cost: z.string(),
-  mechanics: z.string()
+  mechanics: z.string(),
 });
 
 export const StoryPhaseSchema = z.object({
   id: ID,
   name: z.string(),
   summary: z.string(),
-  goal: z.string()
+  goal: z.string(),
 });
 
 export const StoryVolumeSchema = z.object({
   id: ID,
   title: z.string(),
   summary: z.string(),
-  order: z.number()
+  order: z.number(),
 });
 
 export const TimelineEventSchema = z.object({
@@ -370,7 +371,7 @@ export const TimelineEventSchema = z.object({
   importance: z.enum(['Minor', 'Major', 'Climax']),
   foreshadowingLinks: z.array(ForeshadowingLinkSchema),
   status: z.enum(['Canon', 'Plan', 'Hypothesis']),
-  relatedThreadId: z.string().optional()
+  relatedThreadId: z.string().optional(),
 });
 
 export const ForeshadowingSchema = z.object({
@@ -384,7 +385,7 @@ export const ForeshadowingSchema = z.object({
   redHerrings: z.array(z.string()),
   relatedThreadId: z.string().optional(),
   relatedThemeId: z.string().optional(),
-  relatedEntityIds: z.array(z.string())
+  relatedEntityIds: z.array(z.string()),
 });
 
 export const NexusBranchSchema = z.object({
@@ -394,7 +395,7 @@ export const NexusBranchSchema = z.object({
   impactOnState: z.string(),
   alternateTimeline: z.array(z.string()),
   timestamp: Timestamp,
-  color: z.string().optional()
+  color: z.string().optional(),
 });
 
 export const VectorEntrySchema = z.object({
@@ -404,7 +405,7 @@ export const VectorEntrySchema = z.object({
   name: z.string(),
   textChunk: z.string(),
   embedding: z.array(z.number()),
-  updatedAt: Timestamp
+  updatedAt: Timestamp,
 });
 
 export const WorldBibleSchema = z.object({
@@ -430,7 +431,7 @@ export const WorldBibleSchema = z.object({
   nexusBranches: z.array(NexusBranchSchema),
   integrityIssues: z.array(BibleIssueSchema),
   summaryBuffer: z.string(),
-  lastSummaryUpdate: Timestamp
+  lastSummaryUpdate: Timestamp,
 });
 
 // --- Aggregated Project State ---
@@ -443,7 +444,7 @@ export const StoryProjectSchema = z.object({
   bible: WorldBibleSchema,
   chapters: z.array(ChapterLogSchema),
   sync: z.any(), // SyncState defined separately
-  assets: z.record(z.string()).optional()
+  assets: z.record(z.string()).optional(),
 });
 
 // --- Export Types from Schemas ---
@@ -495,9 +496,8 @@ export type WorldBible = z.infer<typeof WorldBibleSchema>;
 
 export type StoryProject = z.infer<typeof StoryProjectSchema> & {
   // SyncState is complex and has recursive structures, better typed manually or via separate schema file
-  sync: any; 
+  sync: any;
 };
-
 
 /**
  * Helper Preprocessors for Sync Operations (Loose input)
@@ -514,13 +514,19 @@ const entityPreprocessor = (val: unknown) => {
 export const CharacterSyncSchema = z.object({
   profile: CharacterProfileSchema.partial().optional(),
   state: CharacterStateSchema.partial().optional(),
-  relationships: z.array(RelationshipSchema.partial({ 
-    targetId: true, strength: true, description: true 
-  }).extend({
-    targetCharacterId: StringOrNull.optional(), // AI alias
-    targetId: StringOrNull
-  })).optional(),
-  
+  relationships: z
+    .array(
+      RelationshipSchema.partial({
+        targetId: true,
+        strength: true,
+        description: true,
+      }).extend({
+        targetCharacterId: StringOrNull.optional(), // AI alias
+        targetId: StringOrNull,
+      }),
+    )
+    .optional(),
+
   // Flat properties often returned by AI
   name: StringOrNull.optional(),
   role: StringOrNull.optional(),
@@ -530,130 +536,189 @@ export const CharacterSyncSchema = z.object({
   status: StringOrNull.optional(),
 });
 
-export const LawSyncSchema = z.preprocess(entityPreprocessor, WorldLawSchema.partial().extend({
-  name: StringOrNull,
-  description: StringOrNull,
-  type: StringOrNull,
-  importance: StringOrNull,
-}));
+export const LawSyncSchema = z.preprocess(
+  entityPreprocessor,
+  WorldLawSchema.partial().extend({
+    name: StringOrNull,
+    description: StringOrNull,
+    type: StringOrNull,
+    importance: StringOrNull,
+  }),
+);
 
-export const LocationSyncSchema = z.preprocess(entityPreprocessor, LocationSchema.partial().extend({
-  name: StringOrNull,
-  type: StringOrNull,
-  description: StringOrNull,
-  connections: z.array(LocationConnectionSchema.partial().extend({
-    targetLocationId: StringOrNull,
-    travelTime: StringOrNull,
-    method: StringOrNull,
-    dangerLevel: StringOrNull
-  })).optional()
-}));
+export const LocationSyncSchema = z.preprocess(
+  entityPreprocessor,
+  LocationSchema.partial().extend({
+    name: StringOrNull,
+    type: StringOrNull,
+    description: StringOrNull,
+    connections: z
+      .array(
+        LocationConnectionSchema.partial().extend({
+          targetLocationId: StringOrNull,
+          travelTime: StringOrNull,
+          method: StringOrNull,
+          dangerLevel: StringOrNull,
+        }),
+      )
+      .optional(),
+  }),
+);
 
-export const OrganizationSyncSchema = z.preprocess(entityPreprocessor, OrganizationSchema.partial().extend({
-  name: StringOrNull,
-  type: StringOrNull,
-  description: StringOrNull,
-  relations: z.array(OrganizationRelationSchema.partial().extend({
-    targetOrganizationId: StringOrNull,
-    stance: StringOrNull,
-    description: StringOrNull
-  })).optional()
-}));
+export const OrganizationSyncSchema = z.preprocess(
+  entityPreprocessor,
+  OrganizationSchema.partial().extend({
+    name: StringOrNull,
+    type: StringOrNull,
+    description: StringOrNull,
+    relations: z
+      .array(
+        OrganizationRelationSchema.partial().extend({
+          targetOrganizationId: StringOrNull,
+          stance: StringOrNull,
+          description: StringOrNull,
+        }),
+      )
+      .optional(),
+  }),
+);
 
-export const KeyItemSyncSchema = z.preprocess(entityPreprocessor, KeyItemSchema.partial().extend({
-  name: StringOrNull,
-  type: StringOrNull,
-  description: StringOrNull,
-  mechanics: StringOrNull,
-  currentOwnerId: StringOrNull.optional(),
-  currentLocationId: StringOrNull.optional(),
-}));
+export const KeyItemSyncSchema = z.preprocess(
+  entityPreprocessor,
+  KeyItemSchema.partial().extend({
+    name: StringOrNull,
+    type: StringOrNull,
+    description: StringOrNull,
+    mechanics: StringOrNull,
+    currentOwnerId: StringOrNull.optional(),
+    currentLocationId: StringOrNull.optional(),
+  }),
+);
 
-export const EntrySyncSchema = z.preprocess(entityPreprocessor, WorldEntrySchema.partial().extend({
-  title: StringOrNull,
-  category: StringOrNull,
-  definition: StringOrNull,
-  description: StringOrNull.optional(), // AI alias
-  tags: StringArray,
-}));
+export const EntrySyncSchema = z.preprocess(
+  entityPreprocessor,
+  WorldEntrySchema.partial().extend({
+    title: StringOrNull,
+    category: StringOrNull,
+    definition: StringOrNull,
+    description: StringOrNull.optional(), // AI alias
+    tags: StringArray,
+  }),
+);
 
-export const ThemeSyncSchema = z.preprocess(entityPreprocessor, ThemeSchema.partial().extend({
-  concept: StringOrNull,
-  description: StringOrNull,
-  motifs: StringArray,
-}));
+export const ThemeSyncSchema = z.preprocess(
+  entityPreprocessor,
+  ThemeSchema.partial().extend({
+    concept: StringOrNull,
+    description: StringOrNull,
+    motifs: StringArray,
+  }),
+);
 
-export const RaceSyncSchema = z.preprocess(entityPreprocessor, RaceSchema.partial().extend({
-  name: StringOrNull,
-  description: StringOrNull,
-  traits: StringArray,
-  lifespan: StringOrNull,
-}));
+export const RaceSyncSchema = z.preprocess(
+  entityPreprocessor,
+  RaceSchema.partial().extend({
+    name: StringOrNull,
+    description: StringOrNull,
+    traits: StringArray,
+    lifespan: StringOrNull,
+  }),
+);
 
-export const BestiarySyncSchema = z.preprocess(entityPreprocessor, BestiarySchema.partial().extend({
-  name: StringOrNull,
-  type: StringOrNull,
-  description: StringOrNull,
-  habitat: StringOrNull,
-  dangerLevel: StringOrNull,
-  dropItems: StringArray,
-}));
+export const BestiarySyncSchema = z.preprocess(
+  entityPreprocessor,
+  BestiarySchema.partial().extend({
+    name: StringOrNull,
+    type: StringOrNull,
+    description: StringOrNull,
+    habitat: StringOrNull,
+    dangerLevel: StringOrNull,
+    dropItems: StringArray,
+  }),
+);
 
-export const AbilitySyncSchema = z.preprocess(entityPreprocessor, AbilitySchema.partial().extend({
-  name: StringOrNull,
-  type: StringOrNull,
-  description: StringOrNull,
-  cost: StringOrNull,
-  mechanics: StringOrNull,
-}));
+export const AbilitySyncSchema = z.preprocess(
+  entityPreprocessor,
+  AbilitySchema.partial().extend({
+    name: StringOrNull,
+    type: StringOrNull,
+    description: StringOrNull,
+    cost: StringOrNull,
+    mechanics: StringOrNull,
+  }),
+);
 
-export const TimelineSyncSchema = z.preprocess(entityPreprocessor, TimelineEventSchema.partial().extend({
-  timeLabel: StringOrNull,
-  event: StringOrNull,
-  description: StringOrNull,
-  importance: StringOrNull,
-  status: StringOrNull,
-  involvedCharacterIds: StringArray,
-}));
+export const TimelineSyncSchema = z.preprocess(
+  entityPreprocessor,
+  TimelineEventSchema.partial().extend({
+    timeLabel: StringOrNull,
+    event: StringOrNull,
+    description: StringOrNull,
+    importance: StringOrNull,
+    status: StringOrNull,
+    involvedCharacterIds: StringArray,
+  }),
+);
 
-export const ForeshadowingSyncSchema = z.preprocess(entityPreprocessor, ForeshadowingSchema.partial().extend({
-  title: StringOrNull,
-  description: StringOrNull,
-  status: StringOrNull,
-  priority: StringOrNull,
-  clues: StringArray,
-  redHerrings: StringArray,
-  relatedEntityIds: StringArray,
-}));
+export const ForeshadowingSyncSchema = z.preprocess(
+  entityPreprocessor,
+  ForeshadowingSchema.partial().extend({
+    title: StringOrNull,
+    description: StringOrNull,
+    status: StringOrNull,
+    priority: StringOrNull,
+    clues: StringArray,
+    redHerrings: StringArray,
+    relatedEntityIds: StringArray,
+  }),
+);
 
-export const StoryThreadSyncSchema = z.preprocess(entityPreprocessor, StoryThreadSchema.partial().extend({
-  title: StringOrNull,
-  shortSummary: StringOrNull,
-  status: StringOrNull,
-  beats: z.array(z.object({
-    chapterId: StringOrNull,
-    eventDescription: StringOrNull
-  })).optional()
-}));
+export const StoryThreadSyncSchema = z.preprocess(
+  entityPreprocessor,
+  StoryThreadSchema.partial().extend({
+    title: StringOrNull,
+    shortSummary: StringOrNull,
+    status: StringOrNull,
+    beats: z
+      .array(
+        z.object({
+          chapterId: StringOrNull,
+          eventDescription: StringOrNull,
+        }),
+      )
+      .optional(),
+  }),
+);
 
-export const StoryStructureSyncSchema = z.preprocess(entityPreprocessor, StoryPhaseSchema.partial().extend({
-  name: StringOrNull,
-  goal: StringOrNull,
-  summary: StringOrNull,
-}));
+export const StoryStructureSyncSchema = z.preprocess(
+  entityPreprocessor,
+  StoryPhaseSchema.partial().extend({
+    name: StringOrNull,
+    goal: StringOrNull,
+    summary: StringOrNull,
+  }),
+);
 
-export const VolumeSyncSchema = z.preprocess(entityPreprocessor, StoryVolumeSchema.partial().extend({
-  title: StringOrNull,
-  order: NumberOrZero,
-  summary: StringOrNull,
-}));
+export const VolumeSyncSchema = z.preprocess(
+  entityPreprocessor,
+  StoryVolumeSchema.partial().extend({
+    title: StringOrNull,
+    order: NumberOrZero,
+    summary: StringOrNull,
+  }),
+);
 
-export const ChapterSyncSchema = z.preprocess(entityPreprocessor, z.object({
-  title: StringOrNull,
-  summary: StringOrNull,
-  status: StringOrNull,
-  beats: z.array(z.object({ text: StringOrNull })).optional(),
-}).partial());
+export const ChapterSyncSchema = z.preprocess(
+  entityPreprocessor,
+  z
+    .object({
+      title: StringOrNull,
+      summary: StringOrNull,
+      status: StringOrNull,
+      beats: z.array(z.object({ text: StringOrNull })).optional(),
+    })
+    .partial(),
+);
 
 export const NexusBranchSyncSchema = NexusBranchSchema.partial().extend({
   hypothesis: StringOrNull,
@@ -666,88 +731,104 @@ export const NexusBranchSyncSchema = NexusBranchSchema.partial().extend({
  * Valid Sync Paths Enum
  */
 export const SyncPathSchema = z.enum([
-  'characters', 'laws', 'entries', 'timeline', 'foreshadowing', 'locations',
-  'organizations', 'themes', 'keyItems', 'storyThreads', 'chapters',
-  'grandArc', 'setting', 'tone', 'volumes', 'races', 'bestiary', 'abilities', 'nexusBranches',
-  'storyStructure'
+  'characters',
+  'laws',
+  'entries',
+  'timeline',
+  'foreshadowing',
+  'locations',
+  'organizations',
+  'themes',
+  'keyItems',
+  'storyThreads',
+  'chapters',
+  'grandArc',
+  'setting',
+  'tone',
+  'volumes',
+  'races',
+  'bestiary',
+  'abilities',
+  'nexusBranches',
+  'storyStructure',
 ]);
 
 export type SyncPath = z.infer<typeof SyncPathSchema>;
 
 /**
  * Sync Operation Value Schema (Comprehensive)
- * 
+ *
  * Defines the comprehensive union of all possible fields for an extraction value.
  * Used to generate the JSON Schema for the AI.
  */
 export const SyncValueExtractionSchema = z.object({
   // Basic Naming
-  name: z.string().optional().describe("Name of the entity, item, or location"),
-  title: z.string().optional().describe("Title of the event, chapter, or thread"),
-  concept: z.string().optional().describe("Theme concept"),
-  event: z.string().optional().describe("Event name for timeline"),
-  
+  name: z.string().optional().describe('Name of the entity, item, or location'),
+  title: z.string().optional().describe('Title of the event, chapter, or thread'),
+  concept: z.string().optional().describe('Theme concept'),
+  event: z.string().optional().describe('Event name for timeline'),
+
   // Description & Content
-  description: z.string().optional().describe("Detailed description"),
-  summary: z.string().optional().describe("Short summary"),
-  definition: z.string().optional().describe("Definition for encyclopedia"),
-  content: z.string().optional().describe("Content body"),
-  shortSummary: z.string().optional().describe("One-line summary"),
-  
+  description: z.string().optional().describe('Detailed description'),
+  summary: z.string().optional().describe('Short summary'),
+  definition: z.string().optional().describe('Definition for encyclopedia'),
+  content: z.string().optional().describe('Content body'),
+  shortSummary: z.string().optional().describe('One-line summary'),
+
   // Categorization
-  type: z.string().optional().describe("Type/Category (e.g. Guild, Magic, City)"),
-  category: z.string().optional().describe("Category for encyclopedia"),
-  tags: z.array(z.string()).optional().describe("Tags"),
-  
+  type: z.string().optional().describe('Type/Category (e.g. Guild, Magic, City)'),
+  category: z.string().optional().describe('Category for encyclopedia'),
+  tags: z.array(z.string()).optional().describe('Tags'),
+
   // Character Specific
-  role: z.string().optional().describe("Role (Protagonist, Antagonist, etc)"),
-  appearance: z.string().optional().describe("Visual appearance"),
-  personality: z.string().optional().describe("Personality traits"),
-  background: z.string().optional().describe("Background story"),
-  motivation: z.string().optional().describe("Motivation"),
-  flaw: z.string().optional().describe("Fatal flaw"),
-  arc: z.string().optional().describe("Character arc"),
-  traits: z.array(z.string()).optional().describe("Traits"),
-  aliases: z.array(z.string()).optional().describe("Aliases"),
-  
+  role: z.string().optional().describe('Role (Protagonist, Antagonist, etc)'),
+  appearance: z.string().optional().describe('Visual appearance'),
+  personality: z.string().optional().describe('Personality traits'),
+  background: z.string().optional().describe('Background story'),
+  motivation: z.string().optional().describe('Motivation'),
+  flaw: z.string().optional().describe('Fatal flaw'),
+  arc: z.string().optional().describe('Character arc'),
+  traits: z.array(z.string()).optional().describe('Traits'),
+  aliases: z.array(z.string()).optional().describe('Aliases'),
+
   // State
-  location: z.string().optional().describe("Current location"),
-  internalState: z.string().optional().describe("Current emotional state"),
-  currentGoal: z.string().optional().describe("Current goal"),
-  health: z.string().optional().describe("Health status"),
-  socialStanding: z.string().optional().describe("Social standing"),
-  status: z.string().optional().describe("Status (Open, Resolved, Canon, etc)"),
-  priority: z.string().optional().describe("Priority"),
-  importance: z.string().optional().describe("Importance"),
-  
+  location: z.string().optional().describe('Current location'),
+  internalState: z.string().optional().describe('Current emotional state'),
+  currentGoal: z.string().optional().describe('Current goal'),
+  health: z.string().optional().describe('Health status'),
+  socialStanding: z.string().optional().describe('Social standing'),
+  status: z.string().optional().describe('Status (Open, Resolved, Canon, etc)'),
+  priority: z.string().optional().describe('Priority'),
+  importance: z.string().optional().describe('Importance'),
+
   // World Properties
-  mechanics: z.string().optional().describe("Mechanics or magic effect"),
-  cost: z.string().optional().describe("Cost or price"),
-  habitat: z.string().optional().describe("Habitat"),
-  dangerLevel: z.string().optional().describe("Danger level"),
-  lifespan: z.string().optional().describe("Lifespan"),
-  
+  mechanics: z.string().optional().describe('Mechanics or magic effect'),
+  cost: z.string().optional().describe('Cost or price'),
+  habitat: z.string().optional().describe('Habitat'),
+  dangerLevel: z.string().optional().describe('Danger level'),
+  lifespan: z.string().optional().describe('Lifespan'),
+
   // Time & Sequence
-  timeLabel: z.string().optional().describe("Time label (e.g. 1999, Era of Fire)"),
-  order: z.number().optional().describe("Order index"),
-  goal: z.string().optional().describe("Goal of the phase"),
-  
+  timeLabel: z.string().optional().describe('Time label (e.g. 1999, Era of Fire)'),
+  order: z.number().optional().describe('Order index'),
+  goal: z.string().optional().describe('Goal of the phase'),
+
   // Relations & Lists
-  clues: z.array(z.string()).optional().describe("Clues for mystery"),
-  redHerrings: z.array(z.string()).optional().describe("Red herrings / Misleads"),
-  dropItems: z.array(z.string()).optional().describe("Dropped items"),
-  relatedEntityIds: z.array(z.string()).optional().describe("IDs of related entities"),
-  involvedCharacterIds: z.array(z.string()).optional().describe("IDs of involved characters"),
-  
+  clues: z.array(z.string()).optional().describe('Clues for mystery'),
+  redHerrings: z.array(z.string()).optional().describe('Red herrings / Misleads'),
+  dropItems: z.array(z.string()).optional().describe('Dropped items'),
+  relatedEntityIds: z.array(z.string()).optional().describe('IDs of related entities'),
+  involvedCharacterIds: z.array(z.string()).optional().describe('IDs of involved characters'),
+
   // Nested Objects (Simplified)
-  profile: CharacterProfileSchema.partial().optional().describe("Full profile update object"),
-  state: CharacterStateSchema.partial().optional().describe("Full state update object"),
-  
+  profile: CharacterProfileSchema.partial().optional().describe('Full profile update object'),
+  state: CharacterStateSchema.partial().optional().describe('Full state update object'),
+
   // Nexus
-  hypothesis: z.string().optional().describe("What-if hypothesis"),
-  impactOnCanon: z.string().optional().describe("Impact on canon history"),
-  impactOnState: z.string().optional().describe("Impact on character states"),
-  alternateTimeline: z.array(z.string()).optional().describe("Alternate timeline events")
+  hypothesis: z.string().optional().describe('What-if hypothesis'),
+  impactOnCanon: z.string().optional().describe('Impact on canon history'),
+  impactOnState: z.string().optional().describe('Impact on character states'),
+  alternateTimeline: z.array(z.string()).optional().describe('Alternate timeline events'),
 });
 
 /**
@@ -756,16 +837,21 @@ export const SyncValueExtractionSchema = z.object({
 
 // Extraction Schema (AI Output Target)
 export const SyncOperationZodSchema = z.object({
-  op: z.enum(['add', 'update', 'delete', 'merge', 'rename', 'set', 'addAlias']).default('update').describe("Operation type"),
-  path: SyncPathSchema.describe("Target path (collection name)"),
-  targetId: z.string().optional().describe("Target ID (if known)"),
-  targetName: z.string().optional().describe("Target Name (for lookup)"),
-  field: z.string().optional().describe("Specific field to update (optional)"),
-  value: SyncValueExtractionSchema.describe("Data to apply. All strings MUST be in the requested language."),
-  rationale: StringOrNull.describe("Reason for this change"),
-  evidence: StringOrNull.describe("Evidence from text"),
-  confidence: z.number().default(0.8).describe("Confidence level (0.0-1.0)"),
-  isHypothetical: z.boolean().optional().describe("True if this is a simulation")
+  op: z
+    .enum(['add', 'update', 'delete', 'merge', 'rename', 'set', 'addAlias'])
+    .default('update')
+    .describe('Operation type'),
+  path: SyncPathSchema.describe('Target path (collection name)'),
+  targetId: z.string().optional().describe('Target ID (if known)'),
+  targetName: z.string().optional().describe('Target Name (for lookup)'),
+  field: z.string().optional().describe('Specific field to update (optional)'),
+  value: SyncValueExtractionSchema.describe(
+    'Data to apply. All strings MUST be in the requested language.',
+  ),
+  rationale: StringOrNull.describe('Reason for this change'),
+  evidence: StringOrNull.describe('Evidence from text'),
+  confidence: z.number().default(0.8).describe('Confidence level (0.0-1.0)'),
+  isHypothetical: z.boolean().optional().describe('True if this is a simulation'),
 });
 
 export const SyncOperationArraySchema = z.array(SyncOperationZodSchema);
@@ -775,11 +861,25 @@ export const SyncCandidateSchema = z.object({
   id: z.string(),
   name: z.string(),
   confidence: z.number(),
-  reason: z.string()
+  reason: z.string(),
 });
 
-export const SyncStatusSchema = z.enum(['proposal', 'committed', 'rejected', 'quarantined', 'needs_resolution']);
-export const SyncOpTypeSchema = z.enum(['add', 'update', 'delete', 'merge', 'rename', 'set', 'addAlias']);
+export const SyncStatusSchema = z.enum([
+  'proposal',
+  'committed',
+  'rejected',
+  'quarantined',
+  'needs_resolution',
+]);
+export const SyncOpTypeSchema = z.enum([
+  'add',
+  'update',
+  'delete',
+  'merge',
+  'rename',
+  'set',
+  'addAlias',
+]);
 
 const BaseInternalSyncOpSchema = z.object({
   id: z.string(),
@@ -797,7 +897,7 @@ const BaseInternalSyncOpSchema = z.object({
   timestamp: z.number(),
   beatId: z.string().optional(),
   resolutionHint: z.string().optional(),
-  candidates: z.array(SyncCandidateSchema).optional()
+  candidates: z.array(SyncCandidateSchema).optional(),
 });
 
 // Discriminated Union for Type Safety
@@ -806,12 +906,21 @@ export const InternalSyncOperationSchema = z.discriminatedUnion('path', [
   BaseInternalSyncOpSchema.extend({ path: z.literal('laws'), value: LawSyncSchema }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('entries'), value: EntrySyncSchema }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('timeline'), value: TimelineSyncSchema }),
-  BaseInternalSyncOpSchema.extend({ path: z.literal('foreshadowing'), value: ForeshadowingSyncSchema }),
+  BaseInternalSyncOpSchema.extend({
+    path: z.literal('foreshadowing'),
+    value: ForeshadowingSyncSchema,
+  }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('locations'), value: LocationSyncSchema }),
-  BaseInternalSyncOpSchema.extend({ path: z.literal('organizations'), value: OrganizationSyncSchema }),
+  BaseInternalSyncOpSchema.extend({
+    path: z.literal('organizations'),
+    value: OrganizationSyncSchema,
+  }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('themes'), value: ThemeSyncSchema }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('keyItems'), value: KeyItemSyncSchema }),
-  BaseInternalSyncOpSchema.extend({ path: z.literal('storyThreads'), value: StoryThreadSyncSchema }),
+  BaseInternalSyncOpSchema.extend({
+    path: z.literal('storyThreads'),
+    value: StoryThreadSyncSchema,
+  }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('chapters'), value: ChapterSyncSchema }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('grandArc'), value: z.string() }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('setting'), value: z.string() }),
@@ -820,8 +929,14 @@ export const InternalSyncOperationSchema = z.discriminatedUnion('path', [
   BaseInternalSyncOpSchema.extend({ path: z.literal('races'), value: RaceSyncSchema }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('bestiary'), value: BestiarySyncSchema }),
   BaseInternalSyncOpSchema.extend({ path: z.literal('abilities'), value: AbilitySyncSchema }),
-  BaseInternalSyncOpSchema.extend({ path: z.literal('nexusBranches'), value: NexusBranchSyncSchema }),
-  BaseInternalSyncOpSchema.extend({ path: z.literal('storyStructure'), value: StoryStructureSyncSchema }),
+  BaseInternalSyncOpSchema.extend({
+    path: z.literal('nexusBranches'),
+    value: NexusBranchSyncSchema,
+  }),
+  BaseInternalSyncOpSchema.extend({
+    path: z.literal('storyStructure'),
+    value: StoryStructureSyncSchema,
+  }),
 ]);
 
 export type SyncOperation = z.infer<typeof InternalSyncOperationSchema>;
@@ -831,77 +946,107 @@ export type SyncCandidate = z.infer<typeof SyncCandidateSchema>;
  * Detection Schema (Architect/Detector)
  */
 export const DetectionZodSchema = z.object({
-  hasChangeIntent: z.boolean().default(false).describe("True if the user intends to change settings"),
-  isHypothetical: z.boolean().default(false).describe("True if the user is asking a 'what-if' question"),
-  domains: z.array(z.string()).default([]).describe("Domains affected (ENTITIES, FOUNDATION, etc)"),
+  hasChangeIntent: z
+    .boolean()
+    .default(false)
+    .describe('True if the user intends to change settings'),
+  isHypothetical: z
+    .boolean()
+    .default(false)
+    .describe("True if the user is asking a 'what-if' question"),
+  domains: z.array(z.string()).default([]).describe('Domains affected (ENTITIES, FOUNDATION, etc)'),
   categories: z.array(z.string()).default([]),
-  instructionSummary: StringOrNull.describe("Summary of the user's intent")
+  instructionSummary: StringOrNull.describe("Summary of the user's intent"),
 });
 
 /**
  * Whisper/Advice Schema (Architect/Whisper)
  */
 export const WhisperZodSchema = z.object({
-  ruleId: StringOrNull.describe("ID of the rule triggered"),
-  text: StringOrNull.describe("Advice text"),
-  type: z.string().default('info').describe("Type of advice (alert, info)"),
-  citations: z.array(z.object({
-    label: StringOrNull,
-    textSnippet: StringOrNull
-  })).default([]).describe("Evidence citations")
+  ruleId: StringOrNull.describe('ID of the rule triggered'),
+  text: StringOrNull.describe('Advice text'),
+  type: z.string().default('info').describe('Type of advice (alert, info)'),
+  citations: z
+    .array(
+      z.object({
+        label: StringOrNull,
+        textSnippet: StringOrNull,
+      }),
+    )
+    .default([])
+    .describe('Evidence citations'),
 });
 
 /**
  * Integrity Issue Schema (Analyst/Linter)
  */
 export const IntegrityScanZodSchema = z.object({
-  issues: z.array(z.object({
-    ruleId: StringOrNull,
-    type: z.string().default('Unknown'),
-    targetType: z.string().optional(),
-    description: StringOrNull.describe("Description of the issue"),
-    suggestion: StringOrNull.describe("Suggestion to fix"),
-    severity: z.string().default('Low'),
-    citations: z.array(z.object({
-      sourceId: z.string().optional(),
-      textSnippet: StringOrNull,
-      label: StringOrNull
-    })).default([])
-  })).default([])
+  issues: z
+    .array(
+      z.object({
+        ruleId: StringOrNull,
+        type: z.string().default('Unknown'),
+        targetType: z.string().optional(),
+        description: StringOrNull.describe('Description of the issue'),
+        suggestion: StringOrNull.describe('Suggestion to fix'),
+        severity: z.string().default('Low'),
+        citations: z
+          .array(
+            z.object({
+              sourceId: z.string().optional(),
+              textSnippet: StringOrNull,
+              label: StringOrNull,
+            }),
+          )
+          .default([]),
+      }),
+    )
+    .default([]),
 });
 
 /**
  * Nexus Simulation Schema (Analyst/Nexus)
  */
 export const NexusSimulationZodSchema = z.object({
-  impactOnCanon: StringOrNull.describe("Description of changes to the main history"),
-  impactOnState: StringOrNull.describe("Description of changes to character states"),
-  alternateTimeline: StringArray.describe("List of events in the new timeline")
+  impactOnCanon: StringOrNull.describe('Description of changes to the main history'),
+  impactOnState: StringOrNull.describe('Description of changes to character states'),
+  alternateTimeline: StringArray.describe('List of events in the new timeline'),
 });
 
 /**
  * Chapter Package Schema (Writer)
  */
 export const ChapterPackageZodSchema = z.object({
-  strategy: z.object({
-    milestones: StringArray,
-    forbiddenResolutions: StringArray,
-    characterArcProgress: StringOrNull,
-    pacing: StringOrNull
-  }).default({ milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }),
-  beats: z.array(z.object({
-    text: StringOrNull
-  })).default([]).describe("List of plot beats"),
-  draft: StringOrNull.describe("Draft text if requested")
+  strategy: z
+    .object({
+      milestones: StringArray,
+      forbiddenResolutions: StringArray,
+      characterArcProgress: StringOrNull,
+      pacing: StringOrNull,
+    })
+    .default({ milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }),
+  beats: z
+    .array(
+      z.object({
+        text: StringOrNull,
+      }),
+    )
+    .default([])
+    .describe('List of plot beats'),
+  draft: StringOrNull.describe('Draft text if requested'),
 });
 
 /**
  * Brainstorming Schema
  */
-export const BrainstormArraySchema = z.array(z.object({
-  name: StringOrNull,
-  title: StringOrNull,
-  concept: StringOrNull,
-  event: StringOrNull,
-  concept_note: StringOrNull,
-}).passthrough());
+export const BrainstormArraySchema = z.array(
+  z
+    .object({
+      name: StringOrNull,
+      title: StringOrNull,
+      concept: StringOrNull,
+      event: StringOrNull,
+      concept_note: StringOrNull,
+    })
+    .passthrough(),
+);

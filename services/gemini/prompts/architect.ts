@@ -1,7 +1,6 @@
-
-import { AppLanguage, AiPersona } from "../../../types";
-import { getTemplate } from "./resources";
-import { PromptTemplate } from "../promptTemplate";
+import { AppLanguage, AiPersona } from '../../../types';
+import { getTemplate } from './resources';
+import { PromptTemplate } from '../promptTemplate';
 
 export const ARCHITECT_MTP = (lang: AppLanguage, persona: AiPersona = AiPersona.STANDARD) => {
   const personaText = getTemplate(`personas.${persona}`, lang);
@@ -38,9 +37,13 @@ export const SYNC_EXTRACTOR_SOUL = (lang: AppLanguage) => {
   return `${base}\n${constraint}`;
 };
 
-export const CHAT_SUMMARIZATION_PROMPT = (currentMemory: string, _oldMessages: any[], lang: AppLanguage = 'ja') => {
-  return PromptTemplate.from(getTemplate('architect.summarization', lang)).format({ 
-    memory: currentMemory || "None" 
+export const CHAT_SUMMARIZATION_PROMPT = (
+  currentMemory: string,
+  _oldMessages: any[],
+  lang: AppLanguage = 'ja',
+) => {
+  return PromptTemplate.from(getTemplate('architect.summarization', lang)).format({
+    memory: currentMemory || 'None',
   });
 };
 
@@ -54,30 +57,49 @@ export const WHISPER_PROMPT = (lang: AppLanguage = 'ja') => {
   return getTemplate('architect.whisperPrompt', lang);
 };
 
-export const GENESIS_FILL_PROMPT = (fieldLabel: string, currentProfile: string, worldContext: string, lang: AppLanguage) => {
+export const GENESIS_FILL_PROMPT = (
+  fieldLabel: string,
+  currentProfile: string,
+  worldContext: string,
+  lang: AppLanguage,
+) => {
   return PromptTemplate.from(getTemplate('architect.genesisFill', lang)).format({
     field: fieldLabel,
     profile: currentProfile,
-    world: worldContext
+    world: worldContext,
   });
 };
 
-export const AUTO_FILL_ITEM_PROMPT = (itemType: string, itemName: string, fieldLabel: string, currentItemJson: string, worldContext: string, lang: AppLanguage) => {
+export const AUTO_FILL_ITEM_PROMPT = (
+  itemType: string,
+  itemName: string,
+  fieldLabel: string,
+  currentItemJson: string,
+  worldContext: string,
+  lang: AppLanguage,
+) => {
   return PromptTemplate.from(getTemplate('architect.autoFill', lang)).format({
     type: itemType,
     name: itemName,
     field: fieldLabel,
     item: currentItemJson,
-    world: worldContext
+    world: worldContext,
   });
 };
 
-export const BRAINSTORM_PROMPT = (itemType: string, taskDescription: string, currentJson: string, worldContext: string, fieldHints: string, lang: AppLanguage) => {
+export const BRAINSTORM_PROMPT = (
+  itemType: string,
+  taskDescription: string,
+  currentJson: string,
+  worldContext: string,
+  fieldHints: string,
+  lang: AppLanguage,
+) => {
   return PromptTemplate.from(getTemplate('architect.brainstorm', lang)).format({
     task: taskDescription,
     json: currentJson,
     world: worldContext,
     type: itemType,
-    hints: fieldHints
+    hints: fieldHints,
   });
 };

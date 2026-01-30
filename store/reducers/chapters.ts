@@ -1,14 +1,16 @@
-
 import { produce } from 'immer';
 import { ChapterLog, ChapterAction, BibleAction } from '../../types';
 
-export const chaptersReducer = (state: ChapterLog[], action: ChapterAction | BibleAction): ChapterLog[] => {
-  return produce(state, draft => {
+export const chaptersReducer = (
+  state: ChapterLog[],
+  action: ChapterAction | BibleAction,
+): ChapterLog[] => {
+  return produce(state, (draft) => {
     switch (action.type) {
       case 'LOAD_CHAPTERS':
         return action.payload;
       case 'UPDATE_CHAPTER': {
-        const chapter = draft.find(c => c.id === action.id);
+        const chapter = draft.find((c) => c.id === action.id);
         if (chapter) {
           Object.assign(chapter, action.updates);
           if (action.updates.content !== undefined) {
@@ -19,7 +21,7 @@ export const chaptersReducer = (state: ChapterLog[], action: ChapterAction | Bib
         break;
       }
       case 'SET_CHAPTER_CONTENT': {
-        const chapter = draft.find(c => c.id === action.id);
+        const chapter = draft.find((c) => c.id === action.id);
         if (chapter) {
           chapter.content = action.content;
           chapter.wordCount = action.content.length;
@@ -31,7 +33,7 @@ export const chaptersReducer = (state: ChapterLog[], action: ChapterAction | Bib
         draft.push(action.payload);
         break;
       case 'REMOVE_CHAPTER': {
-        const idx = draft.findIndex(c => c.id === action.id);
+        const idx = draft.findIndex((c) => c.id === action.id);
         if (idx !== -1) draft.splice(idx, 1);
         break;
       }

@@ -1,7 +1,6 @@
-
 /**
  * DuoScript Gemini Service
- * 
+ *
  * This module acts as an aggregator for the split Gemini service components.
  */
 
