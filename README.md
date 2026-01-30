@@ -231,12 +231,14 @@ Please read [**COMMUNITY.md**](./COMMUNITY.md).
 DuoScript is built with **Vite + React**. Follow the steps below to set up locally.
 
 ### Prerequisites
+
 - Node.js (v18+ recommended)
 - Google Gemini API Key (get one at [Google AI Studio](https://aistudio.google.com/))
 
 ### Setup
 
 1. **Clone the repo and install dependencies**
+
    ```bash
    git clone https://github.com/yourusername/duoscript.git
    cd duoscript
@@ -245,15 +247,18 @@ DuoScript is built with **Vite + React**. Follow the steps below to set up local
 
 2. **Configure environment variables**
    Create a `.env` file in the project root and set your API key.
+
    ```env
    # .env
    API_KEY=your_gemini_api_key_here
    ```
 
 3. **Start the dev server**
+
    ```bash
    npm run dev
    ```
+
    Open `http://localhost:5173` in your browser.
 
 4. **Production build**
@@ -297,21 +302,24 @@ DuoScript is more than a text editor—it is designed as a creative partner.
 ## ✨ Key Features
 
 ### 🛠️ Ideation (Architect & Bible)
+
 - **Neural Sync (dialogue-based sync)**: Automatically extracts and updates story settings in one click.
 - **Nexus simulation**: Input "What if he had died then?" to simulate impacts on the world and characters.
 - **Multi-layer management**:
-    - **Canon**: Rules, culture, terminology, historical context.
-    - **Plan**: Grand arcs, chapter strategies, timelines, foreshadowing.
-    - **State**: Character emotions, relationships, locations, inventory.
+  - **Canon**: Rules, culture, terminology, historical context.
+  - **Plan**: Grand arcs, chapter strategies, timelines, foreshadowing.
+  - **State**: Character emotions, relationships, locations, inventory.
 - **AI Artist & Voice**: Generate character portraits and play dialogue with AI voice for vivid personality.
 
 ### ✍️ Writing (Writer & Editor)
+
 - **POV-aware drafting**: The AI hides information a POV character wouldn't know.
 - **Auto plot/beat generation**: Expand from grand arcs to chapter outlines and then to scene beats.
 - **AI Copilot**: Offers three different continuations when you get stuck.
 - **Zen Mode**: Minimal UI, warm stone-like palette, and manuscript-style typography for deep focus.
 
 ### 📊 Management (Dashboard)
+
 - **Integrity scan**: Cross-checks all materials and flags contradictions.
 - **Stats**: Visualizes word counts, character counts, and token usage.
 
@@ -346,9 +354,9 @@ DuoScript will continue evolving as a free tool for writers.
 
 This software is released under the **Apache License 2.0**.
 
-*   **Freedom to use**: Free for individuals and businesses to use, modify, redistribute, and use commercially.
-*   **Patent clause**: Includes patent grants from contributors.
-*   **Disclaimer**: The developers are not liable for any damages (including AI-generated inaccuracies or data loss). Please back up critical data frequently.
+- **Freedom to use**: Free for individuals and businesses to use, modify, redistribute, and use commercially.
+- **Patent clause**: Includes patent grants from contributors.
+- **Disclaimer**: The developers are not liable for any damages (including AI-generated inaccuracies or data loss). Please back up critical data frequently.
 
 ---
 

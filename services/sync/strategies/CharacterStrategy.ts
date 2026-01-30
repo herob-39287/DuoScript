@@ -98,8 +98,7 @@ export class CharacterStrategy implements SyncStrategy {
           aliases: incoming.profile?.aliases || [],
           role: (incoming.profile?.role || incoming.role || 'Supporting') as any,
           description: incoming.profile?.description || incoming.description || '',
-          shortSummary:
-            incoming.profile?.shortSummary || incoming.summary || '',
+          shortSummary: incoming.profile?.shortSummary || incoming.summary || '',
           appearance: incoming.profile?.appearance || '',
           personality: incoming.profile?.personality || '',
           background: incoming.profile?.background || '',
