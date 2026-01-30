@@ -3,7 +3,7 @@ import { Feather, Sparkles } from 'lucide-react';
 import { useMetadata } from '../../contexts/StoryContext';
 
 interface EditorCanvasProps {
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onChange: () => void;
   isVertical: boolean;
   isZenMode: boolean;

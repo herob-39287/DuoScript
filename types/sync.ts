@@ -118,7 +118,7 @@ export interface HistoryEntry {
 }
 
 // NexusBranch is now exported from bible.ts (which exports schemas)
-export { NexusBranch } from './bible';
+export type { NexusBranch } from './bible';
 
 /**
  * Stored Artifact in IndexedDB (Not in Redux state)

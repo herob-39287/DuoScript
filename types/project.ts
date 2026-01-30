@@ -16,26 +16,29 @@ import {
 import { WorldBible } from './bible';
 import { SyncState } from './sync';
 
-// Enums - Defined as native TypeScript Enums to satisfy both Value and Type usage
-export enum TransmissionScope {
-  FULL = 'FULL',
-  SUMMARY = 'SUMMARY',
-  CHAPTER = 'CHAPTER',
-  MINIMAL = 'MINIMAL',
-}
+// Enums - defined as const objects to align with Zod string unions
+export const TransmissionScope = {
+  FULL: 'FULL',
+  SUMMARY: 'SUMMARY',
+  CHAPTER: 'CHAPTER',
+  MINIMAL: 'MINIMAL',
+} as const;
+export type TransmissionScope = (typeof TransmissionScope)[keyof typeof TransmissionScope];
 
-export enum SafetyPreset {
-  STRICT = 'STRICT',
-  MATURE = 'MATURE',
-  CREATIVE = 'CREATIVE',
-}
+export const SafetyPreset = {
+  STRICT: 'STRICT',
+  MATURE: 'MATURE',
+  CREATIVE: 'CREATIVE',
+} as const;
+export type SafetyPreset = (typeof SafetyPreset)[keyof typeof SafetyPreset];
 
-export enum AiPersona {
-  STANDARD = 'STANDARD',
-  STRICT = 'STRICT',
-  GENTLE = 'GENTLE',
-  CREATIVE = 'CREATIVE',
-}
+export const AiPersona = {
+  STANDARD: 'STANDARD',
+  STRICT: 'STRICT',
+  GENTLE: 'GENTLE',
+  CREATIVE: 'CREATIVE',
+} as const;
+export type AiPersona = (typeof AiPersona)[keyof typeof AiPersona];
 
 // Re-export Zod types (excluding the ones replaced by Enums)
 export type {

@@ -5,7 +5,7 @@ import {
   Maximize2,
   BookOpen,
   Zap,
-  CloudCheck,
+  Cloud,
   Settings2,
 } from 'lucide-react';
 import { ChapterLog } from '../../types';
@@ -69,7 +69,7 @@ export const WriterHeader: React.FC<WriterHeaderProps> = ({
               V{activeChapter?.draftVersion || 0}
             </span>
             {saveStatus !== 'idle' && (
-              <CloudCheck
+              <Cloud
                 size={10}
                 className={
                   saveStatus === 'saved' ? 'text-orange-400' : 'text-stone-500 animate-pulse'

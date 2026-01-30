@@ -149,7 +149,7 @@ export function safeJsonParse<T>(
  */
 export function parseWithSchema<T>(
   text: string,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   source: string,
   fallback?: T,
 ): T {

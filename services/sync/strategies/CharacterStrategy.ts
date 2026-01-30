@@ -24,7 +24,6 @@ export class CharacterStrategy implements SyncStrategy {
     else if (data.description) p.description = data.description;
 
     if (profile.shortSummary) p.shortSummary = profile.shortSummary;
-    else if (profile.summary) p.shortSummary = profile.summary;
     else if (data.summary) p.shortSummary = data.summary;
 
     if (profile.appearance) p.appearance = profile.appearance;
@@ -100,7 +99,7 @@ export class CharacterStrategy implements SyncStrategy {
           role: (incoming.profile?.role || incoming.role || 'Supporting') as any,
           description: incoming.profile?.description || incoming.description || '',
           shortSummary:
-            incoming.profile?.shortSummary || incoming.profile?.summary || incoming.summary || '',
+            incoming.profile?.shortSummary || incoming.summary || '',
           appearance: incoming.profile?.appearance || '',
           personality: incoming.profile?.personality || '',
           background: incoming.profile?.background || '',

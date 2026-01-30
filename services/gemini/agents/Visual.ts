@@ -18,7 +18,7 @@ export class VisualAgent extends BaseAgent {
   ): Promise<string> {
     const visualDesc = await this.client.request<string>({
       model: AI_MODELS.FAST,
-      contents: Prompts.VISUAL_DESCRIPTION_PROMPT(character, context.bible.tone),
+      contents: Prompts.VISUAL_DESCRIPTION_PROMPT(character.profile.name, context.bible.tone),
       usageLabel: 'Visual/PortraitPromptGen',
       onUsage: onUsage,
       logCallback: logCallback,
@@ -33,7 +33,7 @@ export class VisualAgent extends BaseAgent {
           config: { imageConfig: { aspectRatio: '3:4' } },
         });
         trackUsage(res, AI_MODELS.IMAGE, 'Visual/PortraitImageGen', onUsage);
-        const part = res.candidates?.[0]?.content?.parts.find((p: any) => p.inlineData);
+        const part = res.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
         if (!part?.inlineData) throw new Error('Artist Fail');
         return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       },

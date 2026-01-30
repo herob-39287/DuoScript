@@ -41,7 +41,9 @@ async function embedText(text: string): Promise<number[]> {
       model: 'text-embedding-004',
       contents: [{ parts: [{ text }] }],
     });
-    return response.embedding?.values || [];
+    const embedding =
+      (response as any).embedding ?? (response as any).embeddings?.[0] ?? (response as any).embeddings;
+    return embedding?.values || [];
   } catch (e) {
     console.error('Embedding API error in Worker:', e);
     return [];
