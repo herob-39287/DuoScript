@@ -1,6 +1,6 @@
 import { SyncOperation, SyncCandidate } from '../../types';
 import { normalizeJapanese, calculateSimilarity } from '../../utils/stringUtils';
-import { SyncOperationZodSchema } from '../validation/schemas';
+import { InternalSyncOperationSchema } from '../validation/schemas';
 
 export const findMatchCandidates = (
   list: any[],
@@ -74,7 +74,7 @@ export const findItemIdx = (list: any[], targetId?: string, targetName?: string)
  * Returns an array of error messages. Empty array implies valid.
  */
 export const validateSyncOperation = (op: SyncOperation): string[] => {
-  const result = SyncOperationZodSchema.safeParse(op);
+  const result = InternalSyncOperationSchema.safeParse(op);
   if (!result.success) {
     return result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
   }
