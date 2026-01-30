@@ -25,7 +25,7 @@ import { StoryProject, PlotBeat, WhisperAdvice } from '../types';
 
 interface UseWriterAIProps {
   activeChapterId: string;
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   setWordCount: (count: number) => void;
   draftVersionRef: React.MutableRefObject<number>;
 }

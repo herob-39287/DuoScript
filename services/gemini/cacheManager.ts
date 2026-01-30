@@ -66,10 +66,16 @@ export class CacheManager {
 
       const cacheResponse = await this.client.genAI.caches.create({
         model: this.MODEL_NAME,
-        displayName: `duoscript-${projectId.slice(0, 8)}-v${currentVersion}`,
-        contents: [{ role: 'user', parts: [{ text: systemContent }] }],
-        ttlSeconds: this.TTL_SECONDS,
+        config: {
+          contents: [{ role: 'user', parts: [{ text: systemContent }] }],
+          displayName: `duoscript-${projectId.slice(0, 8)}-v${currentVersion}`,
+          ttl: `${this.TTL_SECONDS}s`,
+        },
       });
+
+      if (!cacheResponse.name) {
+        throw new Error('Cache response missing name.');
+      }
 
       this.activeCache = {
         name: cacheResponse.name,

@@ -24,9 +24,12 @@ export const MiniBible: React.FC<MiniBibleProps> = ({ onInsert, className = '' }
   const bible = useBible();
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('all');
-  const [selectedItem, setSelectedItem] = useState<{ id: string; type: string; data: any } | null>(
-    null,
-  );
+  const [selectedItem, setSelectedItem] = useState<{
+    id: string;
+    type: string;
+    name: string;
+    data: any;
+  } | null>(null);
 
   const allItems = useMemo(() => {
     const list = [

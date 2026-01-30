@@ -1,5 +1,5 @@
 import React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
+import { cva, type VariantProps } from './variants';
 import { cn } from './utils';
 import { Styles } from './Styles';
 
@@ -20,7 +20,8 @@ const badgeVariants = cva(`px-2 py-0.5 rounded ${Styles.text.labelSm}`, {
 });
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
+  extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'color'>,
+    VariantProps<typeof badgeVariants> {}
 
 export const Badge: React.FC<BadgeProps> = ({ color, children, className, ...props }) => {
   return (

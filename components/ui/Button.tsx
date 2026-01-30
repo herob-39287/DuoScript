@@ -1,6 +1,6 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { cva, type VariantProps } from 'class-variance-authority';
+import { cva, type VariantProps } from './variants';
 import { cn } from './utils';
 
 const buttonVariants = cva(

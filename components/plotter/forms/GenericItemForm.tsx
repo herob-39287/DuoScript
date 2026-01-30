@@ -4,11 +4,15 @@ import { FieldSchema, ItemType, SCHEMAS } from '../../../services/schema/definit
 import { useMetadata } from '../../../contexts/StoryContext';
 import { t } from '../../../utils/i18n';
 
+type ContextEntry = { id: string; name?: string; title?: string };
+
 export interface ContextData {
-  locations?: { id: string; name: string }[];
-  organizations?: { id: string; name: string }[];
-  chapters?: { id: string; title: string }[];
-  characters?: { id: string; name: string }[];
+  locations?: ContextEntry[];
+  organizations?: ContextEntry[];
+  chapters?: ContextEntry[];
+  characters?: ContextEntry[];
+  items?: ContextEntry[];
+  [key: string]: ContextEntry[] | undefined;
 }
 
 interface GenericItemFormProps {
@@ -140,8 +144,8 @@ export const GenericItemForm: React.FC<GenericItemFormProps> = ({
     if (field.type === 'select') {
       let options = field.options || [];
       if (field.source) {
-        const sourceList = context[field.source] || [];
-        options = sourceList.map((i) => i.id);
+        const sourceList = context[field.source] ?? [];
+        options = sourceList.map((item) => item.id);
       }
 
       return (
@@ -155,7 +159,7 @@ export const GenericItemForm: React.FC<GenericItemFormProps> = ({
             >
               <option value="">Select...</option>
               {field.source
-                ? (context[field.source] || []).map((opt) => (
+                ? (context[field.source] ?? []).map((opt) => (
                     <option key={opt.id} value={opt.id}>
                       {'title' in opt ? opt.title : opt.name}
                     </option>

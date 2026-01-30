@@ -289,7 +289,12 @@ export const DEFAULT_RESPONSES = {
   },
   SUGGESTIONS: ['...', '...', '...'],
   CHAPTER_PACKAGE: {
-    strategy: { milestones: ['Intro', 'Development', 'Climax'], pacing: 'Normal' },
+    strategy: {
+      milestones: ['Intro', 'Development', 'Climax'],
+      forbiddenResolutions: [],
+      characterArcProgress: '',
+      pacing: 'Normal',
+    },
     beats: [{ text: 'Situation' }],
     draft: '',
   },

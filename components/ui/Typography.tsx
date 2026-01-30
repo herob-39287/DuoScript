@@ -3,7 +3,7 @@ import { Styles } from './Styles';
 
 type TextVariant = keyof typeof Styles.text;
 
-interface TextProps extends React.HTMLAttributes<HTMLDivElement> {
+interface TextProps extends React.HTMLAttributes<HTMLElement> {
   variant?: TextVariant;
   as?: 'span' | 'div' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'label';
 }

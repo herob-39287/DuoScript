@@ -7,7 +7,7 @@ import {
   Home,
   HelpCircle,
   Loader2,
-  CloudCheck,
+  Cloud,
   AlertTriangle,
   RefreshCw,
   GitMerge,
@@ -187,7 +187,7 @@ const AppShell: React.FC<AppShellProps> = ({ onLoadProject }) => {
             />
           )}
           {ui.saveStatus !== 'idle' && (
-            <CloudCheck
+            <Cloud
               className={
                 ui.saveStatus === 'saved' ? 'text-orange-400' : 'text-stone-500 animate-pulse'
               }

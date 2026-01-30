@@ -27,8 +27,10 @@ export interface SystemLog {
     | 'Architect'
     | 'Writer'
     | 'Linter'
+    | 'Analysis'
     | 'Artist'
     | 'Voice'
+    | 'Genesis'
     | 'NeuralSync'
     | 'Safety';
   message: string;

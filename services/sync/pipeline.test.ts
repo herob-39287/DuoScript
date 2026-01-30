@@ -144,7 +144,7 @@ describe('Neural Sync Pipeline Integration', () => {
     const charOp = result.readyOps.find((op) => op.path === 'characters');
     expect(charOp).toBeDefined();
     expect(charOp?.targetId).toBe('char-1'); // Should resolve "アリス" to "char-1"
-    expect(charOp?.value.state.internalState).toBe('Anxious');
+    expect(charOp?.value?.state?.internalState).toBe('Anxious');
 
     // Location Op Verification
     const locOp = result.readyOps.find((op) => op.path === 'locations');
@@ -168,7 +168,11 @@ describe('Neural Sync Pipeline Integration', () => {
     `;
 
     const result = runSyncPipeline(aiOutput, 'Test', project, false);
-    const op = result.readyOps[0];
+    const op = result.readyOps[0] as {
+      value?: { type?: string };
+      targetId?: string;
+      confidence?: number;
+    };
 
     expect(op.targetId).toBe('char-1'); // "赤の魔女" is in aliases of Alice
     expect(op.confidence).toBeGreaterThan(0.9);
@@ -194,7 +198,7 @@ describe('Neural Sync Pipeline Integration', () => {
     const op = result.readyOps[0];
     expect(op.path).toBe('keyItems');
     expect(op.targetName).toBe('古びた鍵');
-    expect(op.value.type).toBe('Tool');
+    expect((op.value as { type?: string } | undefined)?.type).toBe('Tool');
   });
 
   // Case 4: バリデーション - 必須フィールド欠落

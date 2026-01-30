@@ -28,6 +28,13 @@ const ComplianceModal: React.FC<Props> = ({ onAccept }) => {
     allowSearch: true,
     whisperSensitivity: 50,
     disabledLinterRules: [],
+    editorSettings: {
+      fontSize: 16,
+      lineHeight: 2.5,
+      fontFamily: 'serif',
+      paperFilter: 'none',
+      verticalMode: false,
+    },
   });
 
   const lang = prefs.uiLanguage;
