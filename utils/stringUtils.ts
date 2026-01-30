@@ -1,4 +1,3 @@
-
 export const normalizeJapanese = (str: string): string => {
   return str
     .normalize('NFKC')
@@ -8,9 +7,10 @@ export const normalizeJapanese = (str: string): string => {
 };
 
 export const calculateSimilarity = (s1: string, s2: string): number => {
-  const n1 = s1.length, n2 = s2.length;
+  const n1 = s1.length,
+    n2 = s2.length;
   if (n1 === 0 || n2 === 0) return 0;
-  
+
   const dp = Array.from({ length: n1 + 1 }, () => Array(n2 + 1).fill(0));
   for (let i = 0; i <= n1; i++) dp[i][0] = i;
   for (let j = 0; j <= n2; j++) dp[0][j] = j;

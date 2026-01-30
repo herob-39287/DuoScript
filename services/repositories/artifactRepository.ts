@@ -1,5 +1,5 @@
-import { Artifact } from "../../types/sync";
-import { initDB, STORE_ARTIFACTS } from "./baseRepository";
+import { Artifact } from '../../types/sync';
+import { initDB, STORE_ARTIFACTS } from './baseRepository';
 
 export const saveArtifact = async (artifact: Artifact): Promise<void> => {
   const db = await initDB();

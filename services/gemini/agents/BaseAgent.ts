@@ -1,5 +1,4 @@
-
-import { GeminiClient } from "../core";
+import { GeminiClient } from '../core';
 
 export abstract class BaseAgent {
   protected client: GeminiClient;

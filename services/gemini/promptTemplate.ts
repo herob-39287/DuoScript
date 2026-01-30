@@ -1,4 +1,3 @@
-
 /**
  * Prompt Template Engine
  * Handles variable injection and section management for prompts.
@@ -34,7 +33,7 @@ export class PromptTemplate {
     return new PromptTemplate(template);
   }
 
-  static join(templates: string[], separator: string = "\n\n"): string {
-    return templates.filter(t => t && t.trim().length > 0).join(separator);
+  static join(templates: string[], separator: string = '\n\n'): string {
+    return templates.filter((t) => t && t.trim().length > 0).join(separator);
   }
 }

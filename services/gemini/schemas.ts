@@ -1,15 +1,14 @@
-
-import { Type } from "@google/genai";
-import { AppLanguage } from "../../types";
-import { 
-  SyncOperationZodSchema, 
-  DetectionZodSchema, 
-  IntegrityScanZodSchema, 
-  WhisperZodSchema, 
-  ChapterPackageZodSchema, 
-  NexusSimulationZodSchema 
-} from "../validation/schemas";
-import { zodToGeminiSchema } from "./schemaConverter";
+import { Type } from '@google/genai';
+import { AppLanguage } from '../../types';
+import {
+  SyncOperationZodSchema,
+  DetectionZodSchema,
+  IntegrityScanZodSchema,
+  WhisperZodSchema,
+  ChapterPackageZodSchema,
+  NexusSimulationZodSchema,
+} from '../validation/schemas';
+import { zodToGeminiSchema } from './schemaConverter';
 
 /**
  * 変更提案 (SyncOperation) 仕様
@@ -33,7 +32,7 @@ export const getWhisperSchema = (lang: AppLanguage) => {
 
 export const suggestionsSchema = {
   type: Type.ARRAY,
-  items: { type: Type.STRING }
+  items: { type: Type.STRING },
 };
 
 export const getChapterPackageSchema = (lang: AppLanguage) => {
@@ -69,9 +68,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
               name: { type: Type.STRING },
               description: { type: Type.STRING },
               type: { type: Type.STRING },
-              importance: { type: Type.STRING }
-            }
-          }
+              importance: { type: Type.STRING },
+            },
+          },
         },
         characters: {
           type: Type.ARRAY,
@@ -92,12 +91,12 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
                   properties: {
                     targetId: { type: Type.STRING },
                     type: { type: Type.STRING },
-                    description: { type: Type.STRING }
-                  }
-                }
-              }
-            }
-          }
+                    description: { type: Type.STRING },
+                  },
+                },
+              },
+            },
+          },
         },
         locations: {
           type: Type.ARRAY,
@@ -106,9 +105,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             properties: {
               name: { type: Type.STRING },
               type: { type: Type.STRING },
-              description: { type: Type.STRING }
-            }
-          }
+              description: { type: Type.STRING },
+            },
+          },
         },
         organizations: {
           type: Type.ARRAY,
@@ -117,9 +116,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             properties: {
               name: { type: Type.STRING },
               type: { type: Type.STRING },
-              description: { type: Type.STRING }
-            }
-          }
+              description: { type: Type.STRING },
+            },
+          },
         },
         keyItems: {
           type: Type.ARRAY,
@@ -128,9 +127,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             properties: {
               name: { type: Type.STRING },
               type: { type: Type.STRING },
-              description: { type: Type.STRING }
-            }
-          }
+              description: { type: Type.STRING },
+            },
+          },
         },
         themes: {
           type: Type.ARRAY,
@@ -138,9 +137,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             type: Type.OBJECT,
             properties: {
               concept: { type: Type.STRING },
-              description: { type: Type.STRING }
-            }
-          }
+              description: { type: Type.STRING },
+            },
+          },
         },
         entries: {
           type: Type.ARRAY,
@@ -149,9 +148,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             properties: {
               title: { type: Type.STRING },
               category: { type: Type.STRING },
-              definition: { type: Type.STRING }
-            }
-          }
+              definition: { type: Type.STRING },
+            },
+          },
         },
         races: {
           type: Type.ARRAY,
@@ -159,9 +158,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             type: Type.OBJECT,
             properties: {
               name: { type: Type.STRING },
-              description: { type: Type.STRING }
-            }
-          }
+              description: { type: Type.STRING },
+            },
+          },
         },
         bestiary: {
           type: Type.ARRAY,
@@ -170,9 +169,9 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             properties: {
               name: { type: Type.STRING },
               description: { type: Type.STRING },
-              dangerLevel: { type: Type.STRING }
-            }
-          }
+              dangerLevel: { type: Type.STRING },
+            },
+          },
         },
         abilities: {
           type: Type.ARRAY,
@@ -181,15 +180,15 @@ export const getGenesisBibleSchema = (lang: AppLanguage) => ({
             properties: {
               name: { type: Type.STRING },
               description: { type: Type.STRING },
-              type: { type: Type.STRING }
-            }
-          }
-        }
+              type: { type: Type.STRING },
+            },
+          },
+        },
       },
-      required: ["setting", "grandArc", "characters", "laws", "locations"]
-    }
+      required: ['setting', 'grandArc', 'characters', 'laws', 'locations'],
+    },
   },
-  required: ["title", "genre", "bible"]
+  required: ['title', 'genre', 'bible'],
 });
 
 /**
@@ -204,10 +203,10 @@ export const getInitialChaptersSchema = (lang: AppLanguage) => ({
         type: Type.OBJECT,
         properties: {
           title: { type: Type.STRING },
-          summary: { type: Type.STRING }
+          summary: { type: Type.STRING },
         },
-        required: ["title", "summary"]
-      }
+        required: ['title', 'summary'],
+      },
     },
     timeline: {
       type: Type.ARRAY,
@@ -216,9 +215,9 @@ export const getInitialChaptersSchema = (lang: AppLanguage) => ({
         properties: {
           timeLabel: { type: Type.STRING },
           event: { type: Type.STRING },
-          importance: { type: Type.STRING }
-        }
-      }
+          importance: { type: Type.STRING },
+        },
+      },
     },
     storyStructure: {
       type: Type.ARRAY,
@@ -227,9 +226,9 @@ export const getInitialChaptersSchema = (lang: AppLanguage) => ({
         properties: {
           name: { type: Type.STRING },
           summary: { type: Type.STRING },
-          goal: { type: Type.STRING }
-        }
-      }
+          goal: { type: Type.STRING },
+        },
+      },
     },
     volumes: {
       type: Type.ARRAY,
@@ -238,12 +237,12 @@ export const getInitialChaptersSchema = (lang: AppLanguage) => ({
         properties: {
           title: { type: Type.STRING },
           order: { type: Type.INTEGER },
-          summary: { type: Type.STRING }
-        }
-      }
-    }
+          summary: { type: Type.STRING },
+        },
+      },
+    },
   },
-  required: ["chapters"]
+  required: ['chapters'],
 });
 
 /**
@@ -260,10 +259,10 @@ export const getInitialForeshadowingSchema = (lang: AppLanguage) => ({
           title: { type: Type.STRING },
           description: { type: Type.STRING },
           clues: { type: Type.ARRAY, items: { type: Type.STRING } },
-          redHerrings: { type: Type.ARRAY, items: { type: Type.STRING } }
+          redHerrings: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
-        required: ["title", "description", "clues", "redHerrings"]
-      }
+        required: ['title', 'description', 'clues', 'redHerrings'],
+      },
     },
     storyThreads: {
       type: Type.ARRAY,
@@ -272,18 +271,33 @@ export const getInitialForeshadowingSchema = (lang: AppLanguage) => ({
         properties: {
           title: { type: Type.STRING },
           shortSummary: { type: Type.STRING },
-          status: { type: Type.STRING }
-        }
-      }
-    }
+          status: { type: Type.STRING },
+        },
+      },
+    },
   },
-  required: ["foreshadowing"]
+  required: ['foreshadowing'],
 });
 
 export const DEFAULT_RESPONSES = {
-  DETECTION: { hasChangeIntent: false, isHypothetical: false, domains: [], categories: [], instructionSummary: "" },
-  SUGGESTIONS: ["...", "...", "..."],
-  CHAPTER_PACKAGE: { strategy: { milestones: ["Intro", "Development", "Climax"], pacing: "Normal" }, beats: [{ text: "Situation" }], draft: "" },
-  NEXUS: { impactOnCanon: "None", impactOnState: "Maintained", alternateTimeline: ["No Change"] },
-  PROJECT_GEN: { title: "Untitled", genre: "Fantasy", bible: { setting: "...", grandArc: "...", characters: [], laws: [], locations: [] }, chapters: [] }
+  DETECTION: {
+    hasChangeIntent: false,
+    isHypothetical: false,
+    domains: [],
+    categories: [],
+    instructionSummary: '',
+  },
+  SUGGESTIONS: ['...', '...', '...'],
+  CHAPTER_PACKAGE: {
+    strategy: { milestones: ['Intro', 'Development', 'Climax'], pacing: 'Normal' },
+    beats: [{ text: 'Situation' }],
+    draft: '',
+  },
+  NEXUS: { impactOnCanon: 'None', impactOnState: 'Maintained', alternateTimeline: ['No Change'] },
+  PROJECT_GEN: {
+    title: 'Untitled',
+    genre: 'Fantasy',
+    bible: { setting: '...', grandArc: '...', characters: [], laws: [], locations: [] },
+    chapters: [],
+  },
 };

@@ -1,10 +1,13 @@
-import { 
-  SyncOperationZodSchema, DetectionZodSchema, 
-  IntegrityScanZodSchema, NexusSimulationZodSchema,
-  ChapterPackageZodSchema, WhisperZodSchema,
+import {
+  SyncOperationZodSchema,
+  DetectionZodSchema,
+  IntegrityScanZodSchema,
+  NexusSimulationZodSchema,
+  ChapterPackageZodSchema,
+  WhisperZodSchema,
   SyncOperation as ZodSyncOperation,
   SyncCandidate as ZodSyncCandidate,
-  SyncPath as ZodSyncPath
+  SyncPath as ZodSyncPath,
 } from '../services/validation/schemas';
 import { z } from 'zod';
 
@@ -134,8 +137,8 @@ export interface Artifact {
 
 export interface SyncState {
   chatHistory: ChatMessage[];
-  archivedChat?: ChatMessage[]; 
-  conversationMemory?: string; 
+  archivedChat?: ChatMessage[];
+  conversationMemory?: string;
   pendingChanges: SyncOperation[];
   quarantine: QuarantineItem[];
   history: HistoryEntry[];

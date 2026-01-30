@@ -1,8 +1,13 @@
-
 import { useState, useCallback } from 'react';
-import { 
-  useBibleDispatch, useMetadataDispatch, useManuscript, useNeuralSync, useMetadata, useWorldFoundation,
-  useUIDispatch, useNotificationDispatch 
+import {
+  useBibleDispatch,
+  useMetadataDispatch,
+  useManuscript,
+  useNeuralSync,
+  useMetadata,
+  useWorldFoundation,
+  useUIDispatch,
+  useNotificationDispatch,
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
 import { genesisFill } from '../services/geminiService';
@@ -13,7 +18,7 @@ export const useCharacterActions = (character: Character) => {
   // when unrelated bible data changes.
   const meta = useMetadata();
   const foundation = useWorldFoundation(); // Use WorldFoundation instead of full Bible to access setting/tone/laws
-  
+
   const bibleDispatch = useBibleDispatch();
   const metaDispatch = useMetadataDispatch();
   const uiDispatch = useUIDispatch();
@@ -21,76 +26,86 @@ export const useCharacterActions = (character: Character) => {
 
   const [loadingField, setLoadingField] = useState<string | null>(null);
 
-  const handleSave = useCallback((profile: CharacterProfile, relationships: Relationship[]) => {
-    // Dispatch specific action to update only this character
-    bibleDispatch(Actions.updateCharacterData(character.id, { profile, relationships }));
-    addLog('success', 'System', `${profile.name} の情報を更新しました。`);
-  }, [character.id, bibleDispatch, addLog]);
+  const handleSave = useCallback(
+    (profile: CharacterProfile, relationships: Relationship[]) => {
+      // Dispatch specific action to update only this character
+      bibleDispatch(Actions.updateCharacterData(character.id, { profile, relationships }));
+      addLog('success', 'System', `${profile.name} の情報を更新しました。`);
+    },
+    [character.id, bibleDispatch, addLog],
+  );
 
   const handleDelete = useCallback(() => {
-    uiDispatch(Actions.openDialog({
-      isOpen: true,
-      type: 'confirm',
-      title: 'キャラクターの削除',
-      message: `「${character.profile.name}」を完全に削除しますか？`,
-      onConfirm: () => {
-        // Use generic list manipulation for deletion
-        bibleDispatch(Actions.manipulateBibleList('characters', 'delete', character.id));
-        uiDispatch(Actions.closeDialog());
-        addLog('info', 'System', `${character.profile.name} を削除しました。`);
-      }
-    }));
+    uiDispatch(
+      Actions.openDialog({
+        isOpen: true,
+        type: 'confirm',
+        title: 'キャラクターの削除',
+        message: `「${character.profile.name}」を完全に削除しますか？`,
+        onConfirm: () => {
+          // Use generic list manipulation for deletion
+          bibleDispatch(Actions.manipulateBibleList('characters', 'delete', character.id));
+          uiDispatch(Actions.closeDialog());
+          addLog('info', 'System', `${character.profile.name} を削除しました。`);
+        },
+      }),
+    );
   }, [character.id, character.profile.name, bibleDispatch, uiDispatch, addLog]);
 
   const handleConsult = useCallback(() => {
-    uiDispatch(Actions.setPendingMsg(`キャラクター「${character.profile.name}」について相談です。\n\n`));
+    uiDispatch(
+      Actions.setPendingMsg(`キャラクター「${character.profile.name}」について相談です。\n\n`),
+    );
   }, [character.profile.name, uiDispatch]);
 
-  const handleGenesisFill = useCallback(async (
-    currentProfile: CharacterProfile,
-    key: keyof CharacterProfile,
-    label: string
-  ): Promise<string | null> => {
-    if (loadingField) return null;
-    if (!foundation) {
+  const handleGenesisFill = useCallback(
+    async (
+      currentProfile: CharacterProfile,
+      key: keyof CharacterProfile,
+      label: string,
+    ): Promise<string | null> => {
+      if (loadingField) return null;
+      if (!foundation) {
         addLog('error', 'Genesis', '世界設定データがロードされていません。');
         return null;
-    }
+      }
 
-    setLoadingField(key as string);
-    try {
-      // Construct a valid CreatorContext
-      const creatorContext = {
-        meta: { language: meta.language },
-        bible: {
-          setting: foundation.setting,
-          tone: foundation.tone,
-          laws: foundation.laws.map(l => ({ name: l.name })) // Minimal mapping
-        }
-      };
+      setLoadingField(key as string);
+      try {
+        // Construct a valid CreatorContext
+        const creatorContext = {
+          meta: { language: meta.language },
+          bible: {
+            setting: foundation.setting,
+            tone: foundation.tone,
+            laws: foundation.laws.map((l) => ({ name: l.name })), // Minimal mapping
+          },
+        };
 
-      const generated = await genesisFill(
-        creatorContext,
-        currentProfile, 
-        label, 
-        (u) => metaDispatch(Actions.trackUsage(u)),
-        addLog
-      );
-      addLog('success', 'Genesis', `${label} を生成しました。`);
-      return generated;
-    } catch (e) {
-      addLog('error', 'Genesis', '生成に失敗しました。');
-      return null;
-    } finally {
-      setLoadingField(null);
-    }
-  }, [meta, foundation, loadingField, metaDispatch, addLog]);
+        const generated = await genesisFill(
+          creatorContext,
+          currentProfile,
+          label,
+          (u) => metaDispatch(Actions.trackUsage(u)),
+          addLog,
+        );
+        addLog('success', 'Genesis', `${label} を生成しました。`);
+        return generated;
+      } catch (e) {
+        addLog('error', 'Genesis', '生成に失敗しました。');
+        return null;
+      } finally {
+        setLoadingField(null);
+      }
+    },
+    [meta, foundation, loadingField, metaDispatch, addLog],
+  );
 
   return {
     handleSave,
     handleDelete,
     handleConsult,
     handleGenesisFill,
-    loadingField
+    loadingField,
   };
 };

@@ -1,15 +1,15 @@
-
-import { PromptResource } from "./core";
+import { PromptResource } from './core';
 
 export const JA_PROMPTS: PromptResource = {
   core: {
     languageConstraint: `
 [LANGUAGE CONSTRAINT]: All string values in the JSON output (especially 'rationale', 'targetName', and content inside 'value') MUST be in Japanese (日本語).
 Do not use English even if the input text contains English terms. Translate them into natural Japanese.
-`.trim()
+`.trim(),
   },
   architect: {
-    mtp: (persona) => `
+    mtp: (persona) =>
+      `
 # ROLE: Story Companion (Architect)
 [PERSONA]: ${persona}
 
@@ -88,18 +88,20 @@ Extract changes related to "Foreshadowing" from the dialogue history and output 
 2. **Progress**: Clues or Red Herrings added.
 3. **Payoff**: Mystery resolved. status: 'Resolved'
 `.trim(),
-      sync: `ROLE: Sync Extractor. Extract proposed changes to story settings in accurate JSON format.`
+      sync: `ROLE: Sync Extractor. Extract proposed changes to story settings in accurate JSON format.`,
     },
-    summarization: (memory) => `
+    summarization: (memory) =>
+      `
 Extract "Decisions" and "Open Questions" regarding story settings from the following dialogue history, and update the JSON summary.
 Overwrite and integrate with the current memory to maintain the latest state.
 
 【CURRENT MEMORY】
-${memory || "None"}
+${memory || 'None'}
 `.trim(),
     whisperSoul: `ROLE: Inner Architect. Whisper advice about contradictions or completions for the current draft.`,
     whisperPrompt: `Analyze and return JSON only if advice is needed.`,
-    genesisFill: (field, profile, world) => `
+    genesisFill: (field, profile, world) =>
+      `
 # TASK: Genesis Fill (Character Auto-Completion)
 Generate a creative and consistent description for the character's "**${field}**".
 
@@ -117,7 +119,8 @@ ${profile}
 - Tone: Matches the world setting.
 - Length: Concise but evocative (1-3 sentences).
 `.trim(),
-    autoFill: (type, name, field, item, world) => `
+    autoFill: (type, name, field, item, world) =>
+      `
 # TASK: Story Setting Auto-Fill
 Generate a creative and consistent description for the "**${field}**" of the ${type} named "**${name}**".
 
@@ -135,7 +138,8 @@ ${item}
 - Tone: Matches the world setting.
 - Length: Concise but evocative.
 `.trim(),
-    brainstorm: (type, task, json, world, hints) => `
+    brainstorm: (type, task, json, world, hints) =>
+      `
 # TASK: Brainstorm Variations
 ${task}
 Based on any existing partial data: ${json}
@@ -149,17 +153,19 @@ ${world}
 - Include these specific fields if applicable: ${hints}
 - Add a "concept_note" field to each object explaining the concept briefly (e.g. "悲劇の英雄").
 - Language: Japanese.
-`.trim()
+`.trim(),
   },
   writer: {
-    mtp: (persona) => `
+    mtp: (persona) =>
+      `
 # ROLE: Master Storyteller (Writer)
 [PERSONA]: ${persona}
 
 あなたは言語の魔術師であり、感情豊かな描写を行う執筆者です。
 `.trim(),
     copilotSoul: `ROLE: Creative Copilot. Propose the next attractive sentences in Japanese.`,
-    draft: (title, summary, beats, prev, focus) => `
+    draft: (title, summary, beats, prev, focus) =>
+      `
 # CONTEXT
 Title: ${title}
 Chapter Summary: ${summary}
@@ -169,9 +175,11 @@ Last 1500 characters of the current draft:
 "${prev}"
 
 # MISSION
-${focus 
-  ? `Write the SPECIFIC SCENE defined by the Target Beat below. Connect naturally from the previous content.` 
-  : `Continue writing the story based on the Chapter Outline. Move the plot forward naturally from the previous content.`}
+${
+  focus
+    ? `Write the SPECIFIC SCENE defined by the Target Beat below. Connect naturally from the previous content.`
+    : `Continue writing the story based on the Chapter Outline. Move the plot forward naturally from the previous content.`
+}
 
 ${beats}
 
@@ -180,23 +188,26 @@ ${beats}
 - Style: Novelistic (Show, Don't Tell)
 - Do NOT repeat the previous content. Start writing the NEXT sentences immediately.
 `.trim(),
-    nextSentence: (content) => `
+    nextSentence: (content) =>
+      `
 Current Draft:
 "${content}"
 
 Propose 3 natural and attractive candidate sentences that follow this text in Japanese.
 `.trim(),
-    draftScan: (draft) => `
+    draftScan: (draft) =>
+      `
 Extract elements from the following draft that are newly established (or contradict existing settings).
 Draft:
 "${draft}"
 `.trim(),
-    chapterPackage: (title, summary) => `
+    chapterPackage: (title, summary) =>
+      `
 Title: ${title}
 Summary: ${summary}
 
 Construct a detailed strategy and plot beats for writing this chapter.
-`.trim()
+`.trim(),
   },
   analysis: {
     analystSoul: `ROLE: Story Integrity Analyst. あらすじと設定の乖離、および最新原稿と設定の矛盾を検出せよ。`,
@@ -211,7 +222,8 @@ ROLE: Intent Detector.
 - FOUNDATION: 場所、法則、アイテム、テーマ、用語.
 `.trim(),
     detectorPrompt: (input) => `Input: "${input}"`,
-    integrityScan: (bible) => `
+    integrityScan: (bible) =>
+      `
 You are a specialist in checking story consistency.
 Compare the provided "Bible (Settings)" and "Chapters" to detect contradictions.
 
@@ -228,7 +240,8 @@ ${bible}
     nexusSim: (hyp, ctx) => `Hypothesis: "${hyp}"\n\n【STORY_CONTEXT】\n${ctx}`,
     safetyAlternatives: () => `Propose 3 alternative expressions in Japanese.`,
     muse: {
-      bible: (theme) => `
+      bible: (theme) =>
+        `
 # TASK: Complete World Genesis (Settings Only)
 Based on the seed theme: "${theme}"
 Extrapolate, expand, and generate a COMPLETE Story Bible.
@@ -249,7 +262,8 @@ Extrapolate, expand, and generate a COMPLETE Story Bible.
 # OUTPUT FORMAT:
 Return strictly a valid JSON object matching the requested schema.
 `.trim(),
-      chapters: (bible) => `
+      chapters: (bible) =>
+        `
 # TASK: Plot & Chronology Construction
 Based on the following World Settings (Bible), design the detailed story structure.
 
@@ -266,7 +280,8 @@ ${bible}
 # OUTPUT FORMAT:
 Return strictly a valid JSON object with 'chapters', 'timeline', 'storyStructure', and 'volumes'.
 `.trim(),
-      foreshadowing: (bible, chapters) => `
+      foreshadowing: (bible, chapters) =>
+        `
 # TASK: Weave Mysteries & Threads
 You are a mystery writer. Based on the established World Settings and Chapter Plot, create "Foreshadowing" and "Story Threads".
 
@@ -283,14 +298,15 @@ ${chapters}
 
 # OUTPUT FORMAT:
 Return strictly a valid JSON object with 'foreshadowing' and 'storyThreads'.
-`.trim()
-    }
+`.trim(),
+    },
   },
   librarian: {
-    soul: `ROLE: Story Librarian. あらすじや対話から関連する設定項目を抽出し、適切な情報を設計士に提供する専門家であれ。`
+    soul: `ROLE: Story Librarian. あらすじや対話から関連する設定項目を抽出し、適切な情報を設計士に提供する専門家であれ。`,
   },
   visual: {
-    description: (name, tone) => `Describe the visual appearance of character "${name}". Tone: ${tone}`,
-    portrait: (desc) => `Illustration of: ${desc}`
-  }
+    description: (name, tone) =>
+      `Describe the visual appearance of character "${name}". Tone: ${tone}`,
+    portrait: (desc) => `Illustration of: ${desc}`,
+  },
 };

@@ -1,4 +1,3 @@
-
 export const COMMON_JSON_RULE = `
 # ABSOLUTE COMPLIANCE RULE:
 - Your response MUST be valid JSON only.

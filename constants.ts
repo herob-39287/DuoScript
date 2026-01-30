@@ -1,4 +1,3 @@
-
 /**
  * DuoScript Application Constants
  */
@@ -14,7 +13,7 @@ export const AI_MODELS = {
   // Text-to-speech tasks
   TTS: 'gemini-2.5-flash-preview-tts',
   // Embedding
-  EMBEDDING: 'text-embedding-004'
+  EMBEDDING: 'text-embedding-004',
 } as const;
 
 // AiModel Type compatible with legacy code
@@ -25,7 +24,7 @@ export const AiModel = {
   TTS: AI_MODELS.TTS,
 } as const;
 
-export type AiModel = typeof AiModel[keyof typeof AiModel];
+export type AiModel = (typeof AiModel)[keyof typeof AiModel];
 
 // Token Limits & Budgets
 export const TOKEN_LIMITS = {
@@ -34,13 +33,13 @@ export const TOKEN_LIMITS = {
   CHAPTER_DRAFT: 32768,
   DEFAULT_OUTPUT: 32768,
   SMALL_OUTPUT: 2048,
-  
+
   // Thinking budgets (Only for Gemini 3 / 2.5 series)
-  THINKING_HEAVY: 8192,   // For complex generation (Muse Bible)
-  THINKING_MEDIUM: 4096,  // For detailed plotting/reasoning (Architect Chat, Muse Chapters)
-  THINKING_LIGHT: 2048,   // For brainstorming/extraction
+  THINKING_HEAVY: 8192, // For complex generation (Muse Bible)
+  THINKING_MEDIUM: 4096, // For detailed plotting/reasoning (Architect Chat, Muse Chapters)
+  THINKING_LIGHT: 2048, // For brainstorming/extraction
   THINKING_MINIMAL: 1024, // Minimal overhead
-  THINKING_FLASH_LIMIT: 16000 // Flash model thinking budget limit (Note: Flash support for thinking varies)
+  THINKING_FLASH_LIMIT: 16000, // Flash model thinking budget limit (Note: Flash support for thinking varies)
 } as const;
 
 // Path Constants for Neural Sync

@@ -1,7 +1,6 @@
-
 import React, { useMemo, useRef } from 'react';
-import { 
-  MetadataStateContext, 
+import {
+  MetadataStateContext,
   ManuscriptStateContext,
   BibleStateContext,
   CharactersContext,
@@ -11,15 +10,23 @@ import {
   GeographyContext,
   PlotPlanContext,
   KnowledgeContext,
-  NeuralSyncStateContext, 
+  NeuralSyncStateContext,
   ProjectDispatchContext,
-  UIStateContext, UIDispatchContext,
-  NotificationStateContext, NotificationDispatchContext,
-  UIDispatch, NotificationState, NotificationDispatch
+  UIStateContext,
+  UIDispatchContext,
+  NotificationStateContext,
+  NotificationDispatchContext,
+  UIDispatch,
+  NotificationState,
+  NotificationDispatch,
 } from '../contexts/StoryContext';
-import { 
-  StoryProjectMetadata, ChapterLog, WorldBible, SyncState,
-  ProjectAction, UIState
+import {
+  StoryProjectMetadata,
+  ChapterLog,
+  WorldBible,
+  SyncState,
+  ProjectAction,
+  UIState,
 } from '../types';
 
 interface AppProvidersProps {
@@ -50,7 +57,7 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
 
   // Granular Bible Sub-States (Optimization)
   // Replaced JSON.stringify deep comparison with reference checks using refs to improve performance with large datasets.
-  
+
   // 1. Characters (Full)
   const charactersValue = useMemo(() => state.bible.characters, [state.bible.characters]);
 
@@ -91,11 +98,11 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
     }
 
     // Generate new derived array
-    const newResult = source.map(c => ({ 
-      id: c.id, 
-      ...c.profile, 
-      imageUrl: c.imageUrl, 
-      isPrivate: c.isPrivate 
+    const newResult = source.map((c) => ({
+      id: c.id,
+      ...c.profile,
+      imageUrl: c.imageUrl,
+      isPrivate: c.isPrivate,
     }));
 
     // Update cache
@@ -120,10 +127,7 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
       hasChanged = true;
     } else {
       for (let i = 0; i < source.length; i++) {
-        if (
-          source[i].state !== prevSource[i].state ||
-          source[i].id !== prevSource[i].id
-        ) {
+        if (source[i].state !== prevSource[i].state || source[i].id !== prevSource[i].id) {
           hasChanged = true;
           break;
         }
@@ -134,53 +138,88 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children, state, dis
       return prevResult;
     }
 
-    const newResult = source.map(c => ({ 
-      id: c.id, 
-      ...c.state 
+    const newResult = source.map((c) => ({
+      id: c.id,
+      ...c.state,
     }));
 
     prevStatesSourceRef.current = source;
     statesCacheRef.current = newResult;
     return newResult;
   }, [state.bible.characters]);
-  
+
   // 4. World Foundation
-  const worldFoundationValue = useMemo(() => ({
-    version: state.bible.version,
-    setting: state.bible.setting,
-    laws: state.bible.laws,
-    grandArc: state.bible.grandArc,
-    tone: state.bible.tone,
-    summaryBuffer: state.bible.summaryBuffer,
-    lastSummaryUpdate: state.bible.lastSummaryUpdate,
-  }), [state.bible.version, state.bible.setting, state.bible.laws, state.bible.grandArc, state.bible.tone, state.bible.summaryBuffer, state.bible.lastSummaryUpdate]);
+  const worldFoundationValue = useMemo(
+    () => ({
+      version: state.bible.version,
+      setting: state.bible.setting,
+      laws: state.bible.laws,
+      grandArc: state.bible.grandArc,
+      tone: state.bible.tone,
+      summaryBuffer: state.bible.summaryBuffer,
+      lastSummaryUpdate: state.bible.lastSummaryUpdate,
+    }),
+    [
+      state.bible.version,
+      state.bible.setting,
+      state.bible.laws,
+      state.bible.grandArc,
+      state.bible.tone,
+      state.bible.summaryBuffer,
+      state.bible.lastSummaryUpdate,
+    ],
+  );
 
   // 5. Geography
-  const geographyValue = useMemo(() => ({
-    locations: state.bible.locations,
-    organizations: state.bible.organizations,
-  }), [state.bible.locations, state.bible.organizations]);
+  const geographyValue = useMemo(
+    () => ({
+      locations: state.bible.locations,
+      organizations: state.bible.organizations,
+    }),
+    [state.bible.locations, state.bible.organizations],
+  );
 
   // 6. Plot Plan
-  const plotPlanValue = useMemo(() => ({
-    storyStructure: state.bible.storyStructure,
-    timeline: state.bible.timeline,
-    foreshadowing: state.bible.foreshadowing,
-    storyThreads: state.bible.storyThreads,
-    volumes: state.bible.volumes,
-  }), [state.bible.storyStructure, state.bible.timeline, state.bible.foreshadowing, state.bible.storyThreads, state.bible.volumes]);
+  const plotPlanValue = useMemo(
+    () => ({
+      storyStructure: state.bible.storyStructure,
+      timeline: state.bible.timeline,
+      foreshadowing: state.bible.foreshadowing,
+      storyThreads: state.bible.storyThreads,
+      volumes: state.bible.volumes,
+    }),
+    [
+      state.bible.storyStructure,
+      state.bible.timeline,
+      state.bible.foreshadowing,
+      state.bible.storyThreads,
+      state.bible.volumes,
+    ],
+  );
 
   // 7. Knowledge Base
-  const knowledgeValue = useMemo(() => ({
-    entries: state.bible.entries,
-    keyItems: state.bible.keyItems,
-    themes: state.bible.themes,
-    nexusBranches: state.bible.nexusBranches,
-    integrityIssues: state.bible.integrityIssues,
-    races: state.bible.races,
-    bestiary: state.bible.bestiary,
-    abilities: state.bible.abilities,
-  }), [state.bible.entries, state.bible.keyItems, state.bible.themes, state.bible.nexusBranches, state.bible.integrityIssues, state.bible.races, state.bible.bestiary, state.bible.abilities]);
+  const knowledgeValue = useMemo(
+    () => ({
+      entries: state.bible.entries,
+      keyItems: state.bible.keyItems,
+      themes: state.bible.themes,
+      nexusBranches: state.bible.nexusBranches,
+      integrityIssues: state.bible.integrityIssues,
+      races: state.bible.races,
+      bestiary: state.bible.bestiary,
+      abilities: state.bible.abilities,
+    }),
+    [
+      state.bible.entries,
+      state.bible.keyItems,
+      state.bible.themes,
+      state.bible.nexusBranches,
+      state.bible.integrityIssues,
+      state.bible.races,
+      state.bible.bestiary,
+      state.bible.abilities,
+    ],
+  );
 
   return (
     <NotificationStateContext.Provider value={notificationValue}>

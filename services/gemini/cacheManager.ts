@@ -1,8 +1,7 @@
-
-import { StoryProject, LogCallback } from "../../types";
-import { GeminiClient } from "./core";
-import { PromptBuilder } from "./promptBuilder";
-import { AI_MODELS } from "../../constants";
+import { StoryProject, LogCallback } from '../../types';
+import { GeminiClient } from './core';
+import { PromptBuilder } from './promptBuilder';
+import { AI_MODELS } from '../../constants';
 
 interface CacheEntry {
   name: string;
@@ -47,10 +46,14 @@ export class CacheManager {
     // 2. Invalidate old cache if exists (Best effort)
     if (this.activeCache) {
       try {
-        logCallback('info', 'System', '設定が更新されたため、コンテキスト・キャッシュを再構築します。');
+        logCallback(
+          'info',
+          'System',
+          '設定が更新されたため、コンテキスト・キャッシュを再構築します。',
+        );
         await this.client.genAI.caches.delete({ name: this.activeCache.name });
       } catch (e) {
-        console.warn("Failed to delete old cache", e);
+        console.warn('Failed to delete old cache', e);
       }
       this.activeCache = null;
     } else {
@@ -60,26 +63,23 @@ export class CacheManager {
     // 3. Create new cache
     try {
       const systemContent = PromptBuilder.buildStaticArchitectContext(project);
-      
+
       const cacheResponse = await this.client.genAI.caches.create({
         model: this.MODEL_NAME,
         displayName: `duoscript-${projectId.slice(0, 8)}-v${currentVersion}`,
-        contents: [
-          { role: 'user', parts: [{ text: systemContent }] }
-        ],
-        ttlSeconds: this.TTL_SECONDS
+        contents: [{ role: 'user', parts: [{ text: systemContent }] }],
+        ttlSeconds: this.TTL_SECONDS,
       });
 
       this.activeCache = {
         name: cacheResponse.name,
         projectId: projectId,
         version: currentVersion,
-        expiresAt: now + (this.TTL_SECONDS * 1000)
+        expiresAt: now + this.TTL_SECONDS * 1000,
       };
 
       logCallback('success', 'System', 'コンテキスト・キャッシュが有効化されました。');
       return this.activeCache.name;
-
     } catch (e: any) {
       logCallback('error', 'System', `キャッシュ作成失敗: ${e.message}`);
       throw e;
@@ -95,7 +95,7 @@ export class CacheManager {
         await this.client.genAI.caches.delete({ name: this.activeCache.name });
         this.activeCache = null;
       } catch (e) {
-        console.warn("Failed to clear cache", e);
+        console.warn('Failed to clear cache', e);
       }
     }
   }

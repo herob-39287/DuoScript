@@ -34,12 +34,12 @@ export interface DuoScriptDB extends DBSchema {
   VectorIndex: {
     key: string; // id
     value: any;
-    indexes: { 'projectId': string };
+    indexes: { projectId: string };
   };
   ArtifactsStore: {
     key: string; // id
     value: any;
-    indexes: { 'projectId': string };
+    indexes: { projectId: string };
   };
 }
 
@@ -75,6 +75,6 @@ export const initDB = (): Promise<IDBPDatabase<DuoScriptDB>> => {
       }
     },
   });
-  
+
   return dbPromise;
 };

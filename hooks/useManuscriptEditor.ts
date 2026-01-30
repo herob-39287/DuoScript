@@ -1,7 +1,9 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  useManuscript, useMetadata, useManuscriptDispatch, useNotificationDispatch 
+import {
+  useManuscript,
+  useMetadata,
+  useManuscriptDispatch,
+  useNotificationDispatch,
 } from '../contexts/StoryContext';
 import { loadChapterContent } from '../services/storageService';
 import * as Actions from '../store/actions';
@@ -11,7 +13,10 @@ interface UseManuscriptEditorProps {
   onContentUpdate?: (content: string) => void;
 }
 
-export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseManuscriptEditorProps) => {
+export const useManuscriptEditor = ({
+  initialChapterId,
+  onContentUpdate,
+}: UseManuscriptEditorProps) => {
   const chapters = useManuscript();
   const projectDispatch = useManuscriptDispatch();
   const meta = useMetadata();
@@ -26,12 +31,12 @@ export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseMa
   const wordCountThrottleRef = useRef<number | null>(null);
   const draftVersionRef = useRef(0);
 
-  const activeChapter = chapters.find(c => c.id === activeChapterId);
+  const activeChapter = chapters.find((c) => c.id === activeChapterId);
 
   // Auto-select first chapter if activeChapterId is invalid
   useEffect(() => {
     if (chapters.length > 0) {
-      const isValid = chapters.some(c => c.id === activeChapterId);
+      const isValid = chapters.some((c) => c.id === activeChapterId);
       if (!activeChapterId || !isValid) {
         setActiveChapterId(chapters[0].id);
       }
@@ -47,9 +52,9 @@ export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseMa
   useEffect(() => {
     const fetchContent = async () => {
       if (!activeChapterId || !meta.id) return;
-      const chapter = chapters.find(c => c.id === activeChapterId);
+      const chapter = chapters.find((c) => c.id === activeChapterId);
       if (!chapter) return;
-      
+
       if (chapter.content !== undefined && chapter.content !== null) {
         if (textareaRef.current) textareaRef.current.value = chapter.content;
         setWordCount(chapter.content.length);
@@ -59,7 +64,7 @@ export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseMa
       setIsLoadingContent(true);
       try {
         const rev = meta.headRev || 1;
-        const content = await loadChapterContent(meta.id, activeChapterId, rev) || "";
+        const content = (await loadChapterContent(meta.id, activeChapterId, rev)) || '';
         projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content });
         if (textareaRef.current) textareaRef.current.value = content;
         setWordCount(content.length);
@@ -75,16 +80,16 @@ export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseMa
   const handleTextChange = useCallback(() => {
     if (!textareaRef.current || !activeChapterId || !meta.id) return;
     const currentVal = textareaRef.current.value;
-    
+
     // 文字数の更新頻度を抑制
     if (!wordCountThrottleRef.current) {
       setWordCount(currentVal.length);
       wordCountThrottleRef.current = window.setTimeout(() => {
-        if(textareaRef.current) setWordCount(textareaRef.current.value.length);
+        if (textareaRef.current) setWordCount(textareaRef.current.value.length);
         wordCountThrottleRef.current = null;
       }, 1000);
     }
-    
+
     draftVersionRef.current += 1;
     const currentVersion = draftVersionRef.current;
 
@@ -92,14 +97,17 @@ export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseMa
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = window.setTimeout(() => {
       setWordCount(currentVal.length);
-      projectDispatch({ type: 'UPDATE_CHAPTER', id: activeChapterId, updates: { content: currentVal, draftVersion: currentVersion } });
+      projectDispatch({
+        type: 'UPDATE_CHAPTER',
+        id: activeChapterId,
+        updates: { content: currentVal, draftVersion: currentVersion },
+      });
     }, 1000);
 
     // 通知
     if (onContentUpdate) {
       onContentUpdate(currentVal);
     }
-
   }, [activeChapterId, projectDispatch, meta.id, meta.headRev, onContentUpdate]);
 
   return {
@@ -111,6 +119,6 @@ export const useManuscriptEditor = ({ initialChapterId, onContentUpdate }: UseMa
     setWordCount,
     draftVersionRef,
     textareaRef,
-    handleTextChange
+    handleTextChange,
   };
 };

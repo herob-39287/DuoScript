@@ -1,13 +1,14 @@
-
-import { 
-  StoryProject, StoryProjectMetadata, AppPreferences, 
-  TokenUsageEntry, SafetyViolation, ChapterLog, UsagePayload 
+import {
+  StoryProject,
+  StoryProjectMetadata,
+  AppPreferences,
+  TokenUsageEntry,
+  SafetyViolation,
+  ChapterLog,
+  UsagePayload,
 } from './project';
 import { WorldBible, Character } from './bible';
-import { 
-  SyncState, ChatMessage, SyncOperation, HistoryEntry, 
-  QuarantineItem 
-} from './sync';
+import { SyncState, ChatMessage, SyncOperation, HistoryEntry, QuarantineItem } from './sync';
 
 export enum ViewMode {
   WELCOME = 'WELCOME',
@@ -21,13 +22,26 @@ export interface SystemLog {
   id: string;
   timestamp: number;
   type: 'info' | 'error' | 'success' | 'usage';
-  source: 'System' | 'Architect' | 'Writer' | 'Linter' | 'Artist' | 'Voice' | 'NeuralSync' | 'Safety';
+  source:
+    | 'System'
+    | 'Architect'
+    | 'Writer'
+    | 'Linter'
+    | 'Artist'
+    | 'Voice'
+    | 'NeuralSync'
+    | 'Safety';
   message: string;
   details?: string;
 }
 
 export type UsageCallback = (usage: UsagePayload) => void;
-export type LogCallback = (type: SystemLog['type'], source: SystemLog['source'], message: string, details?: string) => void;
+export type LogCallback = (
+  type: SystemLog['type'],
+  source: SystemLog['source'],
+  message: string,
+  details?: string,
+) => void;
 
 export interface AppNotification {
   id: string;
@@ -40,7 +54,7 @@ export interface SafetyIntervention {
   category?: string;
   reason?: string;
   alternatives: string[];
-  isLocked: boolean; 
+  isLocked: boolean;
 }
 
 export interface DialogState {
@@ -62,13 +76,13 @@ export interface UIState {
   showHelpModal: boolean;
   saveStatus: 'idle' | 'saving' | 'saved';
   isConflict: boolean;
-  forceSaveRequested: boolean; 
+  forceSaveRequested: boolean;
   isContextActive: boolean;
   thinkingPhase: string | null; // AIの思考プロセスを表示するための状態
   isOnline: boolean; // ネットワーク接続状態
 }
 
-export type MetaAction = 
+export type MetaAction =
   | { type: 'LOAD_META'; payload: StoryProjectMetadata }
   | { type: 'UPDATE_META'; payload: Partial<StoryProjectMetadata> }
   | { type: 'UPDATE_PREFERENCES'; payload: Partial<AppPreferences> }
@@ -78,32 +92,35 @@ export type MetaAction =
 
 // Helper type to extract only array properties from WorldBible
 export type BibleArrayKeys = {
-  [K in keyof WorldBible & string]: WorldBible[K] extends Array<any> ? K : never
+  [K in keyof WorldBible & string]: WorldBible[K] extends Array<any> ? K : never;
 }[keyof WorldBible & string];
 
-export type BibleAction = 
+export type BibleAction =
   | { type: 'LOAD_BIBLE'; payload: WorldBible }
   | { type: 'UPDATE_BIBLE'; payload: Partial<WorldBible> }
   | { type: 'UPDATE_CHARACTER_DATA'; id: string; updates: Partial<Character> }
-  | { 
-      type: 'MANIPULATE_BIBLE_LIST'; 
-      path: BibleArrayKeys; 
-      op: 'add' | 'update' | 'delete'; 
-      id?: string; 
-      item?: any; 
+  | {
+      type: 'MANIPULATE_BIBLE_LIST';
+      path: BibleArrayKeys;
+      op: 'add' | 'update' | 'delete';
+      id?: string;
+      item?: any;
       updates?: any;
     }
-  | { type: 'APPLY_SYNC_OP'; payload: { nextBible: WorldBible; nextChapters: ChapterLog[]; historyEntry: HistoryEntry } }
+  | {
+      type: 'APPLY_SYNC_OP';
+      payload: { nextBible: WorldBible; nextChapters: ChapterLog[]; historyEntry: HistoryEntry };
+    }
   | { type: 'UNDO_BIBLE'; payload: { nextBible: WorldBible; nextChapters: ChapterLog[] } };
 
-export type ChapterAction = 
+export type ChapterAction =
   | { type: 'LOAD_CHAPTERS'; payload: ChapterLog[] }
   | { type: 'UPDATE_CHAPTER'; id: string; updates: Partial<ChapterLog> }
   | { type: 'SET_CHAPTER_CONTENT'; id: string; content: string }
   | { type: 'ADD_CHAPTER'; payload: ChapterLog }
   | { type: 'REMOVE_CHAPTER'; id: string };
 
-export type SyncAction = 
+export type SyncAction =
   | { type: 'LOAD_SYNC'; payload: SyncState }
   | { type: 'SET_CHAT_HISTORY'; payload: ChatMessage[] }
   | { type: 'CONSOLIDATE_CHAT'; payload: { newMemory: string; archivedCount: number } }
@@ -115,7 +132,7 @@ export type SyncAction =
   | { type: 'ADD_HISTORY_ENTRY'; payload: HistoryEntry }
   | { type: 'REMOVE_HISTORY_ENTRY'; id: string };
 
-export type UIAction = 
+export type UIAction =
   | { type: 'SET_VIEW'; payload: ViewMode }
   | { type: 'SET_PLOTTER_TAB'; payload: string }
   | { type: 'SET_PENDING_MSG'; payload: string | null }
@@ -126,12 +143,12 @@ export type UIAction =
   | { type: 'SET_HELP_MODAL'; payload: boolean }
   | { type: 'SET_SAVE_STATUS'; payload: 'idle' | 'saving' | 'saved' }
   | { type: 'SET_CONFLICT'; payload: boolean }
-  | { type: 'SET_FORCE_SAVE_REQUESTED'; payload: boolean } 
+  | { type: 'SET_FORCE_SAVE_REQUESTED'; payload: boolean }
   | { type: 'TOGGLE_CONTEXT_ACTIVE'; payload: boolean }
   | { type: 'SET_THINKING_PHASE'; payload: string | null }
   | { type: 'SET_ONLINE_STATUS'; payload: boolean };
 
-export type ProjectAction = 
+export type ProjectAction =
   | MetaAction
   | BibleAction
   | ChapterAction
@@ -139,7 +156,7 @@ export type ProjectAction =
   | { type: 'LOAD_PROJECT'; payload: StoryProject }
   | { type: 'CLEAR_DATA' };
 
-export type NotificationAction = 
+export type NotificationAction =
   | { type: 'ADD_LOG'; payload: SystemLog }
   | { type: 'CLEAR_LOGS' }
   | { type: 'DISMISS_NOTIFICATION'; id: string };

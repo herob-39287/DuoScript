@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BookOpen, Plus, CheckCircle2, X } from 'lucide-react';
 import { ChapterLog } from '../../types';
@@ -17,8 +16,8 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
   activeChapterId,
   onSelectChapter,
   onAddChapter,
-  className = "w-64 border-r border-white/5 flex flex-col bg-stone-900/40 hidden xl:flex shrink-0",
-  onClose
+  className = 'w-64 border-r border-white/5 flex flex-col bg-stone-900/40 hidden xl:flex shrink-0',
+  onClose,
 }) => {
   const handleSelect = (id: string) => {
     onSelectChapter(id);
@@ -32,22 +31,25 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
           <BookOpen size={12} /> 書標
         </span>
         <div className="flex items-center gap-2">
-          <button 
-            onClick={onAddChapter} 
+          <button
+            onClick={onAddChapter}
             className="p-1.5 hover:bg-stone-800 rounded-lg text-stone-600 hover:text-orange-400 transition-colors"
             title="新しい章を追加"
           >
             <Plus size={16} />
           </button>
           {onClose && (
-            <button onClick={onClose} className="p-1.5 hover:bg-stone-800 rounded-lg text-stone-500 transition-colors xl:hidden">
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-stone-800 rounded-lg text-stone-500 transition-colors xl:hidden"
+            >
               <X size={16} />
             </button>
           )}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-        {chapters.map(ch => (
+        {chapters.map((ch) => (
           <button
             key={ch.id}
             onClick={() => handleSelect(ch.id)}
@@ -55,8 +57,14 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
             title={`「${ch.title}」を開く`}
           >
             <div className="min-w-0">
-              <div className={`text-[11px] font-bold truncate ${activeChapterId === ch.id ? 'text-orange-400' : 'text-stone-400'}`}>{ch.title}</div>
-              <div className="text-[8px] text-stone-600 font-mono mt-0.5">{(ch.wordCount || 0).toLocaleString()} c</div>
+              <div
+                className={`text-[11px] font-bold truncate ${activeChapterId === ch.id ? 'text-orange-400' : 'text-stone-400'}`}
+              >
+                {ch.title}
+              </div>
+              <div className="text-[8px] text-stone-600 font-mono mt-0.5">
+                {(ch.wordCount || 0).toLocaleString()} c
+              </div>
             </div>
             {ch.status === 'Polished' && <CheckCircle2 size={10} className="text-emerald-500" />}
           </button>

@@ -1,4 +1,3 @@
-
 import { describe, it, expect } from 'vitest';
 import { runSyncPipeline } from './pipeline';
 import { applySyncBatch } from './engine';
@@ -26,26 +25,38 @@ const createMockProject = (): StoryProject => {
     characters: [
       {
         id: 'char-1',
-        profile: { 
-          name: 'アリス', 
-          role: 'Protagonist', 
-          description: '主人公', 
-          aliases: ['アリ', '赤の魔女'], 
-          traits: [], 
-          appearance: '', 
-          personality: '', 
-          background: '', 
-          motivation: '', 
-          flaw: '', 
-          arc: '', 
-          voice: { firstPerson: '', secondPerson: '', speechStyle: 'Casual', catchphrases: [], forbiddenWords: [] }, 
-          shortSummary: '' 
+        profile: {
+          name: 'アリス',
+          role: 'Protagonist',
+          description: '主人公',
+          aliases: ['アリ', '赤の魔女'],
+          traits: [],
+          appearance: '',
+          personality: '',
+          background: '',
+          motivation: '',
+          flaw: '',
+          arc: '',
+          voice: {
+            firstPerson: '',
+            secondPerson: '',
+            speechStyle: 'Casual',
+            catchphrases: [],
+            forbiddenWords: [],
+          },
+          shortSummary: '',
         },
-        state: { location: '王都', internalState: 'Normal', currentGoal: '', health: '', socialStanding: '' },
+        state: {
+          location: '王都',
+          internalState: 'Normal',
+          currentGoal: '',
+          health: '',
+          socialStanding: '',
+        },
         relationships: [],
         history: [],
-        isPrivate: false
-      }
+        isPrivate: false,
+      },
     ],
     timeline: [],
     foreshadowing: [],
@@ -53,25 +64,50 @@ const createMockProject = (): StoryProject => {
     nexusBranches: [],
     integrityIssues: [],
     summaryBuffer: '',
-    lastSummaryUpdate: 0
+    lastSummaryUpdate: 0,
   };
 
   const chapters: ChapterLog[] = [
-    { id: 'ch-1', title: '第一章', summary: '始まり', content: '', scenes: [], beats: [], strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' }, status: 'Idea', wordCount: 0, draftVersion: 0, involvedCharacterIds: [], updatedAt: 0 }
+    {
+      id: 'ch-1',
+      title: '第一章',
+      summary: '始まり',
+      content: '',
+      scenes: [],
+      beats: [],
+      strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' },
+      status: 'Idea',
+      wordCount: 0,
+      draftVersion: 0,
+      involvedCharacterIds: [],
+      updatedAt: 0,
+    },
   ];
 
   return {
-    meta: { id: 'proj-1', title: 'Test', author: 'Me', genre: '', createdAt: 0, updatedAt: 0, schemaVersion: 1, language: 'ja', tokenUsage: [], violationCount: 0, violationHistory: [], preferences: {} as any },
+    meta: {
+      id: 'proj-1',
+      title: 'Test',
+      author: 'Me',
+      genre: '',
+      createdAt: 0,
+      updatedAt: 0,
+      schemaVersion: 1,
+      language: 'ja',
+      tokenUsage: [],
+      violationCount: 0,
+      violationHistory: [],
+      preferences: {} as any,
+    },
     bible,
     chapters,
-    sync: { chatHistory: [], pendingChanges: [], quarantine: [], history: [] }
+    sync: { chatHistory: [], pendingChanges: [], quarantine: [], history: [] },
   };
 };
 
 // --- Test Suites ---
 
 describe('Neural Sync Pipeline Integration', () => {
-  
   // Case 1: 正常系 - Markdownコードブロックからの抽出とID解決
   it('should parse valid JSON from Markdown block and resolve existing IDs', () => {
     const project = createMockProject();
@@ -103,15 +139,15 @@ describe('Neural Sync Pipeline Integration', () => {
 
     expect(result.readyOps).toHaveLength(2);
     expect(result.quarantineItems).toHaveLength(0);
-    
+
     // Character Op Verification
-    const charOp = result.readyOps.find(op => op.path === 'characters');
+    const charOp = result.readyOps.find((op) => op.path === 'characters');
     expect(charOp).toBeDefined();
     expect(charOp?.targetId).toBe('char-1'); // Should resolve "アリス" to "char-1"
     expect(charOp?.value.state.internalState).toBe('Anxious');
 
     // Location Op Verification
-    const locOp = result.readyOps.find(op => op.path === 'locations');
+    const locOp = result.readyOps.find((op) => op.path === 'locations');
     expect(locOp).toBeDefined();
     expect(locOp?.targetId).toBe('loc-1'); // Should resolve "王都" to "loc-1"
   });
@@ -210,19 +246,19 @@ describe('Neural Sync Pipeline Integration', () => {
     expect(result.readyOps).toHaveLength(2);
 
     // Update for unknown item -> needs_resolution (Maybe typo or deleted item)
-    const updateOp = result.readyOps.find(op => op.targetName === "ボブ");
+    const updateOp = result.readyOps.find((op) => op.targetName === 'ボブ');
     expect(updateOp?.status).toBe('needs_resolution');
     expect(updateOp?.targetId).toBeUndefined();
 
     // Add for unknown item -> proposal (Clean add)
-    const addOp = result.readyOps.find(op => op.targetName === "チャーリー");
+    const addOp = result.readyOps.find((op) => op.targetName === 'チャーリー');
     expect(addOp?.status).toBe('proposal');
   });
 
   // Case 6: 適用 - エンジンによるState更新
   it('should apply extracted operations to update the Bible state', () => {
     const project = createMockProject();
-    
+
     // 1. Pipeline: Extract
     const aiOutput = `[
       {
@@ -252,7 +288,7 @@ describe('Neural Sync Pipeline Integration', () => {
     const applyResult = applySyncBatch(project.bible, project.chapters, readyOps);
 
     expect(applyResult.success).toBe(true);
-    
+
     // Verify Grand Arc update
     expect(applyResult.nextBible.grandArc).toBe('The story takes a dark turn.');
     expect(applyResult.nextBible.version).toBe(project.bible.version + 2); // 2 operations
@@ -262,5 +298,4 @@ describe('Neural Sync Pipeline Integration', () => {
     expect(applyResult.nextBible.foreshadowing[0].title).toBe('裏切り者の影');
     expect(applyResult.nextBible.foreshadowing[0].clues).toContain('Missing documents');
   });
-
 });

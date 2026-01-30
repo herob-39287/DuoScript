@@ -1,4 +1,3 @@
-
 import { SyncPath } from '../../types';
 import { SyncStrategy } from './strategies/types';
 import { ScalarStrategy } from './strategies/ScalarStrategy';
@@ -23,13 +22,13 @@ export const STRATEGY_MAP: Record<SyncPath, SyncStrategy> = {
   setting: scalarStrategy,
   tone: scalarStrategy,
   grandArc: scalarStrategy,
-  laws: collectionStrategy, 
-  storyStructure: collectionStrategy, 
-  locations: collectionStrategy, 
+  laws: collectionStrategy,
+  storyStructure: collectionStrategy,
+  locations: collectionStrategy,
   organizations: collectionStrategy,
-  themes: collectionStrategy, 
-  keyItems: collectionStrategy, 
-  storyThreads: collectionStrategy, 
+  themes: collectionStrategy,
+  keyItems: collectionStrategy,
+  storyThreads: collectionStrategy,
   races: collectionStrategy,
   bestiary: collectionStrategy,
   abilities: collectionStrategy,
@@ -39,7 +38,7 @@ export const STRATEGY_MAP: Record<SyncPath, SyncStrategy> = {
   entries: collectionStrategy,
   volumes: collectionStrategy,
   chapters: collectionStrategy,
-  nexusBranches: collectionStrategy
+  nexusBranches: collectionStrategy,
 };
 
 export const getStrategy = (path: SyncPath): SyncStrategy => {

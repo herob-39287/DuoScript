@@ -12,25 +12,25 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg'],
         manifest: {
-          name: "DuoScript - 物語のアトリエ",
-          short_name: "DuoScript",
-          start_url: "/",
-          display: "standalone",
-          background_color: "#1c1917",
-          theme_color: "#1c1917",
-          description: "AIと共に物語を紡ぐ、執筆のためのアトリエ。",
+          name: 'DuoScript - 物語のアトリエ',
+          short_name: 'DuoScript',
+          start_url: '/',
+          display: 'standalone',
+          background_color: '#1c1917',
+          theme_color: '#1c1917',
+          description: 'AIと共に物語を紡ぐ、執筆のためのアトリエ。',
           icons: [
             {
-              src: "/icon.svg",
-              sizes: "any",
-              type: "image/svg+xml"
-            }
-          ]
+              src: '/icon.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+            },
+          ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
-        }
-      })
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        },
+      }),
     ],
     define: {
       // コード内の process.env.API_KEY を、.env ファイルの API_KEY (または VITE_API_KEY) に置換
@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: false
-    }
+      sourcemap: false,
+    },
   };
 });

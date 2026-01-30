@@ -23,6 +23,7 @@ If no private channel is available, please open an issue asking for a way to con
 ### What to include
 
 Please include as much information as possible to help us reproduce and fix the issue, such as:
+
 - A description of the vulnerability.
 - Steps to reproduce.
 - Potential impact.
@@ -34,6 +35,7 @@ We will do our best to respond to your report within a reasonable timeframe. Ple
 ## API Key Safety
 
 DuoScript operates on a **BYOK (Bring Your Own Key)** model.
+
 - The application stores the API key in the browser's memory/environment variables during runtime.
 - It is the user's responsibility to keep their API keys secure and not share screenshots containing them.
 - We will never ask for your API key in issues or pull requests.

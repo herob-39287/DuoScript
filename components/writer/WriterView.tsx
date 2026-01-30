@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { ViewMode } from '../../types';
 import { useWriterLogic } from '../../hooks/useWriterLogic';
@@ -21,9 +20,11 @@ const WriterView: React.FC = () => {
   const { ui, data, status } = state;
 
   return (
-    <div className={`h-full flex flex-col transition-all duration-700 bg-stone-900 ${ui.isZenMode ? 'fixed inset-0 z-[200] bg-stone-950' : ''}`}>
+    <div
+      className={`h-full flex flex-col transition-all duration-700 bg-stone-900 ${ui.isZenMode ? 'fixed inset-0 z-[200] bg-stone-950' : ''}`}
+    >
       <ThinkingIndicator phase={ui.thinkingPhase} />
-      
+
       {!ui.isZenMode && (
         <WriterHeader
           activeChapter={data.activeChapter}
@@ -41,7 +42,7 @@ const WriterView: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative h-full">
         {/* Desktop Sidebar: Chapter Nav */}
         {!ui.isZenMode && (
-          <ChapterNavigation 
+          <ChapterNavigation
             chapters={data.chapters}
             activeChapterId={data.activeChapterId}
             onSelectChapter={actions.selectChapter}
@@ -49,9 +50,13 @@ const WriterView: React.FC = () => {
           />
         )}
 
-        <main className={`flex-1 relative flex flex-col overflow-hidden items-center ${ui.isZenMode ? 'pt-12 md:pt-16 pb-safe' : 'pb-safe'}`}>
-          <div className={`w-full max-w-4xl h-full flex flex-col transition-all duration-1000 ${ui.isZenMode ? 'px-4 md:px-0' : 'px-4 md:px-8'}`}>
-            <EditorCanvas 
+        <main
+          className={`flex-1 relative flex flex-col overflow-hidden items-center ${ui.isZenMode ? 'pt-12 md:pt-16 pb-safe' : 'pb-safe'}`}
+        >
+          <div
+            className={`w-full max-w-4xl h-full flex flex-col transition-all duration-1000 ${ui.isZenMode ? 'px-4 md:px-0' : 'px-4 md:px-8'}`}
+          >
+            <EditorCanvas
               textareaRef={refs.textareaRef}
               onChange={actions.handleTextChange}
               isVertical={ui.isVertical}
@@ -60,13 +65,13 @@ const WriterView: React.FC = () => {
               isProcessing={status.isProcessing}
             />
 
-            <SuggestionOverlay 
+            <SuggestionOverlay
               suggestions={data.suggestions}
               onApply={actions.applySuggestion}
               onClose={actions.closeSuggestions}
             />
 
-            <WriterToolbar 
+            <WriterToolbar
               isZenMode={ui.isZenMode}
               isProcessing={status.isProcessing}
               isSuggesting={status.isSuggesting}
@@ -84,39 +89,39 @@ const WriterView: React.FC = () => {
         {/* Desktop Sidebar: Right Panel (Plot/Bible) */}
         {!ui.isZenMode && (
           <div className="hidden xl:flex w-80 border-l border-white/5 flex-col bg-stone-900/40 shrink-0">
-             <div className="flex border-b border-white/5">
-                <button 
-                  onClick={() => actions.setRightPanelTab('plot')}
-                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'plot' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
-                >
-                  <Zap size={12}/> Plot
-                </button>
-                <button 
-                  onClick={() => actions.setRightPanelTab('bible')}
-                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'bible' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
-                >
-                  <Book size={12}/> Bible
-                </button>
-             </div>
-             
-             {ui.rightPanelTab === 'plot' ? (
-                <PlotReference 
-                  beats={data.activeChapter?.beats || []}
-                  whisper={data.whisper}
-                  contextUsage={64} 
-                  onGeneratePackage={actions.generatePackage}
-                  onCloseWhisper={actions.closeWhisper}
-                  onDraftBeat={(beat) => actions.streamDraft(beat)}
-                  processingBeatId={status.processingBeatId}
-                  isProcessing={status.isProcessing}
-                  className="flex-1 overflow-hidden"
-                />
-             ) : (
-                <MiniBible 
-                  onInsert={(text) => actions.applySuggestion(text)} 
-                  className="flex-1 overflow-hidden"
-                />
-             )}
+            <div className="flex border-b border-white/5">
+              <button
+                onClick={() => actions.setRightPanelTab('plot')}
+                className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'plot' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
+              >
+                <Zap size={12} /> Plot
+              </button>
+              <button
+                onClick={() => actions.setRightPanelTab('bible')}
+                className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'bible' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
+              >
+                <Book size={12} /> Bible
+              </button>
+            </div>
+
+            {ui.rightPanelTab === 'plot' ? (
+              <PlotReference
+                beats={data.activeChapter?.beats || []}
+                whisper={data.whisper}
+                contextUsage={64}
+                onGeneratePackage={actions.generatePackage}
+                onCloseWhisper={actions.closeWhisper}
+                onDraftBeat={(beat) => actions.streamDraft(beat)}
+                processingBeatId={status.processingBeatId}
+                isProcessing={status.isProcessing}
+                className="flex-1 overflow-hidden"
+              />
+            ) : (
+              <MiniBible
+                onInsert={(text) => actions.applySuggestion(text)}
+                className="flex-1 overflow-hidden"
+              />
+            )}
           </div>
         )}
 
@@ -128,7 +133,7 @@ const WriterView: React.FC = () => {
             chapters: data.chapters,
             activeChapterId: data.activeChapterId,
             onSelectChapter: actions.selectChapter,
-            onAddChapter: actions.addChapter
+            onAddChapter: actions.addChapter,
           }}
           rightPanelProps={{
             rightPanelTab: ui.rightPanelTab,
@@ -141,16 +146,19 @@ const WriterView: React.FC = () => {
               onCloseWhisper: actions.closeWhisper,
               onDraftBeat: (beat) => actions.streamDraft(beat),
               processingBeatId: status.processingBeatId,
-              isProcessing: status.isProcessing
+              isProcessing: status.isProcessing,
             },
             miniBibleProps: {
-              onInsert: (text) => actions.applySuggestion(text)
-            }
+              onInsert: (text) => actions.applySuggestion(text),
+            },
           }}
         />
       </div>
-      
-      <AppearanceSettingsModal isOpen={ui.showSettings} onClose={() => actions.toggleSettings(false)} />
+
+      <AppearanceSettingsModal
+        isOpen={ui.showSettings}
+        onClose={() => actions.toggleSettings(false)}
+      />
 
       <style>{`
         .animate-slide-in-left { animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }

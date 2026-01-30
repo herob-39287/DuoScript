@@ -1,9 +1,8 @@
-
 import { produce } from 'immer';
 import { SyncState, SyncAction } from '../../types';
 
 export const syncReducer = (state: SyncState, action: SyncAction): SyncState => {
-  return produce(state, draft => {
+  return produce(state, (draft) => {
     switch (action.type) {
       case 'LOAD_SYNC':
         return action.payload;
@@ -19,21 +18,21 @@ export const syncReducer = (state: SyncState, action: SyncAction): SyncState => 
         break;
       }
       case 'ADD_PENDING_OPS':
-        action.payload.forEach(op => {
-          if (!draft.pendingChanges.some(p => p.id === op.id)) {
+        action.payload.forEach((op) => {
+          if (!draft.pendingChanges.some((p) => p.id === op.id)) {
             draft.pendingChanges.push(op);
           }
         });
         break;
       case 'UPDATE_PENDING_OP': {
-        const op = draft.pendingChanges.find(p => p.id === action.id);
+        const op = draft.pendingChanges.find((p) => p.id === action.id);
         if (op) {
           Object.assign(op, action.updates);
         }
         break;
       }
       case 'REMOVE_PENDING_OP': {
-        const idx = draft.pendingChanges.findIndex(p => p.id === action.id);
+        const idx = draft.pendingChanges.findIndex((p) => p.id === action.id);
         if (idx !== -1) draft.pendingChanges.splice(idx, 1);
         break;
       }
@@ -43,7 +42,7 @@ export const syncReducer = (state: SyncState, action: SyncAction): SyncState => 
         break;
       case 'REMOVE_QUARANTINE_ITEM': {
         if (draft.quarantine) {
-          const idx = draft.quarantine.findIndex(q => q.id === action.id);
+          const idx = draft.quarantine.findIndex((q) => q.id === action.id);
           if (idx !== -1) draft.quarantine.splice(idx, 1);
         }
         break;
@@ -53,7 +52,7 @@ export const syncReducer = (state: SyncState, action: SyncAction): SyncState => 
         if (draft.history.length > 100) draft.history.length = 100;
         break;
       case 'REMOVE_HISTORY_ENTRY': {
-        const idx = draft.history.findIndex(h => h.id === action.id);
+        const idx = draft.history.findIndex((h) => h.id === action.id);
         if (idx !== -1) draft.history.splice(idx, 1);
         break;
       }

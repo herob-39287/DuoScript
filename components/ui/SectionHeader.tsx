@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Styles } from './Styles';
 
@@ -11,7 +10,14 @@ interface SectionHeaderProps {
   action?: React.ReactNode;
 }
 
-export const SectionHeader: React.FC<SectionHeaderProps> = ({ icon, title, subtitle, color = "text-stone-600", className = "", action }) => (
+export const SectionHeader: React.FC<SectionHeaderProps> = ({
+  icon,
+  title,
+  subtitle,
+  color = 'text-stone-600',
+  className = '',
+  action,
+}) => (
   <div className={`flex items-end justify-between ${className}`}>
     <div className="flex flex-col gap-1">
       <div className={`${Styles.text.section} flex items-center gap-2 ${color}`}>
