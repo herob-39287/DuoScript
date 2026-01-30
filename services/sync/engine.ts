@@ -79,7 +79,7 @@ export const applySyncBatch = (
 } => {
   let currentBible = bible;
   let currentChapters = chapters;
-  let currentHistory = [...history];
+  const currentHistory = [...history];
   const historyEntries: HistoryEntry[] = [];
   const failedOps: { op: SyncOperation; error: string }[] = [];
 

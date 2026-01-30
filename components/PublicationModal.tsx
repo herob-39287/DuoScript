@@ -190,7 +190,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
       const locFolder = settingsFolder?.folder('Locations');
       exportData.bible.locations.forEach((l) => {
         const safeName = l.name.replace(/[\\/:*?"<>|]/g, '_');
-        let md = `# ${l.name}\n**Type**: ${l.type}\n\n${l.description}\n`;
+        const md = `# ${l.name}\n**Type**: ${l.type}\n\n${l.description}\n`;
         locFolder?.file(`${safeName}.md`, md);
       });
 
@@ -198,7 +198,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
       const itemFolder = settingsFolder?.folder('Items');
       exportData.bible.keyItems.forEach((i) => {
         const safeName = i.name.replace(/[\\/:*?"<>|]/g, '_');
-        let md = `# ${i.name}\n**Type**: ${i.type}\n\n${i.description}\n`;
+        const md = `# ${i.name}\n**Type**: ${i.type}\n\n${i.description}\n`;
         itemFolder?.file(`${safeName}.md`, md);
       });
 
@@ -206,7 +206,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
       const entryFolder = settingsFolder?.folder('Encyclopedia');
       exportData.bible.entries.forEach((e) => {
         const safeName = e.title.replace(/[\\/:*?"<>|]/g, '_');
-        let md = `# ${e.title}\n**Category**: ${e.category}\n\n${e.content || e.definition}\n`;
+        const md = `# ${e.title}\n**Category**: ${e.category}\n\n${e.content || e.definition}\n`;
         entryFolder?.file(`${safeName}.md`, md);
       });
 
