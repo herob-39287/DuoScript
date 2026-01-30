@@ -1,5 +1,16 @@
 export default {
-  content: ['./index.html', './**/*.{ts,tsx,js,jsx}'],
+  content: [
+    './index.html',
+    './*.{ts,tsx,js,jsx}',
+    './components/**/*.{ts,tsx,js,jsx}',
+    './contexts/**/*.{ts,tsx,js,jsx}',
+    './hooks/**/*.{ts,tsx,js,jsx}',
+    './services/**/*.{ts,tsx,js,jsx}',
+    './store/**/*.{ts,tsx,js,jsx}',
+    './types/**/*.{ts,tsx,js,jsx}',
+    './utils/**/*.{ts,tsx,js,jsx}',
+    './workers/**/*.{ts,tsx,js,jsx}',
+  ],
   theme: {
     extend: {
       colors: {
