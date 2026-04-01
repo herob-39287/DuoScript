@@ -5,6 +5,7 @@ import { getAllProjects, saveProjectRevision } from '../services/storageService'
 import { generateRandomProject } from '../services/geminiService';
 import { useMetadataDispatch, useNotificationDispatch } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
+import { workspaceBundleToProject } from '../services/workspace/import';
 
 interface UseWelcomeLogicProps {
   onStart: (projectData: StoryProject) => void;
@@ -168,8 +169,11 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
       reader.onload = async (event) => {
         try {
           const json = JSON.parse(event.target?.result as string);
-          if (json && (json.title || json.bible || json.chapters || json.meta)) {
-            const p = normalizeProject(json);
+          if (json && (json.title || json.bible || json.chapters || json.meta || json.kind)) {
+            const p =
+              json.kind === 'duoscript.workspace'
+                ? workspaceBundleToProject(normalizeProject({}), json).project
+                : normalizeProject(json);
             p.meta.preferences.uiLanguage = lang;
 
             try {

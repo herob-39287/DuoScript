@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import {
   useManuscript,
   useBible,
   useUI,
-  useManuscriptDispatch,
-  useUIDispatch,
+  useMetadata,
+  useNeuralSync,
+  useProjectDispatchContext,
 } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
 import { useWriterUI } from './useWriterUI';
@@ -14,14 +16,23 @@ import {
   buildChapterDraftFromScenePackages,
   syncChapterContentFromScenePackages,
   validateChapterScenePackages,
-  validateProjectBranches,
 } from '../services/scenePackage';
+import { buildWorkspaceBundle, serializeWorkspaceBundle } from '../services/workspace/export';
+import { workspaceBundleToProject } from '../services/workspace/import';
+import { diffWorkspaceBundles, WorkspaceDiff } from '../services/workspace/diff';
+import { validateProjectBranches as validateProjectBranchesV2 } from '../services/validation/branchValidator';
 
 export const useWriterLogic = () => {
   const chapters = useManuscript();
-  const projectDispatch = useManuscriptDispatch();
+  const projectDispatch = useProjectDispatchContext();
   const bible = useBible();
   const globalUI = useUI();
+  const meta = useMetadata();
+  const sync = useNeuralSync();
+  const [pendingImport, setPendingImport] = useState<{
+    nextProject: { meta: typeof meta; bible: typeof bible; chapters: typeof chapters; sync: typeof sync };
+    diff: WorkspaceDiff;
+  } | null>(null);
 
   // 1. UI Logic
   const ui = useWriterUI();
@@ -44,7 +55,7 @@ export const useWriterLogic = () => {
   });
 
   // --- Handlers ---
-  const branchIssues = validateProjectBranches(chapters, bible);
+  const branchIssues = validateProjectBranchesV2(chapters, bible);
   const activeChapterIssues = editor.activeChapter
     ? validateChapterScenePackages(editor.activeChapter, bible)
     : [];
@@ -143,6 +154,32 @@ export const useWriterLogic = () => {
       }
       editor.setWordCount(draft.length);
     },
+    exportWorkspace: () => {
+      return serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync }));
+    },
+    importWorkspace: (raw: unknown) => {
+      const currentBundle = buildWorkspaceBundle({ meta, bible, chapters, sync });
+      const imported = workspaceBundleToProject(
+        { meta, bible, chapters, sync },
+        raw,
+      );
+      const importedBundle = buildWorkspaceBundle(imported.project);
+      setPendingImport({
+        nextProject: imported.project,
+        diff: diffWorkspaceBundles(currentBundle, importedBundle),
+      });
+    },
+    validateBranches: () => validateProjectBranchesV2(chapters, bible),
+    rebuildDraft: () => actions.buildDraftFromScenePackages(),
+    acceptImportedChanges: () => {
+      if (!pendingImport) return;
+      projectDispatch(Actions.updateMeta(pendingImport.nextProject.meta));
+      projectDispatch(Actions.loadBible(pendingImport.nextProject.bible));
+      projectDispatch(Actions.loadChapters(pendingImport.nextProject.chapters));
+      projectDispatch(Actions.loadSync(pendingImport.nextProject.sync));
+      setPendingImport(null);
+    },
+    rejectImportedChanges: () => setPendingImport(null),
   };
 
   return {
@@ -167,6 +204,8 @@ export const useWriterLogic = () => {
         bible,
         branchIssues,
         activeChapterIssues,
+        pendingImportDiff: pendingImport?.diff || null,
+        hasPendingImport: Boolean(pendingImport),
       },
       status: {
         isProcessing: writerAI.isProcessing,
