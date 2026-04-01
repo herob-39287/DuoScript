@@ -12,7 +12,7 @@ export const useWriterUI = () => {
   const [rightPanelTab, setRightPanelTab] = useState<'plot' | 'bible' | 'branch'>('plot');
   const [mobileTab, setMobileTab] = useState<'none' | 'chapters' | 'rightPanel'>('none');
   const [writerMode, setWriterMode] = useState<
-    'shared_spine' | 'choice_variant' | 'convergence' | 'final_draft'
+    'shared_spine' | 'choice_variant' | 'convergence' | 'validation' | 'final_draft'
   >('final_draft');
 
   const toggleVertical = () => setIsVertical(!isVertical);

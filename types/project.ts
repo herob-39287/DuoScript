@@ -23,6 +23,7 @@ import {
 } from '../services/validation/schemas';
 import { WorldBible } from './bible';
 import { SyncState } from './sync';
+import { WorkspaceBundle } from '../services/workspace/types';
 
 // Enums - defined as const objects to align with Zod string unions
 export const TransmissionScope = {
@@ -71,6 +72,7 @@ export type {
   NodeType,
   ConditionExpression,
   BranchPolicy,
+  WorkspaceBundle,
 };
 
 /**

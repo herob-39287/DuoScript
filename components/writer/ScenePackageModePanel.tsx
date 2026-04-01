@@ -8,7 +8,7 @@ import {
 import { z } from 'zod';
 
 interface ScenePackageModePanelProps {
-  mode: 'shared_spine' | 'choice_variant' | 'convergence' | 'final_draft';
+  mode: 'shared_spine' | 'choice_variant' | 'convergence' | 'validation' | 'final_draft';
   chapter?: ChapterLog;
   onUpdateScenePackage: (
     sceneId: string,
@@ -48,7 +48,7 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
     setEditorError(null);
   }, [activeSceneId, activeScene]);
 
-  if (mode === 'final_draft') return null;
+  if (mode === 'final_draft' || mode === 'validation') return null;
 
   const parseAndValidateArray = <T,>(
     raw: string,
@@ -176,6 +176,37 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
 
       {mode === 'convergence' && (
         <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs text-stone-400">Entry Condition</label>
+            <input
+              value={activeScene.entryConditions || ''}
+              onChange={(e) => {
+                const value = e.target.value || undefined;
+                onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({
+                  ...scenePackage,
+                  entryConditions: value,
+                }));
+              }}
+              className={textInputClass}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-stone-400">Exit Effects (newline)</label>
+            <textarea
+              value={(activeScene.exitEffects || []).join('\n')}
+              onChange={(e) => {
+                const value = e.target.value
+                  .split('\n')
+                  .map((line) => line.trim())
+                  .filter(Boolean);
+                onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({
+                  ...scenePackage,
+                  exitEffects: value,
+                }));
+              }}
+              className={`${textInputClass} min-h-28`}
+            />
+          </div>
           <div className="space-y-1">
             <label className="text-xs text-stone-400">Convergence Target Block</label>
             <input

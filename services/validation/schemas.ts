@@ -118,6 +118,7 @@ export const RouteSchema = z.object({
   revealPolicy: z.string(),
   enabledState: z.boolean(),
 });
+export const RouteDefinitionSchema = RouteSchema;
 
 export const RevealPlanSchema = z.object({
   revealId: ID,
@@ -127,6 +128,7 @@ export const RevealPlanSchema = z.object({
   optionalRevealSceneIds: z.array(z.string()),
   spoilerLevel: z.enum(['Low', 'Medium', 'High']),
 });
+export const RevealPlanDefinitionSchema = RevealPlanSchema;
 
 export const StateAxisSchema = z.object({
   stateKey: z.string(),
@@ -137,6 +139,7 @@ export const StateAxisSchema = z.object({
   max: z.number().optional(),
   usagePurpose: z.string(),
 });
+export const StateAxisDefinitionSchema = StateAxisSchema;
 
 export const BranchPolicySchema = z.object({
   policyId: ID,
@@ -145,6 +148,7 @@ export const BranchPolicySchema = z.object({
   promotionRule: z.string(),
   convergenceRequirement: z.enum(['required', 'optional', 'forbidden']),
 });
+export const BranchPolicyDefinitionSchema = BranchPolicySchema;
 
 export const ChoicePointSchema = z.object({
   choiceId: ID,
@@ -161,6 +165,7 @@ export const ChoicePointSchema = z.object({
   visibilityCondition: ConditionExpressionSchema.optional(),
   availabilityCondition: ConditionExpressionSchema.optional(),
 });
+export const ChoicePointDefinitionSchema = ChoicePointSchema;
 
 export const ReactionVariantSchema = z.object({
   variantId: ID,
@@ -177,6 +182,7 @@ export const ReactionVariantSchema = z.object({
     'normalize_scene_state',
   ]),
 });
+export const ReactionVariantDefinitionSchema = ReactionVariantSchema;
 
 export const ConvergencePointSchema = z.object({
   convergenceId: ID,
@@ -190,6 +196,7 @@ export const ConvergencePointSchema = z.object({
     'normalize_scene_state',
   ]),
 });
+export const ConvergencePointDefinitionSchema = ConvergencePointSchema;
 
 export const ScenePackageSchema = z.object({
   sceneId: ID,
@@ -218,6 +225,7 @@ export const ScenePackageSchema = z.object({
   spoilerLevel: z.enum(['Low', 'Medium', 'High']).optional(),
   status: z.enum(['Idea', 'Drafting', 'Polished']),
 });
+export const ScenePackageDefinitionSchema = ScenePackageSchema;
 
 export const StorySceneSchema = z.object({
   id: ID,
@@ -259,6 +267,20 @@ export const ChapterLogSchema = z.object({
   revealNotes: z.array(z.string()).optional(),
   statePolicies: z.array(z.string()).optional(),
   branchPolicies: z.array(BranchPolicySchema).optional(),
+  validatorIssues: z
+    .array(
+      z.object({
+        code: z.string(),
+        level: z.enum(['error', 'warning']),
+        chapterId: z.string().optional(),
+        sceneId: z.string().optional(),
+        choiceId: z.string().optional(),
+        stateKey: z.string().optional(),
+        message: z.string(),
+      }),
+    )
+    .optional(),
+  codexImportedAt: Timestamp.optional(),
   strategy: ChapterStrategySchema,
   status: z.enum(['Idea', 'Beats', 'Drafting', 'Polished']),
   wordCount: z.number(),
@@ -577,6 +599,46 @@ export const StoryProjectSchema = z.object({
   assets: z.record(z.string()).optional(),
 });
 
+export const WorkspaceBundleSchema = z.object({
+  kind: z.literal('duoscript.workspace'),
+  version: z.number().int().positive(),
+  exportedAt: Timestamp,
+  project: z.object({
+    meta: z.object({
+      id: ID,
+      title: z.string(),
+      author: z.string(),
+      genre: z.string(),
+      language: AppLanguageSchema,
+      updatedAt: Timestamp,
+    }),
+    bible: WorldBibleSchema,
+    chapters: z.array(ChapterLogSchema),
+    vnDesign: z.object({
+      routes: z.array(RouteDefinitionSchema),
+      revealPlans: z.array(RevealPlanSchema),
+      stateAxes: z.array(StateAxisSchema),
+      branchPolicies: z.array(BranchPolicySchema),
+    }),
+    reports: z.array(
+      z.object({
+        generatedAt: Timestamp,
+        issues: z.array(
+          z.object({
+            code: z.string(),
+            level: z.enum(['error', 'warning']),
+            chapterId: z.string().optional(),
+            sceneId: z.string().optional(),
+            choiceId: z.string().optional(),
+            stateKey: z.string().optional(),
+            message: z.string(),
+          }),
+        ),
+      }),
+    ),
+  }),
+});
+
 // --- Export Types from Schemas ---
 
 export type AppLanguage = z.infer<typeof AppLanguageSchema>;
@@ -595,13 +657,21 @@ export type BranchLevel = z.infer<typeof BranchLevelSchema>;
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 export type ConditionExpression = z.infer<typeof ConditionExpressionSchema>;
 export type Route = z.infer<typeof RouteSchema>;
+export type RouteDefinition = Route;
 export type RevealPlan = z.infer<typeof RevealPlanSchema>;
+export type RevealPlanDefinition = RevealPlan;
 export type StateAxis = z.infer<typeof StateAxisSchema>;
+export type StateAxisDefinition = StateAxis;
 export type BranchPolicy = z.infer<typeof BranchPolicySchema>;
+export type BranchPolicyDefinition = BranchPolicy;
 export type ChoicePoint = z.infer<typeof ChoicePointSchema>;
+export type ChoicePointDefinition = ChoicePoint;
 export type ReactionVariant = z.infer<typeof ReactionVariantSchema>;
+export type ReactionVariantDefinition = ReactionVariant;
 export type ConvergencePoint = z.infer<typeof ConvergencePointSchema>;
+export type ConvergencePointDefinition = ConvergencePoint;
 export type ScenePackage = z.infer<typeof ScenePackageSchema>;
+export type ScenePackageDefinition = ScenePackage;
 export type StoryScene = z.infer<typeof StorySceneSchema>;
 export type ChapterStrategy = z.infer<typeof ChapterStrategySchema>;
 export type ForeshadowingLink = z.infer<typeof ForeshadowingLinkSchema>;
@@ -634,6 +704,7 @@ export type Foreshadowing = z.infer<typeof ForeshadowingSchema>;
 export type NexusBranch = z.infer<typeof NexusBranchSchema>;
 export type VectorEntry = z.infer<typeof VectorEntrySchema>;
 export type WorldBible = z.infer<typeof WorldBibleSchema>;
+export type WorkspaceBundle = z.infer<typeof WorkspaceBundleSchema>;
 
 export type StoryProject = z.infer<typeof StoryProjectSchema> & {
   // SyncState is complex and has recursive structures, better typed manually or via separate schema file

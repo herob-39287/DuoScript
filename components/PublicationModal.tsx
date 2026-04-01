@@ -19,6 +19,7 @@ import {
 } from '../services/storageService';
 import { StoryProject } from '../types';
 import JSZip from 'jszip';
+import { buildWorkspaceBundle, serializeWorkspaceBundle } from '../services/workspace/export';
 
 interface Props {
   onClose: () => void;
@@ -238,6 +239,29 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
     }
   };
 
+  const handleDownloadWorkspace = async () => {
+    if (!exportData) return;
+    try {
+      const bundle = buildWorkspaceBundle(exportData);
+      const jsonStr = serializeWorkspaceBundle(bundle);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      const safeTitle = (exportData.meta?.title || 'Untitled').replace(/[\\/:*?"<>|]/g, '_');
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `Workspace_${safeTitle}_v${bundle.version}_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: any) {
+      console.error('Workspace export failed', e);
+      setErrorMsg(`Workspace出力エラー: ${e.message}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-stone-950/90 backdrop-blur-xl flex items-center justify-center z-[1000] p-0 md:p-6">
       <div className="bg-stone-900 w-full md:max-w-5xl h-full md:h-[80vh] md:rounded-3xl border-t md:border border-stone-800 shadow-3xl flex flex-col overflow-hidden animate-fade-in">
@@ -348,6 +372,13 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
                   className="w-full py-4 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40"
                 >
                   <FolderArchive size={14} /> Markdown一括書出し (.zip)
+                </button>
+                <button
+                  onClick={handleDownloadWorkspace}
+                  disabled={!exportData || isPreparing}
+                  className="w-full py-4 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40"
+                >
+                  <FileJson size={14} /> Codex Workspace (.json)
                 </button>
                 <button
                   onClick={handleDownloadFullBackup}

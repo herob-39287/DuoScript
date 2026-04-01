@@ -280,7 +280,7 @@ export const normalizeProject = (data: any): StoryProject => {
       priority: f.priority || 'Medium',
     })),
     routes: safeArray(data?.bible?.routes),
-    revealPlans: safeArray(data?.bible?.revealPlans),
+    revealPlans: safeArray(data?.bible?.revealPlans || data?.bible?.revealPlan),
     stateAxes: safeArray(data?.bible?.stateAxes),
     branchPolicies: safeArray(data?.bible?.branchPolicies),
 
@@ -358,6 +358,9 @@ export const normalizeProject = (data: any): StoryProject => {
             revealNotes: safeArray(c.revealNotes),
             statePolicies: safeArray(c.statePolicies),
             branchPolicies: safeArray(c.branchPolicies),
+            validatorIssues: safeArray(c.validatorIssues),
+            codexImportedAt:
+              typeof c.codexImportedAt === 'number' ? c.codexImportedAt : undefined,
             strategy: {
               milestones: safeArray(c.strategy?.milestones),
               forbiddenResolutions: safeArray(c.strategy?.forbiddenResolutions),
