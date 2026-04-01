@@ -127,7 +127,7 @@ class Tokenizer {
 
   private readString(quote: string): Token {
     this.pos += 1;
-    let start = this.pos;
+    const start = this.pos;
     while (this.pos < this.input.length && this.input[this.pos] !== quote) {
       this.pos += 1;
     }
