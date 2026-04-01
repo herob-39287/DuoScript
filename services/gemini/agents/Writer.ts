@@ -5,18 +5,63 @@ import {
   LogCallback,
   ExtractionResult,
   ChapterPackageResponse,
+  ScenePackage,
 } from '../../../types';
 import { PromptBuilder } from '../promptBuilder';
 import { parseWithSchema, getSafetySettings } from '../utils';
 import * as Prompts from '../prompts';
 import { STRICT_JSON_ENFORCEMENT } from '../prompts/resources';
 import * as Schemas from '../schemas';
-import { ChapterPackageZodSchema } from '../../validation/schemas';
+import {
+  ChapterPackageZodSchema,
+  ChoicePointSchema,
+  ReactionVariantSchema,
+  ConvergencePointSchema,
+} from '../../validation/schemas';
 import { Type } from '@google/genai';
 import { z } from 'zod';
 import { AI_MODELS, TOKEN_LIMITS } from '../../../constants';
 import { BaseAgent } from './BaseAgent';
 import { GeminiClient } from '../core';
+import { zodToGeminiSchema } from '../schemaConverter';
+
+const SharedSpineStageSchema = z.object({
+  scenePackages: z.array(
+    z.object({
+      sceneId: z.string(),
+      purpose: z.string(),
+      mandatoryInfo: z.array(z.string()).default([]),
+      sharedSpine: z.object({
+        intro: z.string(),
+        conflict: z.string(),
+        deepen: z.string(),
+        preChoiceBeat: z.string(),
+        close: z.string(),
+      }),
+    }),
+  ),
+});
+
+const VariantStageSchema = z.object({
+  scenePackages: z.array(
+    z.object({
+      sceneId: z.string(),
+      choicePoints: z.array(ChoicePointSchema).default([]),
+      reactionVariants: z.array(ReactionVariantSchema).default([]),
+      carryoverStateChanges: z.array(z.string()).default([]),
+    }),
+  ),
+});
+
+const ConvergenceStageSchema = z.object({
+  scenePackages: z.array(
+    z.object({
+      sceneId: z.string(),
+      convergencePoint: ConvergencePointSchema.optional(),
+    }),
+  ),
+  content: z.string().optional(),
+});
 
 export class WriterAgent extends BaseAgent {
   constructor(client: GeminiClient) {
@@ -172,6 +217,90 @@ export class WriterAgent extends BaseAgent {
           'Writer',
           Schemas.DEFAULT_RESPONSES.CHAPTER_PACKAGE,
         ),
+    });
+  }
+
+  async generateSharedSpineStage(
+    project: StoryProject,
+    chapter: ChapterLog,
+    onUsage: UsageCallback,
+    logCallback: LogCallback,
+  ): Promise<z.infer<typeof SharedSpineStageSchema>> {
+    const lang = project.meta.language || 'ja';
+    const storyData = PromptBuilder.buildFocalData(project, [], chapter.id);
+    const prompt = `【STORY_DATA(JSON)】\n${storyData}\n\n章「${chapter.title}」のScenePackageについて、sharedSpineのみを生成してください。\n必ずJSONのみで返し、scenePackages[].sharedSpine(intro/conflict/deepen/preChoiceBeat/close)を埋めてください。`;
+
+    return this.client.request({
+      model: AI_MODELS.REASONING,
+      contents: prompt,
+      config: {
+        systemInstruction: `${Prompts.WRITER_MTP(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
+        responseMimeType: 'application/json',
+        responseSchema: zodToGeminiSchema(SharedSpineStageSchema),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM },
+      },
+      usageLabel: 'Writer/Stage1SharedSpine',
+      onUsage,
+      logCallback,
+      mapper: (res) =>
+        parseWithSchema(res.text, SharedSpineStageSchema, 'WriterStage1', { scenePackages: [] }),
+    });
+  }
+
+  async generateVariantStage(
+    project: StoryProject,
+    chapter: ChapterLog,
+    scenePackages: ScenePackage[],
+    onUsage: UsageCallback,
+    logCallback: LogCallback,
+  ): Promise<z.infer<typeof VariantStageSchema>> {
+    const lang = project.meta.language || 'ja';
+    const prompt = `章「${chapter.title}」のScenePackageに対してchoicePoints/reactionVariantsのみ生成してください。\n入力: ${JSON.stringify(scenePackages)}\n\nJSONのみ返してください。`;
+
+    return this.client.request({
+      model: AI_MODELS.REASONING,
+      contents: prompt,
+      config: {
+        systemInstruction: `${Prompts.WRITER_MTP(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
+        responseMimeType: 'application/json',
+        responseSchema: zodToGeminiSchema(VariantStageSchema),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM },
+      },
+      usageLabel: 'Writer/Stage2Variants',
+      onUsage,
+      logCallback,
+      mapper: (res) =>
+        parseWithSchema(res.text, VariantStageSchema, 'WriterStage2', { scenePackages: [] }),
+    });
+  }
+
+  async generateConvergenceStage(
+    project: StoryProject,
+    chapter: ChapterLog,
+    scenePackages: ScenePackage[],
+    onUsage: UsageCallback,
+    logCallback: LogCallback,
+  ): Promise<z.infer<typeof ConvergenceStageSchema>> {
+    const lang = project.meta.language || 'ja';
+    const prompt = `章「${chapter.title}」について、convergencePointと最終整文contentを生成してください。\n入力: ${JSON.stringify(scenePackages)}\n\nJSONのみ返してください。`;
+
+    return this.client.request({
+      model: AI_MODELS.REASONING,
+      contents: prompt,
+      config: {
+        systemInstruction: `${Prompts.WRITER_MTP(lang)}\n\n${STRICT_JSON_ENFORCEMENT}`,
+        responseMimeType: 'application/json',
+        responseSchema: zodToGeminiSchema(ConvergenceStageSchema),
+        thinkingConfig: { thinkingBudget: TOKEN_LIMITS.THINKING_MEDIUM },
+      },
+      usageLabel: 'Writer/Stage3ConvergencePolish',
+      onUsage,
+      logCallback,
+      mapper: (res) =>
+        parseWithSchema(res.text, ConvergenceStageSchema, 'WriterStage3', {
+          scenePackages: [],
+          content: '',
+        }),
     });
   }
 }

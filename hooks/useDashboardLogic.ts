@@ -26,6 +26,7 @@ import { normalizeProject } from '../services/bibleManager';
 import { AssetMetadata, BibleIssue, ViewMode } from '../types';
 import { translateSafetyCategory } from '../services/gemini/utils';
 import { t } from '../utils/i18n';
+import { validateChapterScenePackages, validateProjectBranches } from '../services/scenePackage';
 
 export const useDashboardLogic = () => {
   const meta = useMetadata();
@@ -254,6 +255,12 @@ export const useDashboardLogic = () => {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [characters]);
 
+  const branchIssues = useMemo(() => validateProjectBranches(chapters, bible), [chapters, bible]);
+  const chapterRuleIssues = useMemo(
+    () => chapters.flatMap((chapter) => validateChapterScenePackages(chapter, bible)),
+    [chapters, bible],
+  );
+
   // --- Actions ---
 
   useEffect(() => {
@@ -384,6 +391,8 @@ export const useDashboardLogic = () => {
       summaryBuffer: foundation?.summaryBuffer,
       history,
       headRev,
+      branchIssues,
+      chapterRuleIssues,
     },
     ui: {
       isScanning,

@@ -3,6 +3,9 @@ import {
   generateDraftStream,
   suggestNextSentence,
   generateFullChapterPackage,
+  generateSharedSpineStage,
+  generateVariantStage,
+  generateConvergenceStage,
   getSafetyAlternatives,
   scanDraftAppSettings,
   getArchitectWhisper,
@@ -393,6 +396,89 @@ export const useWriterAI = ({
     [isProcessing, textareaRef, ui.isContextActive, uiDispatch, addLog, setWordCount, metaDispatch],
   );
 
+  const generateThreeStageDraft = useCallback(async () => {
+    const project = projectRef.current;
+    const activeChapter = getResolvedChapter(project);
+    if (!activeChapter || isProcessing) return;
+
+    setIsProcessing(true);
+    uiDispatch(Actions.setThinkingPhase('Stage1: Shared Spine...'));
+
+    try {
+      const stage1 = await generateSharedSpineStage(
+        project,
+        activeChapter,
+        (u) => metaDispatch(Actions.trackUsage(u)),
+        addLog,
+      );
+
+      const baseScenePackages = (activeChapter.scenePackages || []).map((scenePackage) => {
+        const next = stage1.scenePackages.find((s) => s.sceneId === scenePackage.sceneId);
+        return next
+          ? {
+              ...scenePackage,
+              purpose: next.purpose,
+              mandatoryInfo: next.mandatoryInfo,
+              sharedSpine: next.sharedSpine,
+            }
+          : scenePackage;
+      });
+
+      uiDispatch(Actions.setThinkingPhase('Stage2: Variants...'));
+      const stage2 = await generateVariantStage(
+        project,
+        { ...activeChapter, scenePackages: baseScenePackages },
+        baseScenePackages,
+        (u) => metaDispatch(Actions.trackUsage(u)),
+        addLog,
+      );
+
+      const withVariants = baseScenePackages.map((scenePackage) => {
+        const next = stage2.scenePackages.find((s) => s.sceneId === scenePackage.sceneId);
+        return next
+          ? {
+              ...scenePackage,
+              choicePoints: next.choicePoints,
+              reactionVariants: next.reactionVariants,
+              carryoverStateChanges: next.carryoverStateChanges,
+            }
+          : scenePackage;
+      });
+
+      uiDispatch(Actions.setThinkingPhase('Stage3: Convergence & Polish...'));
+      const stage3 = await generateConvergenceStage(
+        project,
+        { ...activeChapter, scenePackages: withVariants },
+        withVariants,
+        (u) => metaDispatch(Actions.trackUsage(u)),
+        addLog,
+      );
+
+      const polishedPackages = withVariants.map((scenePackage) => {
+        const next = stage3.scenePackages.find((s) => s.sceneId === scenePackage.sceneId);
+        return next?.convergencePoint
+          ? { ...scenePackage, convergencePoint: next.convergencePoint }
+          : scenePackage;
+      });
+
+      const nextContent = stage3.content || textareaRef.current?.value || '';
+      projectDispatch(
+        Actions.updateChapter(activeChapter.id, {
+          scenePackages: polishedPackages,
+          content: nextContent,
+        }),
+      );
+      if (textareaRef.current) textareaRef.current.value = nextContent;
+      setWordCount(nextContent.length);
+      addLog('success', 'Writer', '3段階生成が完了しました。');
+    } catch (e) {
+      addLog('error', 'Writer', '3段階生成に失敗しました。');
+    } finally {
+      setIsProcessing(false);
+      uiDispatch(Actions.setThinkingPhase(null));
+    }
+  }, [isProcessing, uiDispatch, metaDispatch, addLog, projectDispatch, textareaRef, setWordCount]);
+
   return {
     isProcessing,
     processingBeatId,
@@ -407,6 +493,7 @@ export const useWriterAI = ({
     suggestNext,
     applySuggestion,
     streamDraft,
+    generateThreeStageDraft,
     scanDraft,
     triggerWhisper,
     analyzeContext,

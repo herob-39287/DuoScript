@@ -2,6 +2,8 @@ import React from 'react';
 import { ChapterNavigation } from './ChapterNavigation';
 import { PlotReference } from './PlotReference';
 import { MiniBible } from './MiniBible';
+import { BranchIssuesPanel } from './BranchIssuesPanel';
+import { BranchValidationIssue, ChapterRuleIssue } from '../../services/scenePackage';
 import { Styles } from '../ui/DesignSystem';
 import { Zap, Book } from 'lucide-react';
 import { ChapterLog, PlotBeat, WhisperAdvice } from '../../types';
@@ -16,8 +18,8 @@ interface MobileDrawersProps {
     onAddChapter: () => void;
   };
   rightPanelProps: {
-    rightPanelTab: 'plot' | 'bible';
-    setRightPanelTab: (tab: 'plot' | 'bible') => void;
+    rightPanelTab: 'plot' | 'bible' | 'branch';
+    setRightPanelTab: (tab: 'plot' | 'bible' | 'branch') => void;
     plotProps: {
       beats: PlotBeat[];
       whisper: WhisperAdvice | null;
@@ -30,6 +32,10 @@ interface MobileDrawersProps {
     };
     miniBibleProps: {
       onInsert: (text: string) => void;
+    };
+    branchProps: {
+      issues: BranchValidationIssue[];
+      chapterIssues: ChapterRuleIssue[];
     };
   };
 }
@@ -80,6 +86,12 @@ export const MobileDrawers: React.FC<MobileDrawersProps> = ({
               >
                 <Book size={14} /> Bible
               </button>
+              <button
+                onClick={() => rightPanelProps.setRightPanelTab('branch')}
+                className={`flex-1 py-4 ${Styles.text.label} flex items-center justify-center gap-2 transition-colors ${rightPanelProps.rightPanelTab === 'branch' ? 'text-orange-400 bg-stone-900' : 'text-stone-500'}`}
+              >
+                Branch
+              </button>
             </div>
 
             {rightPanelProps.rightPanelTab === 'plot' ? (
@@ -88,8 +100,10 @@ export const MobileDrawers: React.FC<MobileDrawersProps> = ({
                 className="flex-1 overflow-hidden"
                 onClose={onClose}
               />
-            ) : (
+            ) : rightPanelProps.rightPanelTab === 'bible' ? (
               <MiniBible {...rightPanelProps.miniBibleProps} className="flex-1 overflow-hidden" />
+            ) : (
+              <BranchIssuesPanel {...rightPanelProps.branchProps} />
             )}
           </div>
         </div>

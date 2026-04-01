@@ -12,6 +12,7 @@ import { SafetyMonitor } from './dashboard/SafetyMonitor';
 import { AssetLibrary } from './dashboard/AssetLibrary';
 import { AtelierLog } from './dashboard/AtelierLog';
 import { HistoryModal } from './HistoryModal';
+import { BranchIssuesPanel } from './writer/BranchIssuesPanel';
 
 interface Props {
   onOpenPublication: () => void;
@@ -113,6 +114,19 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication, onExit }) => {
           onClearLogs={actions.handleClearLogs}
           lang={ui.lang}
         />
+
+        {/* Branch Issues */}
+        <section className="rounded-3xl border border-white/5 bg-stone-900/40 p-4 md:p-6">
+          <h3 className="text-xs font-black uppercase tracking-widest text-stone-400 mb-3">
+            Branch Issues
+          </h3>
+          <div className="h-80">
+            <BranchIssuesPanel
+              issues={data.branchIssues}
+              chapterIssues={data.chapterRuleIssues}
+            />
+          </div>
+        </section>
       </div>
 
       <HistoryModal
