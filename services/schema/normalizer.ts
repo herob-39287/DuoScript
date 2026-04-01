@@ -359,8 +359,7 @@ export const normalizeProject = (data: any): StoryProject => {
             statePolicies: safeArray(c.statePolicies),
             branchPolicies: safeArray(c.branchPolicies),
             validatorIssues: safeArray(c.validatorIssues),
-            codexImportedAt:
-              typeof c.codexImportedAt === 'number' ? c.codexImportedAt : undefined,
+            codexImportedAt: typeof c.codexImportedAt === 'number' ? c.codexImportedAt : undefined,
             strategy: {
               milestones: safeArray(c.strategy?.milestones),
               forbiddenResolutions: safeArray(c.strategy?.forbiddenResolutions),
