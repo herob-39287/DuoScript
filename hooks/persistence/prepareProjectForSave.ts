@@ -17,15 +17,15 @@ export type SavePreparationResult = {
   blockingIssues: SaveValidationIssue[];
 };
 
-const toIssue = (
-  issue: { level: 'error' | 'warning'; message: string },
-): SaveValidationIssue => ({
+const toIssue = (issue: { level: 'error' | 'warning'; message: string }): SaveValidationIssue => ({
   level: issue.level,
   message: issue.message,
 });
 
 export const prepareProjectForSave = (project: StoryProject): SavePreparationResult => {
-  const syncedChapters = project.chapters.map((chapter) => syncChapterContentFromScenePackages(chapter));
+  const syncedChapters = project.chapters.map((chapter) =>
+    syncChapterContentFromScenePackages(chapter),
+  );
 
   const didSyncChapterContent = syncedChapters.some(
     (chapter, idx) => chapter.content !== project.chapters[idx].content,
@@ -38,9 +38,7 @@ export const prepareProjectForSave = (project: StoryProject): SavePreparationRes
   const issues = [...chapterIssues, ...projectIssues];
   const blockingIssues = issues.filter((issue) => issue.level === 'error');
 
-  const projectToSave = didSyncChapterContent
-    ? { ...project, chapters: syncedChapters }
-    : project;
+  const projectToSave = didSyncChapterContent ? { ...project, chapters: syncedChapters } : project;
 
   return {
     projectToSave,
@@ -49,4 +47,3 @@ export const prepareProjectForSave = (project: StoryProject): SavePreparationRes
     blockingIssues,
   };
 };
-

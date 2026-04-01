@@ -3,8 +3,49 @@ import { prepareProjectForSave } from './prepareProjectForSave';
 
 const createProject = () =>
   ({
-    meta: { id: 'p1', title: 'P1', author: 'a', language: 'ja', createdAt: 0, updatedAt: 0, headRev: 0, preferences: { appLanguage: 'ja', transmissionScope: 'FULL', safetyPreset: 'STRICT', aiPersona: 'STANDARD', autoSave: true, useCloudSync: false, defaultGenerativeModel: 'gemini-2.5-pro', defaultImageModel: 'imagen-3.0-generate-002', editorSettings: { fontSize: 16, lineHeight: 1.7, letterSpacing: 0.04, preferredFont: 'sans', writingWidth: 42, vertical: false } }, tokenUsage: [], safetyViolations: [] },
-    bible: { stateAxes: [{ stateKey: 'trust_a', scope: 'scene', type: 'number', defaultValue: 0, min: 0, max: 10, usagePurpose: 'test' }], revealPlans: [] },
+    meta: {
+      id: 'p1',
+      title: 'P1',
+      author: 'a',
+      language: 'ja',
+      createdAt: 0,
+      updatedAt: 0,
+      headRev: 0,
+      preferences: {
+        appLanguage: 'ja',
+        transmissionScope: 'FULL',
+        safetyPreset: 'STRICT',
+        aiPersona: 'STANDARD',
+        autoSave: true,
+        useCloudSync: false,
+        defaultGenerativeModel: 'gemini-2.5-pro',
+        defaultImageModel: 'imagen-3.0-generate-002',
+        editorSettings: {
+          fontSize: 16,
+          lineHeight: 1.7,
+          letterSpacing: 0.04,
+          preferredFont: 'sans',
+          writingWidth: 42,
+          vertical: false,
+        },
+      },
+      tokenUsage: [],
+      safetyViolations: [],
+    },
+    bible: {
+      stateAxes: [
+        {
+          stateKey: 'trust_a',
+          scope: 'scene',
+          type: 'number',
+          defaultValue: 0,
+          min: 0,
+          max: 10,
+          usagePurpose: 'test',
+        },
+      ],
+      revealPlans: [],
+    },
     sync: { chatHistory: [], memory: '', pendingOps: [], quarantine: [], history: [] },
     chapters: [
       {
@@ -13,7 +54,12 @@ const createProject = () =>
         summary: '',
         scenes: [],
         beats: [],
-        strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' },
+        strategy: {
+          milestones: [],
+          forbiddenResolutions: [],
+          characterArcProgress: '',
+          pacing: '',
+        },
         status: 'Idea',
         wordCount: 0,
         draftVersion: 0,
@@ -68,6 +114,8 @@ describe('prepareProjectForSave', () => {
     const prepared = prepareProjectForSave(project);
 
     expect(prepared.blockingIssues.length).toBeGreaterThan(0);
-    expect(prepared.blockingIssues.some((issue) => issue.message.includes('local_branch'))).toBe(true);
+    expect(prepared.blockingIssues.some((issue) => issue.message.includes('local_branch'))).toBe(
+      true,
+    );
   });
 });

@@ -81,7 +81,9 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
   return (
     <div className="mb-4 rounded-2xl border border-white/10 bg-stone-900/60 p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] uppercase tracking-widest text-stone-500 font-black">Scene Package</span>
+        <span className="text-[10px] uppercase tracking-widest text-stone-500 font-black">
+          Scene Package
+        </span>
         <select
           value={activeSceneId}
           onChange={(e) => setActiveSceneId(e.target.value)}
@@ -97,13 +99,15 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
 
       {mode === 'shared_spine' && (
         <div className="space-y-3">
-          {([
-            ['intro', '導入'],
-            ['conflict', '対立'],
-            ['deepen', '掘り下げ'],
-            ['preChoiceBeat', '選択前の溜め'],
-            ['close', '締め'],
-          ] as const).map(([key, label]) => (
+          {(
+            [
+              ['intro', '導入'],
+              ['conflict', '対立'],
+              ['deepen', '掘り下げ'],
+              ['preChoiceBeat', '選択前の溜め'],
+              ['close', '締め'],
+            ] as const
+          ).map(([key, label]) => (
             <div key={key} className="space-y-1">
               <label className="text-xs text-stone-400">{label}</label>
               <textarea
@@ -136,10 +140,10 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
                 setChoiceJson(value);
                 const parsed = parseAndValidateArray(value, ChoicePointSchema, 'ChoicePoints');
                 if (!parsed) return;
-                  onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({
-                    ...scenePackage,
-                    choicePoints: parsed,
-                  }));
+                onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({
+                  ...scenePackage,
+                  choicePoints: parsed,
+                }));
               }}
               className={`${textInputClass} min-h-64 font-mono text-xs`}
             />
@@ -151,12 +155,16 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
               onChange={(e) => {
                 const value = e.target.value;
                 setVariantJson(value);
-                const parsed = parseAndValidateArray(value, ReactionVariantSchema, 'ReactionVariants');
+                const parsed = parseAndValidateArray(
+                  value,
+                  ReactionVariantSchema,
+                  'ReactionVariants',
+                );
                 if (!parsed) return;
-                  onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({
-                    ...scenePackage,
-                    reactionVariants: parsed,
-                  }));
+                onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({
+                  ...scenePackage,
+                  reactionVariants: parsed,
+                }));
               }}
               className={`${textInputClass} min-h-64 font-mono text-xs`}
             />

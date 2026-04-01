@@ -88,7 +88,10 @@ const validateConditionTypeSafety = (
 ): ChapterRuleIssue[] => {
   const conditions = [
     scene.entryConditions,
-    ...scene.choicePoints.flatMap((choice) => [choice.visibilityCondition, choice.availabilityCondition]),
+    ...scene.choicePoints.flatMap((choice) => [
+      choice.visibilityCondition,
+      choice.availabilityCondition,
+    ]),
   ].filter(Boolean) as string[];
 
   return conditions.flatMap((condition) =>

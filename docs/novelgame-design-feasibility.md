@@ -22,6 +22,7 @@
 「演出差分 / 感情差分 / 局所会話分岐 / 構造分岐」の4階層を直接表現できません。
 
 **必要対応:**
+
 - `branchLevel`（A/B/C/D相当）を Choice 単位に持たせる
 - C（局所会話分岐）は `scene` 内部ノードとして表現し `merge` を必須化
 - D（構造分岐）のみ Route Graph を更新
@@ -32,6 +33,7 @@
 `Route`, `RevealPlan`, `StateAxis`, `BranchPolicy` を機械処理前提で保持する構造が不足しています。
 
 **必要対応:**
+
 - Bible 拡張に `routes[]`, `revealPlans[]`, `stateAxes[]`, `branchPolicies[]` を追加
 - `unlockConditions` などを自然文ではなく式AST or DSL文字列で保持
 
@@ -41,6 +43,7 @@
 局所差分だけ再生成する運用に弱いです。
 
 **必要対応:**
+
 - Stage1: `sharedSpine` だけ生成
 - Stage2: `reactionVariants` だけ生成
 - Stage3: `convergencePoint` を踏まえて統合整文
@@ -51,6 +54,7 @@
 保存前/生成前のバリデーションが必要です。
 
 **必要対応:**
+
 - グラフ整合チェック（到達不能ノード、merge欠落、ループ検知）
 - 条件式型チェック（未知 stateKey / 型不一致）
 - 分岐昇格ルールチェック（BranchPolicy準拠）
@@ -74,6 +78,7 @@
   - `convergencePoint`
 
 **互換戦略:**
+
 - 既存 `StoryScene` は残し、`ScenePackage` を optional で共存
 - マイグレーションで旧 `StoryScene` から最小 `ScenePackage` を自動生成
 
@@ -86,6 +91,7 @@
 - Type checker（`knowledge` に数値比較していないか等を検知）
 
 **実装優先:**
+
 - v1は文字列DSL + 安全な独自パーサ（`eval`不使用）
 - v2でUI式ビルダー導入（非エンジニア向け）
 
@@ -193,6 +199,7 @@
 ### 9.1 Architect
 
 **担当:**
+
 - 物語骨格
 - 章構成
 - ルート大枠
@@ -202,6 +209,7 @@
 ### 9.2 Route Planner
 
 **担当:**
+
 - 分岐点設計
 - エンド条件設計
 - `unlockConditions` 設計
@@ -210,6 +218,7 @@
 ### 9.3 Scene Designer
 
 **担当:**
+
 - beat → scene package 変換
 - `purpose` 定義
 - `mandatoryInfo` 定義
@@ -218,6 +227,7 @@
 ### 9.4 Scene Reaction Designer
 
 **担当:**
+
 - `choicePoints` 設計
 - `intentTag` 設計
 - `reactionVariants` 設計
@@ -226,6 +236,7 @@
 ### 9.5 Writer
 
 **担当:**
+
 - Shared Spine 本文化
 - Reaction Variant 本文化
 - 最終整文
@@ -233,6 +244,7 @@
 ### 9.6 Analysis / Validator
 
 **担当:**
+
 - 設定整合性
 - 口調整合性
 - 情報開示過多/不足
@@ -241,6 +253,7 @@
 ### 9.7 Branch Validator
 
 **担当:**
+
 - 到達不能分岐検出
 - 条件衝突検出
 - 未使用状態検出

@@ -51,7 +51,9 @@ export const syncChapterContentFromScenePackages = (chapter: ChapterLog): Chapte
   };
 };
 
-export const detectChapterContentDrift = (chapter: ChapterLog): {
+export const detectChapterContentDrift = (
+  chapter: ChapterLog,
+): {
   hasDrift: boolean;
   canonicalContent: string;
 } => {

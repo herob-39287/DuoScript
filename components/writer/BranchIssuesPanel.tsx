@@ -47,7 +47,9 @@ export const BranchIssuesPanel: React.FC<BranchIssuesPanelProps> = ({ issues, ch
   return (
     <div className="flex flex-col h-full bg-stone-900/40">
       <div className="p-4 border-b border-white/5">
-        <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Branch Issues</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+          Branch Issues
+        </p>
         <div className="mt-2 flex items-center gap-2">
           <select
             value={levelFilter}

@@ -288,7 +288,14 @@ export const generateVariantStage = (
   scenePackages: ScenePackage[],
   onUsage: UsageCallback,
   logCb: LogCallback,
-) => defaultService.writerAgent.generateVariantStage(project, chapter, scenePackages as any, onUsage, logCb);
+) =>
+  defaultService.writerAgent.generateVariantStage(
+    project,
+    chapter,
+    scenePackages as any,
+    onUsage,
+    logCb,
+  );
 
 export const generateConvergenceStage = (
   project: StoryProject,

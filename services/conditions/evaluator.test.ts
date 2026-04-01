@@ -10,13 +10,10 @@ import {
 
 describe('condition evaluator (P2)', () => {
   it('evaluates numeric and boolean conditions', () => {
-    const result = evaluateConditionExpression(
-      'trust_A >= 3 AND flag_confession_seen == true',
-      {
-        scene: { trust_A: 4 },
-        global: { flag_confession_seen: true },
-      },
-    );
+    const result = evaluateConditionExpression('trust_A >= 3 AND flag_confession_seen == true', {
+      scene: { trust_A: 4 },
+      global: { flag_confession_seen: true },
+    });
 
     expect(result).toBe(true);
   });
@@ -31,10 +28,13 @@ describe('condition evaluator (P2)', () => {
   });
 
   it('supports grouping and NOT', () => {
-    const result = evaluateConditionExpression('NOT (knowledge.weapon == true OR affinity.Alice < 2)', {
-      knowledge: { weapon: false },
-      affinity: { Alice: 5 },
-    });
+    const result = evaluateConditionExpression(
+      'NOT (knowledge.weapon == true OR affinity.Alice < 2)',
+      {
+        knowledge: { weapon: false },
+        affinity: { Alice: 5 },
+      },
+    );
 
     expect(result).toBe(true);
   });
