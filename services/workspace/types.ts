@@ -29,7 +29,10 @@ export type WorkspaceBundle = {
   version: number;
   exportedAt: number;
   project: {
-    meta: Pick<StoryProjectMetadata, 'id' | 'title' | 'author' | 'genre' | 'language' | 'updatedAt'>;
+    meta: Pick<
+      StoryProjectMetadata,
+      'id' | 'title' | 'author' | 'genre' | 'language' | 'updatedAt'
+    >;
     bible: WorldBible;
     chapters: ChapterLog[];
     vnDesign: WorkspaceVNDesign;

@@ -30,7 +30,12 @@ export const useWriterLogic = () => {
   const meta = useMetadata();
   const sync = useNeuralSync();
   const [pendingImport, setPendingImport] = useState<{
-    nextProject: { meta: typeof meta; bible: typeof bible; chapters: typeof chapters; sync: typeof sync };
+    nextProject: {
+      meta: typeof meta;
+      bible: typeof bible;
+      chapters: typeof chapters;
+      sync: typeof sync;
+    };
     diff: WorkspaceDiff;
   } | null>(null);
 
@@ -159,10 +164,7 @@ export const useWriterLogic = () => {
     },
     importWorkspace: (raw: unknown) => {
       const currentBundle = buildWorkspaceBundle({ meta, bible, chapters, sync });
-      const imported = workspaceBundleToProject(
-        { meta, bible, chapters, sync },
-        raw,
-      );
+      const imported = workspaceBundleToProject({ meta, bible, chapters, sync }, raw);
       const importedBundle = buildWorkspaceBundle(imported.project);
       setPendingImport({
         nextProject: imported.project,
