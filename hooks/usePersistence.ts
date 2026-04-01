@@ -10,6 +10,7 @@ import {
   getSyncChannel,
 } from '../services/storageService';
 import { normalizeProject } from '../services/bibleManager';
+import { prepareProjectForSave } from './persistence/prepareProjectForSave';
 
 /**
  * Checks if there are meaningful changes between two project states.
@@ -50,6 +51,7 @@ export const usePersistence = (
   const isSaving = useRef(false);
   const pendingSaveRef = useRef<StoryProject | null>(null);
   const hasConflict = useRef(false);
+  const lastValidationDigestRef = useRef<string>('');
 
   // Track active project ID to detect switches
   const activeProjectIdRef = useRef<string | null>(null);
@@ -77,19 +79,50 @@ export const usePersistence = (
       uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
 
       try {
+        const prep = prepareProjectForSave(proj);
+        if (prep.didSyncChapterContent) {
+          projectDispatch({ type: 'LOAD_CHAPTERS', payload: prep.projectToSave.chapters });
+        }
+
+        if (prep.blockingIssues.length > 0) {
+          const digest = prep.blockingIssues.map((issue) => issue.message).join('\n');
+          if (lastValidationDigestRef.current !== digest) {
+            lastValidationDigestRef.current = digest;
+            const preview = prep.blockingIssues
+              .slice(0, 3)
+              .map((issue, idx) => `${idx + 1}. ${issue.message}`)
+              .join('\n');
+
+            uiDispatch({
+              type: 'OPEN_DIALOG',
+              payload: {
+                isOpen: true,
+                type: 'alert',
+                title: '分岐検証エラー',
+                message: `保存前検証で ${prep.blockingIssues.length} 件のエラーを検出しました。\n\n${preview}`,
+              },
+            });
+          }
+
+          uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
+          return;
+        }
+
+        lastValidationDigestRef.current = '';
+
         // Use the ref value instead of the potentially stale state value
         const expectedRev = currentHeadRevRef.current;
-        const nextRev = await saveProjectRevision(proj, expectedRev);
+        const nextRev = await saveProjectRevision(prep.projectToSave, expectedRev);
 
         // Update our authoritative headRev ref
         currentHeadRevRef.current = nextRev;
 
-        const updatedMeta = { ...proj.meta, headRev: nextRev };
+        const updatedMeta = { ...prep.projectToSave.meta, headRev: nextRev };
         projectDispatch({ type: 'UPDATE_META', payload: { headRev: nextRev } });
-        localStorage.setItem('duoscript_active_id', proj.meta.id);
+        localStorage.setItem('duoscript_active_id', prep.projectToSave.meta.id);
 
         // Update stable ref with the state that was just saved (including new rev)
-        lastSavedStateRef.current = { ...proj, meta: updatedMeta };
+        lastSavedStateRef.current = { ...prep.projectToSave, meta: updatedMeta };
 
         uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saved' });
         setTimeout(() => uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' }), 2000);
@@ -140,6 +173,17 @@ export const usePersistence = (
         isSaving.current = true; // Block other saves
         uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'saving' });
         try {
+          const prep = prepareProjectForSave(project);
+          if (prep.didSyncChapterContent) {
+            projectDispatch({ type: 'LOAD_CHAPTERS', payload: prep.projectToSave.chapters });
+          }
+
+          if (prep.blockingIssues.length > 0) {
+            uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
+            uiDispatch({ type: 'SET_FORCE_SAVE_REQUESTED', payload: false });
+            return;
+          }
+
           // 1. Fetch latest head revision from DB (Truth source)
           const latestRev = await getHeadRev(project.meta.id);
 
@@ -147,14 +191,17 @@ export const usePersistence = (
           // We pass latestRev as 'expectedRev' to saveProjectRevision.
           // This creates a new revision on top of the remote head, effectively forcing our local state
           // to become the newest version, overwriting any concurrent changes logic-wise (but preserving history).
-          const nextRev = await saveProjectRevision(project, latestRev);
+          const nextRev = await saveProjectRevision(prep.projectToSave, latestRev);
 
           // 3. Update local state
           currentHeadRevRef.current = nextRev;
           projectDispatch({ type: 'UPDATE_META', payload: { headRev: nextRev } });
 
           // 4. Update stable ref to prevent immediate auto-save trigger
-          const rebasedProject = { ...project, meta: { ...project.meta, headRev: nextRev } };
+          const rebasedProject = {
+            ...prep.projectToSave,
+            meta: { ...prep.projectToSave.meta, headRev: nextRev },
+          };
           lastSavedStateRef.current = rebasedProject;
 
           // 5. Reset Conflict Flags

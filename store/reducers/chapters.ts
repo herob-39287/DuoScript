@@ -1,5 +1,6 @@
 import { produce } from 'immer';
 import { ChapterLog, ChapterAction, BibleAction } from '../../types';
+import { syncChapterContentFromScenePackages } from '../../services/scenePackage';
 
 export const chaptersReducer = (
   state: ChapterLog[],
@@ -13,7 +14,11 @@ export const chaptersReducer = (
         const chapter = draft.find((c) => c.id === action.id);
         if (chapter) {
           Object.assign(chapter, action.updates);
-          if (action.updates.content !== undefined) {
+          if (action.updates.scenePackages !== undefined) {
+            const synced = syncChapterContentFromScenePackages(chapter as ChapterLog);
+            chapter.content = synced.content;
+            chapter.wordCount = synced.wordCount;
+          } else if (action.updates.content !== undefined) {
             chapter.wordCount = action.updates.content.length;
           }
           chapter.updatedAt = Date.now();
@@ -30,7 +35,7 @@ export const chaptersReducer = (
         break;
       }
       case 'ADD_CHAPTER':
-        draft.push(action.payload);
+        draft.push(syncChapterContentFromScenePackages(action.payload));
         break;
       case 'REMOVE_CHAPTER': {
         const idx = draft.findIndex((c) => c.id === action.id);

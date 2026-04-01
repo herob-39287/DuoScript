@@ -10,6 +10,7 @@ import {
   NexusBranch,
   WhisperAdvice,
   SyncOperation,
+  ScenePackage,
   CreatorContext,
   VisualContext,
 } from '../../types';
@@ -273,6 +274,36 @@ export const generateFullChapterPackage = (
   onUsage: UsageCallback,
   logCb: LogCallback,
 ) => defaultService.writerAgent.generatePackage(project, chapter, onUsage, logCb);
+
+export const generateSharedSpineStage = (
+  project: StoryProject,
+  chapter: ChapterLog,
+  onUsage: UsageCallback,
+  logCb: LogCallback,
+) => defaultService.writerAgent.generateSharedSpineStage(project, chapter, onUsage, logCb);
+
+export const generateVariantStage = (
+  project: StoryProject,
+  chapter: ChapterLog,
+  scenePackages: ScenePackage[],
+  onUsage: UsageCallback,
+  logCb: LogCallback,
+) => defaultService.writerAgent.generateVariantStage(project, chapter, scenePackages as any, onUsage, logCb);
+
+export const generateConvergenceStage = (
+  project: StoryProject,
+  chapter: ChapterLog,
+  scenePackages: ScenePackage[],
+  onUsage: UsageCallback,
+  logCb: LogCallback,
+) =>
+  defaultService.writerAgent.generateConvergenceStage(
+    project,
+    chapter,
+    scenePackages as any,
+    onUsage,
+    logCb,
+  );
 
 // --- Visual & Analysis ---
 export const generateCharacterPortrait = (

@@ -279,6 +279,10 @@ export const normalizeProject = (data: any): StoryProject => {
       status: f.status || 'Open',
       priority: f.priority || 'Medium',
     })),
+    routes: safeArray(data?.bible?.routes),
+    revealPlans: safeArray(data?.bible?.revealPlans),
+    stateAxes: safeArray(data?.bible?.stateAxes),
+    branchPolicies: safeArray(data?.bible?.branchPolicies),
 
     entries: safeArray(data?.bible?.entries).map((e: any) => ({
       ...e,
@@ -306,8 +310,41 @@ export const normalizeProject = (data: any): StoryProject => {
   // Manuscript
   const chapters: ChapterLog[] =
     Array.isArray(data?.chapters) && data.chapters.length > 0
-      ? data.chapters.map((c: any) => ({
-          ...c,
+      ? data.chapters.map((c: any) => {
+          // P1 migration helper: create minimal Scene Packages from legacy scenes when absent.
+          const scenePackages =
+            Array.isArray(c.scenePackages) && c.scenePackages.length > 0
+              ? c.scenePackages
+              : safeArray(c.scenes).map((s: any) => ({
+                  sceneId: s.id || crypto.randomUUID(),
+                  title: safeString(s.title, '無題シーン'),
+                  chapterId: c.id || '',
+                  routeId: undefined,
+                  locationId: s.locationId,
+                  involvedCharacterIds: resolveArray(s.involvedCharacterIds),
+                  povCharacterId: undefined,
+                  purpose: safeString(s.goal || s.summary || s.title, ''),
+                  mandatoryInfo: [],
+                  emotionalShift: '',
+                  entryConditions: undefined,
+                  exitEffects: [],
+                  sharedSpine: {
+                    intro: '',
+                    conflict: '',
+                    deepen: '',
+                    preChoiceBeat: '',
+                    close: safeString(s.summary || ''),
+                  },
+                  choicePoints: [],
+                  reactionVariants: [],
+                  convergencePoint: undefined,
+                  carryoverStateChanges: [],
+                  spoilerLevel: 'Low',
+                  status: s.status || 'Idea',
+                }));
+
+          return {
+            ...c,
           id: c.id || crypto.randomUUID(),
           title: safeString(c.title),
           summary: safeString(c.summary),
@@ -316,6 +353,11 @@ export const normalizeProject = (data: any): StoryProject => {
             typeof c.wordCount === 'number' ? c.wordCount : safeString(c.content).length || 0,
           draftVersion: c.draftVersion || 0,
           scenes: safeArray(c.scenes),
+          scenePackages,
+          routeNotes: safeArray(c.routeNotes),
+          revealNotes: safeArray(c.revealNotes),
+          statePolicies: safeArray(c.statePolicies),
+          branchPolicies: safeArray(c.branchPolicies),
           strategy: {
             milestones: safeArray(c.strategy?.milestones),
             forbiddenResolutions: safeArray(c.strategy?.forbiddenResolutions),
@@ -332,7 +374,8 @@ export const normalizeProject = (data: any): StoryProject => {
             foreshadowingId: resolve(l.foreshadowingId),
           })),
           relevantEntityIds: resolveArray(c.relevantEntityIds),
-        }))
+          };
+        })
       : [
           {
             id: crypto.randomUUID(),

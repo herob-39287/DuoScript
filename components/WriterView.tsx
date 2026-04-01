@@ -15,6 +15,8 @@ import { ThinkingIndicator } from './ui/ThinkingIndicator';
 import { Book, Zap } from 'lucide-react';
 import { Styles } from './ui/DesignSystem';
 import { MobileDrawers } from './writer/MobileDrawers';
+import { ScenePackageModePanel } from './writer/ScenePackageModePanel';
+import { BranchIssuesPanel } from './writer/BranchIssuesPanel';
 
 const WriterView: React.FC = () => {
   const { state, refs, actions } = useWriterLogic();
@@ -57,33 +59,83 @@ const WriterView: React.FC = () => {
           <div
             className={`w-full max-w-4xl h-full flex flex-col transition-all duration-1000 ${ui.isZenMode ? 'px-4 md:px-0' : 'px-4 md:px-8'}`}
           >
-            <EditorCanvas
-              textareaRef={refs.textareaRef}
-              onChange={actions.handleTextChange}
-              isVertical={ui.isVertical}
-              isZenMode={ui.isZenMode}
-              isLoading={status.isLoadingContent}
-              isProcessing={status.isProcessing}
+            {!ui.isZenMode && (
+              <div className="mt-4 mb-3 rounded-2xl border border-white/10 bg-stone-900/60 p-1 grid grid-cols-2 md:grid-cols-4 gap-1">
+                {[
+                  ['shared_spine', 'Shared Spine'],
+                  ['choice_variant', 'Choice / Variant'],
+                  ['convergence', 'Convergence'],
+                  ['final_draft', 'Final Draft'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() =>
+                      actions.setWriterMode(
+                        key as 'shared_spine' | 'choice_variant' | 'convergence' | 'final_draft',
+                      )
+                    }
+                    className={`px-3 py-2 rounded-xl text-[11px] font-black tracking-wider transition-colors ${ui.writerMode === key ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40' : 'text-stone-400 hover:text-stone-100'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!ui.isZenMode && ui.writerMode === 'final_draft' && (
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  onClick={actions.buildDraftFromScenePackages}
+                  className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 hover:bg-stone-700"
+                >
+                  Build Draft
+                </button>
+                <button
+                  onClick={actions.syncChapterFromScenePackages}
+                  className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-orange-300 bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20"
+                >
+                  Sync Cache
+                </button>
+              </div>
+            )}
+
+            <ScenePackageModePanel
+              mode={ui.writerMode}
+              chapter={data.activeChapter}
+              onUpdateScenePackage={actions.updateScenePackage}
             />
 
-            <SuggestionOverlay
-              suggestions={data.suggestions}
-              onApply={actions.applySuggestion}
-              onClose={actions.closeSuggestions}
-            />
+            {ui.writerMode === 'final_draft' && (
+              <>
+                <EditorCanvas
+                  textareaRef={refs.textareaRef}
+                  onChange={actions.handleTextChange}
+                  isVertical={ui.isVertical}
+                  isZenMode={ui.isZenMode}
+                  isLoading={status.isLoadingContent}
+                  isProcessing={status.isProcessing}
+                />
 
-            <WriterToolbar
-              isZenMode={ui.isZenMode}
-              isProcessing={status.isProcessing}
-              isSuggesting={status.isSuggesting}
-              isWhispering={status.isWhispering}
-              isScanning={status.isScanning}
-              onSuggest={actions.suggest}
-              onDraft={() => actions.streamDraft()}
-              onWhisper={() => actions.triggerWhisper()}
-              onScan={actions.scanDraft}
-              onToggleZen={actions.toggleZen}
-            />
+                <SuggestionOverlay
+                  suggestions={data.suggestions}
+                  onApply={actions.applySuggestion}
+                  onClose={actions.closeSuggestions}
+                />
+
+                <WriterToolbar
+                  isZenMode={ui.isZenMode}
+                  isProcessing={status.isProcessing}
+                  isSuggesting={status.isSuggesting}
+                  isWhispering={status.isWhispering}
+                  isScanning={status.isScanning}
+                  onSuggest={actions.suggest}
+                  onDraft={() => actions.generateThreeStageDraft()}
+                  onWhisper={() => actions.triggerWhisper()}
+                  onScan={actions.scanDraft}
+                  onToggleZen={actions.toggleZen}
+                />
+              </>
+            )}
           </div>
         </main>
 
@@ -103,6 +155,12 @@ const WriterView: React.FC = () => {
               >
                 <Book size={12} /> Bible
               </button>
+              <button
+                onClick={() => actions.setRightPanelTab('branch')}
+                className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors ${ui.rightPanelTab === 'branch' ? 'text-orange-400 bg-stone-900' : 'text-stone-500 hover:text-stone-300'}`}
+              >
+                Branch
+              </button>
             </div>
 
             {ui.rightPanelTab === 'plot' ? (
@@ -115,10 +173,15 @@ const WriterView: React.FC = () => {
                 onDraftBeat={(beatText) => actions.streamDraft(beatText)}
                 className="flex-1 overflow-hidden"
               />
-            ) : (
+            ) : ui.rightPanelTab === 'bible' ? (
               <MiniBible
                 onInsert={(text) => actions.applySuggestion(text)}
                 className="flex-1 overflow-hidden"
+              />
+            ) : (
+              <BranchIssuesPanel
+                issues={data.branchIssues}
+                chapterIssues={data.activeChapterIssues}
               />
             )}
           </div>
@@ -147,6 +210,10 @@ const WriterView: React.FC = () => {
             },
             miniBibleProps: {
               onInsert: (text) => actions.applySuggestion(text),
+            },
+            branchProps: {
+              issues: data.branchIssues,
+              chapterIssues: data.activeChapterIssues,
             },
           }}
         />

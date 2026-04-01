@@ -98,6 +98,127 @@ export const PlotBeatSchema = z.object({
   text: z.string(),
 });
 
+export const BranchLevelSchema = z.enum([
+  'performative',
+  'emotional',
+  'local_branch',
+  'structural',
+]);
+
+export const NodeTypeSchema = z.enum(['scene', 'choice', 'gate', 'merge', 'jump', 'ending']);
+
+export const ConditionExpressionSchema = z.string().min(1);
+
+export const RouteSchema = z.object({
+  routeId: ID,
+  routeType: z.enum(['Common', 'Character', 'Bad', 'True']),
+  description: z.string(),
+  parentRouteId: z.string().optional(),
+  unlockConditions: ConditionExpressionSchema.optional(),
+  revealPolicy: z.string(),
+  enabledState: z.boolean(),
+});
+
+export const RevealPlanSchema = z.object({
+  revealId: ID,
+  informationKey: z.string(),
+  allowedRoutes: z.array(z.string()),
+  firstRevealSceneId: z.string(),
+  optionalRevealSceneIds: z.array(z.string()),
+  spoilerLevel: z.enum(['Low', 'Medium', 'High']),
+});
+
+export const StateAxisSchema = z.object({
+  stateKey: z.string(),
+  scope: z.enum(['global', 'route', 'chapter', 'scene', 'transient', 'knowledge', 'affinity']),
+  type: z.enum(['number', 'boolean', 'string']),
+  defaultValue: z.union([z.number(), z.boolean(), z.string()]),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  usagePurpose: z.string(),
+});
+
+export const BranchPolicySchema = z.object({
+  policyId: ID,
+  targetPattern: z.string(),
+  branchLevel: BranchLevelSchema,
+  promotionRule: z.string(),
+  convergenceRequirement: z.enum(['required', 'optional', 'forbidden']),
+});
+
+export const ChoicePointSchema = z.object({
+  choiceId: ID,
+  text: z.string(),
+  branchLevel: BranchLevelSchema,
+  intentTag: z.string(),
+  immediateEffects: z.array(z.string()),
+  delayedEffects: z.array(z.string()),
+  reactionVariantId: z.string().optional(),
+  immediateReactionVariantId: z.string().optional(),
+  convergenceTarget: z.string(),
+  routeImpact: z.string().optional(),
+  unlockImpact: z.string().optional(),
+  visibilityCondition: ConditionExpressionSchema.optional(),
+  availabilityCondition: ConditionExpressionSchema.optional(),
+});
+
+export const ReactionVariantSchema = z.object({
+  variantId: ID,
+  trigger: z.string(),
+  affectedStates: z.array(z.string()),
+  toneShift: z.string(),
+  revealedInfo: z.array(z.string()),
+  responseBlocks: z.array(z.string()),
+  convergencePolicy: z.enum([
+    'keep_state',
+    'merge_text_only',
+    'keep_knowledge',
+    'keep_affection_delta',
+    'normalize_scene_state',
+  ]),
+});
+
+export const ConvergencePointSchema = z.object({
+  convergenceId: ID,
+  sceneId: z.string(),
+  targetBlockId: z.string(),
+  convergencePolicy: z.enum([
+    'keep_state',
+    'merge_text_only',
+    'keep_knowledge',
+    'keep_affection_delta',
+    'normalize_scene_state',
+  ]),
+});
+
+export const ScenePackageSchema = z.object({
+  sceneId: ID,
+  title: z.string(),
+  chapterId: z.string(),
+  routeId: z.string().optional(),
+  locationId: z.string().optional(),
+  involvedCharacterIds: z.array(z.string()),
+  povCharacterId: z.string().optional(),
+  purpose: z.string(),
+  mandatoryInfo: z.array(z.string()),
+  emotionalShift: z.string().optional(),
+  entryConditions: ConditionExpressionSchema.optional(),
+  exitEffects: z.array(z.string()),
+  sharedSpine: z.object({
+    intro: z.string(),
+    conflict: z.string(),
+    deepen: z.string(),
+    preChoiceBeat: z.string(),
+    close: z.string(),
+  }),
+  choicePoints: z.array(ChoicePointSchema),
+  reactionVariants: z.array(ReactionVariantSchema),
+  convergencePoint: ConvergencePointSchema.optional(),
+  carryoverStateChanges: z.array(z.string()),
+  spoilerLevel: z.enum(['Low', 'Medium', 'High']).optional(),
+  status: z.enum(['Idea', 'Drafting', 'Polished']),
+});
+
 export const StorySceneSchema = z.object({
   id: ID,
   title: z.string(),
@@ -132,7 +253,12 @@ export const ChapterLogSchema = z.object({
   summary: z.string(),
   content: z.string().optional(),
   scenes: z.array(StorySceneSchema),
+  scenePackages: z.array(ScenePackageSchema).optional(),
   beats: z.array(PlotBeatSchema),
+  routeNotes: z.array(z.string()).optional(),
+  revealNotes: z.array(z.string()).optional(),
+  statePolicies: z.array(z.string()).optional(),
+  branchPolicies: z.array(BranchPolicySchema).optional(),
   strategy: ChapterStrategySchema,
   status: z.enum(['Idea', 'Beats', 'Drafting', 'Polished']),
   wordCount: z.number(),
@@ -427,6 +553,10 @@ export const WorldBibleSchema = z.object({
   characters: z.array(CharacterSchema),
   timeline: z.array(TimelineEventSchema),
   foreshadowing: z.array(ForeshadowingSchema),
+  routes: z.array(RouteSchema),
+  revealPlans: z.array(RevealPlanSchema),
+  stateAxes: z.array(StateAxisSchema),
+  branchPolicies: z.array(BranchPolicySchema),
   entries: z.array(WorldEntrySchema),
   nexusBranches: z.array(NexusBranchSchema),
   integrityIssues: z.array(BibleIssueSchema),
@@ -461,6 +591,17 @@ export type StoryProjectMetadata = z.infer<typeof StoryProjectMetadataSchema>;
 export type AssetMetadata = z.infer<typeof AssetMetadataSchema>;
 
 export type PlotBeat = z.infer<typeof PlotBeatSchema>;
+export type BranchLevel = z.infer<typeof BranchLevelSchema>;
+export type NodeType = z.infer<typeof NodeTypeSchema>;
+export type ConditionExpression = z.infer<typeof ConditionExpressionSchema>;
+export type Route = z.infer<typeof RouteSchema>;
+export type RevealPlan = z.infer<typeof RevealPlanSchema>;
+export type StateAxis = z.infer<typeof StateAxisSchema>;
+export type BranchPolicy = z.infer<typeof BranchPolicySchema>;
+export type ChoicePoint = z.infer<typeof ChoicePointSchema>;
+export type ReactionVariant = z.infer<typeof ReactionVariantSchema>;
+export type ConvergencePoint = z.infer<typeof ConvergencePointSchema>;
+export type ScenePackage = z.infer<typeof ScenePackageSchema>;
 export type StoryScene = z.infer<typeof StorySceneSchema>;
 export type ChapterStrategy = z.infer<typeof ChapterStrategySchema>;
 export type ForeshadowingLink = z.infer<typeof ForeshadowingLinkSchema>;

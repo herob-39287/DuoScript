@@ -7,10 +7,18 @@ import {
   AssetMetadata,
   ChapterLog,
   PlotBeat,
+  ScenePackage,
+  ChoicePoint,
+  ReactionVariant,
+  ConvergencePoint,
   StoryScene,
   ChapterStrategy,
   StoryVolume,
   ForeshadowingLink,
+  BranchLevel,
+  NodeType,
+  ConditionExpression,
+  BranchPolicy,
   EditorSettings,
 } from '../services/validation/schemas';
 import { WorldBible } from './bible';
@@ -50,11 +58,19 @@ export type {
   StoryProjectMetadata,
   AssetMetadata,
   PlotBeat,
+  ScenePackage,
+  ChoicePoint,
+  ReactionVariant,
+  ConvergencePoint,
   StoryScene,
   ChapterStrategy,
   ChapterLog,
   StoryVolume,
   ForeshadowingLink,
+  BranchLevel,
+  NodeType,
+  ConditionExpression,
+  BranchPolicy,
 };
 
 /**

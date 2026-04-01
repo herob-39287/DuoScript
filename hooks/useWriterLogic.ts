@@ -9,6 +9,13 @@ import * as Actions from '../store/actions';
 import { useWriterUI } from './useWriterUI';
 import { useManuscriptEditor } from './useManuscriptEditor';
 import { useWriterAI } from './useWriterAI';
+import { ScenePackage } from '../types';
+import {
+  buildChapterDraftFromScenePackages,
+  syncChapterContentFromScenePackages,
+  validateChapterScenePackages,
+  validateProjectBranches,
+} from '../services/scenePackage';
 
 export const useWriterLogic = () => {
   const chapters = useManuscript();
@@ -37,6 +44,10 @@ export const useWriterLogic = () => {
   });
 
   // --- Handlers ---
+  const branchIssues = validateProjectBranches(chapters, bible);
+  const activeChapterIssues = editor.activeChapter
+    ? validateChapterScenePackages(editor.activeChapter, bible)
+    : [];
 
   const actions = {
     // Navigation & UI
@@ -45,6 +56,7 @@ export const useWriterLogic = () => {
     toggleSettings: ui.toggleSettings,
     setRightPanelTab: ui.setRightPanelTab,
     setMobileTab: ui.setMobileTab,
+    setWriterMode: ui.setWriterMode,
     navigateBack: ui.navigateBack,
 
     // Chapter Management
@@ -79,10 +91,58 @@ export const useWriterLogic = () => {
     suggest: writerAI.suggestNext,
     applySuggestion: writerAI.applySuggestion,
     streamDraft: writerAI.streamDraft,
+    generateThreeStageDraft: writerAI.generateThreeStageDraft,
     scanDraft: writerAI.scanDraft,
     triggerWhisper: writerAI.triggerWhisper,
     closeSuggestions: () => writerAI.setSuggestions([]),
     closeWhisper: () => writerAI.setWhisper(null),
+
+    updateScenePackage: (
+      sceneId: string,
+      updater: (scenePackage: ScenePackage) => ScenePackage,
+    ) => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+
+      const existing = chapter.scenePackages || [];
+      const nextScenePackages = existing.map((scenePackage) =>
+        scenePackage.sceneId === sceneId ? updater(scenePackage as ScenePackage) : scenePackage,
+      );
+
+      projectDispatch(
+        Actions.updateChapter(chapter.id, {
+          scenePackages: nextScenePackages,
+        }),
+      );
+    },
+
+    syncChapterFromScenePackages: () => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+
+      const synced = syncChapterContentFromScenePackages(chapter);
+      projectDispatch(Actions.updateChapter(chapter.id, synced));
+      if (editor.textareaRef.current && synced.content !== undefined) {
+        editor.textareaRef.current.value = synced.content;
+      }
+      editor.setWordCount((synced.content || '').length);
+    },
+
+    buildDraftFromScenePackages: () => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+
+      const draft = buildChapterDraftFromScenePackages(chapter);
+      projectDispatch(
+        Actions.updateChapter(chapter.id, {
+          content: draft,
+        }),
+      );
+      if (editor.textareaRef.current) {
+        editor.textareaRef.current.value = draft;
+      }
+      editor.setWordCount(draft.length);
+    },
   };
 
   return {
@@ -93,6 +153,7 @@ export const useWriterLogic = () => {
         showSettings: ui.showSettings,
         rightPanelTab: ui.rightPanelTab,
         mobileTab: ui.mobileTab,
+        writerMode: ui.writerMode,
         thinkingPhase: globalUI.thinkingPhase,
         isContextActive: globalUI.isContextActive,
       },
@@ -104,6 +165,8 @@ export const useWriterLogic = () => {
         whisper: writerAI.whisper,
         suggestions: writerAI.suggestions,
         bible,
+        branchIssues,
+        activeChapterIssues,
       },
       status: {
         isProcessing: writerAI.isProcessing,
