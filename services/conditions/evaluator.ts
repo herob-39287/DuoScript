@@ -127,7 +127,7 @@ class Tokenizer {
 
   private readString(quote: string): Token {
     this.pos += 1;
-    let start = this.pos;
+    const start = this.pos;
     while (this.pos < this.input.length && this.input[this.pos] !== quote) {
       this.pos += 1;
     }
@@ -396,7 +396,9 @@ export type ConditionLintIssue = {
 type LintValueType = 'number' | 'boolean' | 'string' | 'unknown';
 
 const resolveIdentifierType = (identifier: string, stateAxes: StateAxis[]): LintValueType => {
-  const normalized = identifier.includes('.') ? identifier.split('.').slice(1).join('.') : identifier;
+  const normalized = identifier.includes('.')
+    ? identifier.split('.').slice(1).join('.')
+    : identifier;
   const axis = stateAxes.find((item) => item.stateKey === normalized);
   if (!axis) return 'unknown';
   if (axis.type === 'number' || axis.type === 'boolean' || axis.type === 'string') return axis.type;
@@ -465,7 +467,11 @@ export const lintConditionExpression = (
       });
     }
 
-    if (leftType.type !== 'unknown' && rightType.type !== 'unknown' && leftType.type !== rightType.type) {
+    if (
+      leftType.type !== 'unknown' &&
+      rightType.type !== 'unknown' &&
+      leftType.type !== rightType.type
+    ) {
       issues.push({
         code: 'TYPE_MISMATCH',
         level: 'error',

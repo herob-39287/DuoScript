@@ -121,10 +121,7 @@ const DashboardView: React.FC<Props> = ({ onOpenPublication, onExit }) => {
             Branch Issues
           </h3>
           <div className="h-80">
-            <BranchIssuesPanel
-              issues={data.branchIssues}
-              chapterIssues={data.chapterRuleIssues}
-            />
+            <BranchIssuesPanel issues={data.branchIssues} chapterIssues={data.chapterRuleIssues} />
           </div>
         </section>
       </div>

@@ -345,35 +345,35 @@ export const normalizeProject = (data: any): StoryProject => {
 
           return {
             ...c,
-          id: c.id || crypto.randomUUID(),
-          title: safeString(c.title),
-          summary: safeString(c.summary),
-          content: c.content || undefined, // Keep undefined if not present to trigger lazy load
-          wordCount:
-            typeof c.wordCount === 'number' ? c.wordCount : safeString(c.content).length || 0,
-          draftVersion: c.draftVersion || 0,
-          scenes: safeArray(c.scenes),
-          scenePackages,
-          routeNotes: safeArray(c.routeNotes),
-          revealNotes: safeArray(c.revealNotes),
-          statePolicies: safeArray(c.statePolicies),
-          branchPolicies: safeArray(c.branchPolicies),
-          strategy: {
-            milestones: safeArray(c.strategy?.milestones),
-            forbiddenResolutions: safeArray(c.strategy?.forbiddenResolutions),
-            characterArcProgress: safeString(c.strategy?.characterArcProgress),
-            pacing: safeString(c.strategy?.pacing),
-            povCharacterId: resolve(c.strategy?.povCharacterId),
-          },
-          beats: safeArray(c.beats).map((b: any) => ({ ...b, id: b.id || crypto.randomUUID() })),
-          status: c.status || 'Idea',
-          updatedAt: c.updatedAt || now,
-          involvedCharacterIds: resolveArray(c.involvedCharacterIds),
-          foreshadowingLinks: safeArray(c.foreshadowingLinks).map((l: any) => ({
-            ...l,
-            foreshadowingId: resolve(l.foreshadowingId),
-          })),
-          relevantEntityIds: resolveArray(c.relevantEntityIds),
+            id: c.id || crypto.randomUUID(),
+            title: safeString(c.title),
+            summary: safeString(c.summary),
+            content: c.content || undefined, // Keep undefined if not present to trigger lazy load
+            wordCount:
+              typeof c.wordCount === 'number' ? c.wordCount : safeString(c.content).length || 0,
+            draftVersion: c.draftVersion || 0,
+            scenes: safeArray(c.scenes),
+            scenePackages,
+            routeNotes: safeArray(c.routeNotes),
+            revealNotes: safeArray(c.revealNotes),
+            statePolicies: safeArray(c.statePolicies),
+            branchPolicies: safeArray(c.branchPolicies),
+            strategy: {
+              milestones: safeArray(c.strategy?.milestones),
+              forbiddenResolutions: safeArray(c.strategy?.forbiddenResolutions),
+              characterArcProgress: safeString(c.strategy?.characterArcProgress),
+              pacing: safeString(c.strategy?.pacing),
+              povCharacterId: resolve(c.strategy?.povCharacterId),
+            },
+            beats: safeArray(c.beats).map((b: any) => ({ ...b, id: b.id || crypto.randomUUID() })),
+            status: c.status || 'Idea',
+            updatedAt: c.updatedAt || now,
+            involvedCharacterIds: resolveArray(c.involvedCharacterIds),
+            foreshadowingLinks: safeArray(c.foreshadowingLinks).map((l: any) => ({
+              ...l,
+              foreshadowingId: resolve(l.foreshadowingId),
+            })),
+            relevantEntityIds: resolveArray(c.relevantEntityIds),
           };
         })
       : [

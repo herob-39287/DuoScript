@@ -90,7 +90,9 @@ describe('scenePackage rule validator (P4)', () => {
     const chapter = createChapter();
     chapter.scenePackages.push({ ...chapter.scenePackages[0] });
 
-    const issues = validateChapterScenePackages(chapter, { stateAxes: [{ stateKey: 'known_key' }] } as any);
+    const issues = validateChapterScenePackages(chapter, {
+      stateAxes: [{ stateKey: 'known_key' }],
+    } as any);
     expect(issues.some((i) => i.code === 'DUPLICATE_SCENE_ID')).toBe(true);
   });
 

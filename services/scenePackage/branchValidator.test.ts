@@ -68,54 +68,47 @@ describe('branch validator (P5)', () => {
     const scene = makeScene();
     scene.entryConditions = 'global.unknown_flag == true';
 
-    const issues = validateSceneBranches(
-      scene,
-      {
-        stateAxes: [{ stateKey: 'trust' }],
-        revealPlans: [],
-      } as any,
-    );
+    const issues = validateSceneBranches(scene, {
+      stateAxes: [{ stateKey: 'trust' }],
+      revealPlans: [],
+    } as any);
 
     expect(issues.some((i) => i.code === 'REFERENCED_NOT_UPDATED_STATE')).toBe(true);
-    expect(issues.some((i) => i.code === 'CONDITION_CONFLICT' && i.stateKey === 'unknown_flag')).toBe(
-      true,
-    );
+    expect(
+      issues.some((i) => i.code === 'CONDITION_CONFLICT' && i.stateKey === 'unknown_flag'),
+    ).toBe(true);
   });
 
   it('detects project-level unused states', () => {
     const scene = makeScene();
     const chapter = { id: 'ch1', scenePackages: [scene] } as any;
 
-    const issues = validateProjectBranches(
-      [chapter],
-      {
-        stateAxes: [{ stateKey: 'trust' }, { stateKey: 'unused_axis' }],
-        revealPlans: [],
-      } as any,
-    );
+    const issues = validateProjectBranches([chapter], {
+      stateAxes: [{ stateKey: 'trust' }, { stateKey: 'unused_axis' }],
+      revealPlans: [],
+    } as any);
 
-    expect(issues.some((i) => i.code === 'UNUSED_STATE' && i.stateKey === 'unused_axis')).toBe(true);
+    expect(issues.some((i) => i.code === 'UNUSED_STATE' && i.stateKey === 'unused_axis')).toBe(
+      true,
+    );
   });
 
   it('detects strict condition type mismatch', () => {
     const scene = makeScene();
     scene.entryConditions = 'global.trust >= "high"';
 
-    const issues = validateSceneBranches(
-      scene,
-      {
-        stateAxes: [
-          {
-            stateKey: 'trust',
-            scope: 'global',
-            type: 'number',
-            defaultValue: 0,
-            usagePurpose: 'test',
-          },
-        ],
-        revealPlans: [],
-      } as any,
-    );
+    const issues = validateSceneBranches(scene, {
+      stateAxes: [
+        {
+          stateKey: 'trust',
+          scope: 'global',
+          type: 'number',
+          defaultValue: 0,
+          usagePurpose: 'test',
+        },
+      ],
+      revealPlans: [],
+    } as any);
 
     expect(issues.some((i) => i.code === 'CONDITION_TYPE_MISMATCH')).toBe(true);
   });
