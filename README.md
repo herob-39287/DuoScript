@@ -33,10 +33,24 @@
    - `codex_schema_reference.md`
 3. Codex は `updated_workspace_bundle.json` と `codex_change_summary.md` を返します。
 4. DuoScript 側で `Import Workspace`（または `Import & Apply`）を実行します。
-5. Import 後は必ず次を実行します。
-   - `validateBranches` で branch validator を再実行
-   - scene package を更新した場合は `Build Draft` / `rebuildDraft` で本文キャッシュを再構築
+5. Import 後に `validateBranches` で branch validator を再実行します。
 6. 残存する validator issue があれば、`codex_change_summary.md` を参照して追加修正を行います。
+7. scene package を更新した場合は `Build Draft` / `rebuildDraft` を実行して本文キャッシュを更新します。
+
+
+### Codex 往復の受け渡しファイル
+
+**DuoScript → Codex（渡す4ファイル）**
+
+- `workspace_bundle.json`
+- `codex_task.md`
+- `validator_report.md`
+- `codex_schema_reference.md`
+
+**Codex → DuoScript（返す2ファイル）**
+
+- `updated_workspace_bundle.json`
+- `codex_change_summary.md`
 
 ---
 
