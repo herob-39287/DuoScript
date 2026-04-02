@@ -17,10 +17,15 @@ import {
   syncChapterContentFromScenePackages,
   validateChapterScenePackages,
 } from '../services/scenePackage';
-import { buildWorkspaceBundle, serializeWorkspaceBundle } from '../services/workspace/export';
+import {
+  buildPrepareForCodexArtifacts,
+  buildWorkspaceBundle,
+  serializeWorkspaceBundle,
+} from '../services/workspace/export';
 import { workspaceBundleToProject } from '../services/workspace/import';
 import { diffWorkspaceBundles, WorkspaceDiff } from '../services/workspace/diff';
 import { validateProjectBranches as validateProjectBranchesV2 } from '../services/validation/branchValidator';
+import { CodexTaskScope } from '../services/workspace/buildCodexTask';
 
 export const useWriterLogic = () => {
   const chapters = useManuscript();
@@ -37,6 +42,8 @@ export const useWriterLogic = () => {
       sync: typeof sync;
     };
     diff: WorkspaceDiff;
+    validationIssueCount: number;
+    requiresDraftRebuild: boolean;
   } | null>(null);
 
   // 1. UI Logic
@@ -162,14 +169,48 @@ export const useWriterLogic = () => {
     exportWorkspace: () => {
       return serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync }));
     },
-    importWorkspace: (raw: unknown) => {
+    importWorkspace: (raw: unknown, options?: { autoApply?: boolean }) => {
       const currentBundle = buildWorkspaceBundle({ meta, bible, chapters, sync });
       const imported = workspaceBundleToProject({ meta, bible, chapters, sync }, raw);
       const importedBundle = buildWorkspaceBundle(imported.project);
-      setPendingImport({
+      const validationIssues = validateProjectBranchesV2(
+        imported.project.chapters,
+        imported.project.bible,
+      );
+      const requiresDraftRebuild = imported.project.chapters.some((chapter) => {
+        const currentChapter = chapters.find((item) => item.id === chapter.id);
+        if (!currentChapter) return true;
+        return JSON.stringify(currentChapter.scenePackages || []) !== JSON.stringify(chapter.scenePackages || []);
+      });
+      const nextPendingImport = {
         nextProject: imported.project,
         diff: diffWorkspaceBundles(currentBundle, importedBundle),
-      });
+        validationIssueCount: validationIssues.length,
+        requiresDraftRebuild,
+      };
+
+      if (options?.autoApply) {
+        projectDispatch(Actions.updateMeta(nextPendingImport.nextProject.meta));
+        projectDispatch(Actions.loadBible(nextPendingImport.nextProject.bible));
+        projectDispatch(Actions.loadChapters(nextPendingImport.nextProject.chapters));
+        projectDispatch(Actions.loadSync(nextPendingImport.nextProject.sync));
+        setPendingImport(null);
+        return {
+          applied: true,
+          validationIssueCount: validationIssues.length,
+          requiresDraftRebuild,
+        };
+      }
+
+      setPendingImport(nextPendingImport);
+      return {
+        applied: false,
+        validationIssueCount: validationIssues.length,
+        requiresDraftRebuild,
+      };
+    },
+    prepareForCodex: (scope: CodexTaskScope) => {
+      return buildPrepareForCodexArtifacts({ meta, bible, chapters, sync }, scope);
     },
     validateBranches: () => validateProjectBranchesV2(chapters, bible),
     rebuildDraft: () => actions.buildDraftFromScenePackages(),
@@ -207,6 +248,8 @@ export const useWriterLogic = () => {
         branchIssues,
         activeChapterIssues,
         pendingImportDiff: pendingImport?.diff || null,
+        pendingImportValidationIssueCount: pendingImport?.validationIssueCount || 0,
+        pendingImportRequiresDraftRebuild: pendingImport?.requiresDraftRebuild || false,
         hasPendingImport: Boolean(pendingImport),
       },
       status: {

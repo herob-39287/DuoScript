@@ -1,0 +1,25 @@
+export const buildCodexSchemaReference = (): string => {
+  return [
+    '# codex_schema_reference.md',
+    '',
+    '## Canonical VN structures',
+    '- `RouteDefinition`: Route identity, unlock conditions, reveal policy, enabled state.',
+    '- `RevealPlan`: Which information keys can be revealed in which routes/scenes.',
+    '- `StateAxis`: Typed state registry (`number`, `boolean`, `string`) with scope/defaults.',
+    '- `BranchPolicy`: Branch level and convergence requirements for target patterns.',
+    '- `ScenePackage`: Canonical scene design unit (spine, choices, variants, convergence).',
+    '- `ChoicePoint`: Player choice + condition/effect metadata + variant/convergence targets.',
+    '- `ReactionVariant`: Variant response blocks with state/reveal effects and convergence policy.',
+    '- `ConvergencePoint`: How a branching scene merges into target block/policy.',
+    '',
+    '## Source-of-truth rules',
+    '- Canonical: `bible.routes`, `bible.revealPlans`, `bible.stateAxes`, `bible.branchPolicies`, `chapter.scenePackages`.',
+    '- Cached/display-only: `chapter.content`.',
+    '',
+    '## Codex editing rules',
+    '- Keep IDs stable unless intentionally creating/deleting entities.',
+    '- Preserve type consistency between condition expressions and `StateAxis` definitions.',
+    '- Every `ChoicePoint.reactionVariantId` / `immediateReactionVariantId` should resolve to an existing variant in the same scene package.',
+    '- If choices diverge, provide explicit convergence via `convergenceTarget` and/or scene `convergencePoint`.',
+  ].join('\n');
+};
