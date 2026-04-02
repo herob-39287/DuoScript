@@ -9,7 +9,6 @@ import {
   ConditionExpression,
   RevealPlan,
   ScenePackage,
-  StateAxis,
   WorldBible,
 } from '../validation/schemas';
 import { validateSceneBranching } from './editor';
@@ -24,7 +23,12 @@ export type BranchValidationIssue = {
     | 'SPOILER_LEAKAGE'
     | 'ALWAYS_TRUE_CONDITION'
     | 'ALWAYS_FALSE_CONDITION'
-    | 'CONDITION_TYPE_MISMATCH';
+    | 'CONDITION_TYPE_MISMATCH'
+    | 'UNREACHABLE_ROUTE'
+    | 'IMPOSSIBLE_UNLOCK_CONDITION'
+    | 'CROSS_CHAPTER_STATE_DEPENDENCY'
+    | 'CONVERGENCE_POLICY_MISMATCH'
+    | 'WEAK_CHOICE';
   level: 'error' | 'warning';
   chapterId?: string;
   sceneId?: string;

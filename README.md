@@ -8,6 +8,18 @@
 
 ---
 
+## 🔁 運用モード（Codex中心 / Gemini補助）
+
+- **Codex中心運用（推奨）**
+  - Writer で `Prepare for Codex` を実行して、`workspace_bundle.json` / `codex_task.md` / `validator_report.md` / `codex_schema_reference.md` を出力
+  - Codex で route / scene package / branch logic を編集
+  - DuoScript に `Import Workspace`（または `Import & Apply`）で戻し、validator と draft 再構築を実行
+- **Gemini補助運用**
+  - `generateThreeStageDraft` などの生成機能は補助として利用
+  - 正本は scene package / VN構造を優先し、本文はキャッシュとして扱う
+
+---
+
 ## ⚠️ セキュリティに関する重要なお知らせ (API Key Safety)
 
 本アプリケーションは、環境変数等で設定された **Google Gemini API Key** を使用して動作します。
