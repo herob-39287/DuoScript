@@ -156,6 +156,30 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert }) => {
                 <input type="file" accept=".json" className="sr-only" onChange={handleFileUpload} />
               </Card>
             </label>
+
+            <label className="block w-full focus-within:ring-2 focus-within:ring-orange-400 rounded-[1.5rem] md:rounded-[2rem] cursor-pointer">
+              <Card
+                variant="panel"
+                padding="md"
+                className="h-full flex items-center gap-4 hover:bg-orange-500/10 hover:border-orange-500/30 group transition-colors"
+              >
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-stone-900 flex items-center justify-center text-stone-500 group-hover:text-orange-300">
+                  <FileJson size={18} />
+                </div>
+                <div className="text-left">
+                  <div className={`${Styles.text.labelSm} text-orange-300`}>Import from Codex</div>
+                  <div className="text-[8px] md:text-[9px] text-stone-700 mt-0.5 truncate">
+                    workspace_bundle.json
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="sr-only"
+                  onChange={(e) => handleFileUpload(e, 'codex')}
+                />
+              </Card>
+            </label>
           </div>
         </div>
 

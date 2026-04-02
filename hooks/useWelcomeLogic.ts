@@ -161,44 +161,57 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
     }
   }, [autoTheme, lang, metaDispatch, addLog, onStart, showAlert]);
 
+  const importProjectFile = useCallback(
+    async (rawJson: any, mode: 'backup' | 'codex') => {
+      if (!(rawJson && (rawJson.title || rawJson.bible || rawJson.chapters || rawJson.meta || rawJson.kind))) {
+        showAlert('Load Failed', 'Invalid Project File');
+        return;
+      }
+
+      if (mode === 'codex' && rawJson.kind !== 'duoscript.workspace') {
+        showAlert('Load Failed', 'This file is not a Codex workspace bundle.');
+        return;
+      }
+
+      const p =
+        rawJson.kind === 'duoscript.workspace'
+          ? workspaceBundleToProject(normalizeProject({}), rawJson).project
+          : normalizeProject(rawJson);
+      p.meta.preferences.uiLanguage = lang;
+
+      try {
+        // Force save to persist data and restore assets to IndexedDB immediately
+        const rev = await saveProjectRevision(p);
+        p.meta.headRev = rev;
+
+        // 重要: インポートしたプロジェクトIDを即座にlocalStorageに保存し、リロード後も参照できるようにする
+        localStorage.setItem('duoscript_active_id', p.meta.id);
+
+        onStart(p);
+      } catch (saveErr) {
+        console.error('Import save failed', saveErr);
+        showAlert('Import Error', 'Failed to save imported data to local database.');
+      }
+    },
+    [lang, onStart, showAlert],
+  );
+
   const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement>, mode: 'backup' | 'codex' = 'backup') => {
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
           const json = JSON.parse(event.target?.result as string);
-          if (json && (json.title || json.bible || json.chapters || json.meta || json.kind)) {
-            const p =
-              json.kind === 'duoscript.workspace'
-                ? workspaceBundleToProject(normalizeProject({}), json).project
-                : normalizeProject(json);
-            p.meta.preferences.uiLanguage = lang;
-
-            try {
-              // Force save to persist data and restore assets to IndexedDB immediately
-              const rev = await saveProjectRevision(p);
-              p.meta.headRev = rev;
-
-              // 重要: インポートしたプロジェクトIDを即座にlocalStorageに保存し、リロード後も参照できるようにする
-              localStorage.setItem('duoscript_active_id', p.meta.id);
-
-              onStart(p);
-            } catch (saveErr) {
-              console.error('Import save failed', saveErr);
-              showAlert('Import Error', 'Failed to save imported data to local database.');
-            }
-          } else {
-            showAlert('Load Failed', 'Invalid Project File');
-          }
+          await importProjectFile(json, mode);
         } catch (err) {
           showAlert('Error', 'Failed to parse file.');
         }
       };
       reader.readAsText(file);
     },
-    [lang, onStart, showAlert],
+    [importProjectFile],
   );
 
   return {

@@ -43,4 +43,6 @@ export type WorkspaceBundle = {
 export type WorkspaceImportResult = {
   project: StoryProject;
   bundle: WorkspaceBundle;
+  validationIssueCount: number;
+  rebuiltChapterIds: string[];
 };

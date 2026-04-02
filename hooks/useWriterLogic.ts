@@ -173,22 +173,11 @@ export const useWriterLogic = () => {
       const currentBundle = buildWorkspaceBundle({ meta, bible, chapters, sync });
       const imported = workspaceBundleToProject({ meta, bible, chapters, sync }, raw);
       const importedBundle = buildWorkspaceBundle(imported.project);
-      const validationIssues = validateProjectBranchesV2(
-        imported.project.chapters,
-        imported.project.bible,
-      );
-      const requiresDraftRebuild = imported.project.chapters.some((chapter) => {
-        const currentChapter = chapters.find((item) => item.id === chapter.id);
-        if (!currentChapter) return true;
-        return (
-          JSON.stringify(currentChapter.scenePackages || []) !==
-          JSON.stringify(chapter.scenePackages || [])
-        );
-      });
+      const requiresDraftRebuild = imported.rebuiltChapterIds.length > 0;
       const nextPendingImport = {
         nextProject: imported.project,
         diff: diffWorkspaceBundles(currentBundle, importedBundle),
-        validationIssueCount: validationIssues.length,
+        validationIssueCount: imported.validationIssueCount,
         requiresDraftRebuild,
       };
 
@@ -200,7 +189,7 @@ export const useWriterLogic = () => {
         setPendingImport(null);
         return {
           applied: true,
-          validationIssueCount: validationIssues.length,
+          validationIssueCount: imported.validationIssueCount,
           requiresDraftRebuild,
         };
       }
@@ -208,7 +197,7 @@ export const useWriterLogic = () => {
       setPendingImport(nextPendingImport);
       return {
         applied: false,
-        validationIssueCount: validationIssues.length,
+        validationIssueCount: imported.validationIssueCount,
         requiresDraftRebuild,
       };
     },

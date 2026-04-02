@@ -1,5 +1,10 @@
 import { StoryProject } from '../../types';
 import { normalizeProject } from '../bibleManager';
+import {
+  buildChapterDraftFromScenePackages,
+  detectChapterContentDrift,
+} from '../scenePackage/chapterAssembler';
+import { validateProjectBranches } from '../validation/branchValidator';
 import { WorkspaceBundleSchema } from './schema';
 import { WorkspaceImportResult } from './types';
 
@@ -12,13 +17,14 @@ export const workspaceBundleToProject = (
   raw: unknown,
 ): WorkspaceImportResult => {
   const bundle = parseWorkspaceBundle(raw);
+  const importedAt = Date.now();
 
   const next: StoryProject = normalizeProject({
     ...currentProject,
     meta: {
       ...currentProject.meta,
       ...bundle.project.meta,
-      updatedAt: Date.now(),
+      updatedAt: importedAt,
     },
     bible: {
       ...bundle.project.bible,
@@ -29,12 +35,40 @@ export const workspaceBundleToProject = (
     },
     chapters: bundle.project.chapters.map((chapter) => ({
       ...chapter,
-      codexImportedAt: Date.now(),
+      codexImportedAt: importedAt,
     })),
   });
 
+  const rebuiltChapterIds: string[] = [];
+  const rebuiltChapters = next.chapters.map((chapter) => {
+    const hasScenePackages = Boolean(chapter.scenePackages && chapter.scenePackages.length > 0);
+    if (!hasScenePackages) return chapter;
+
+    const drift = detectChapterContentDrift(chapter);
+    if (!drift.hasDrift) return chapter;
+
+    const rebuilt = buildChapterDraftFromScenePackages(chapter);
+    rebuiltChapterIds.push(chapter.id);
+    return {
+      ...chapter,
+      content: rebuilt,
+      wordCount: rebuilt.length,
+    };
+  });
+
+  const finalizedProject: StoryProject = {
+    ...next,
+    chapters: rebuiltChapters,
+  };
+  const validationIssueCount = validateProjectBranches(
+    finalizedProject.chapters,
+    finalizedProject.bible,
+  ).length;
+
   return {
-    project: next,
+    project: finalizedProject,
     bundle,
+    validationIssueCount,
+    rebuiltChapterIds,
   };
 };

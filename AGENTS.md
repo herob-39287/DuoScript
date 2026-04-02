@@ -18,6 +18,13 @@ Treat the following as canonical VN structures:
 
 Treat `chapter.content` as cached/final-display text, not the canonical branch design source.
 
+When editing, prioritize these targets:
+
+- `bible`
+- `chapters`
+- `beats`
+- `scenes`
+
 ## Required Validation
 
 Before returning any edits, re-check:
@@ -27,6 +34,11 @@ Before returning any edits, re-check:
 - condition type safety
 - spoiler leakage
 - weak choices and route reachability assumptions
+- run validator checks after applying changes
+
+## Safety
+
+- Avoid destructive changes unless explicitly requested.
 
 ## Output Rules
 
