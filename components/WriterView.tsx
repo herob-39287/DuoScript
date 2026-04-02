@@ -187,13 +187,13 @@ const WriterView: React.FC = () => {
                   onClick={() => importInputRef.current?.click()}
                   className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 hover:bg-stone-700"
                 >
-                  Import Workspace
+                  Import from Codex
                 </button>
                 <button
                   onClick={() => importAndApplyInputRef.current?.click()}
                   className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-emerald-200 bg-emerald-500/15 border border-emerald-500/30"
                 >
-                  Import & Apply
+                  Import from Codex (Overwrite)
                 </button>
                 {data.hasPendingImport && (
                   <>
@@ -322,7 +322,7 @@ const WriterView: React.FC = () => {
                     CODEX ROUND-TRIP
                   </div>
                   <div className="text-[10px] text-stone-400">
-                    Use “Prepare for Codex” / “Import Workspace” for the primary flow.
+                    Use “Prepare for Codex” / “Import from Codex” for the primary flow.
                   </div>
                   <div className="text-[10px] font-black tracking-widest text-stone-400">
                     GEMINI ASSIST (OPTIONAL)

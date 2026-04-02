@@ -249,9 +249,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
 
       const a = document.createElement('a');
       a.href = url;
-      const safeTitle = (exportData.meta?.title || 'Untitled').replace(/[\\/:*?"<>|]/g, '_');
-      const dateStr = new Date().toISOString().split('T')[0];
-      a.download = `Workspace_${safeTitle}_v${bundle.version}_${dateStr}.json`;
+      a.download = 'workspace_bundle.json';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -378,7 +376,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
                   disabled={!exportData || isPreparing}
                   className="w-full py-4 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40"
                 >
-                  <FileJson size={14} /> Codex Workspace (.json)
+                  <FileJson size={14} /> Export for Codex (workspace_bundle.json)
                 </button>
                 <button
                   onClick={handleDownloadFullBackup}
