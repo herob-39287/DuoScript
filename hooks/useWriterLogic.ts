@@ -180,7 +180,10 @@ export const useWriterLogic = () => {
       const requiresDraftRebuild = imported.project.chapters.some((chapter) => {
         const currentChapter = chapters.find((item) => item.id === chapter.id);
         if (!currentChapter) return true;
-        return JSON.stringify(currentChapter.scenePackages || []) !== JSON.stringify(chapter.scenePackages || []);
+        return (
+          JSON.stringify(currentChapter.scenePackages || []) !==
+          JSON.stringify(chapter.scenePackages || [])
+        );
       });
       const nextPendingImport = {
         nextProject: imported.project,

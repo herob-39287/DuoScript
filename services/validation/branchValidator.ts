@@ -61,9 +61,7 @@ const weakChoiceIssues = (chapters: ChapterLog[]): BranchValidationIssue[] => {
   return issues;
 };
 
-const impossibleUnlockIssues = (
-  bible: Pick<WorldBible, 'routes'>,
-): BranchValidationIssue[] => {
+const impossibleUnlockIssues = (bible: Pick<WorldBible, 'routes'>): BranchValidationIssue[] => {
   const issues: BranchValidationIssue[] = [];
 
   for (const route of bible.routes || []) {
@@ -110,9 +108,7 @@ const crossChapterDependencyIssues = (
   bible: Pick<WorldBible, 'stateAxes'>,
 ): BranchValidationIssue[] => {
   const chapterScopedStates = new Set(
-    (bible.stateAxes || [])
-      .filter((axis) => axis.scope === 'chapter')
-      .map((axis) => axis.stateKey),
+    (bible.stateAxes || []).filter((axis) => axis.scope === 'chapter').map((axis) => axis.stateKey),
   );
   const seenUpdated = new Set<string>();
   const issues: BranchValidationIssue[] = [];

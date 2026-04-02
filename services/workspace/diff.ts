@@ -50,7 +50,9 @@ export const diffWorkspaceBundles = (
   const previousRouteById = new Map(
     previous.project.vnDesign.routes.map((route) => [route.routeId, stableStringify(route)]),
   );
-  const nextRouteById = new Map(next.project.vnDesign.routes.map((route) => [route.routeId, stableStringify(route)]));
+  const nextRouteById = new Map(
+    next.project.vnDesign.routes.map((route) => [route.routeId, stableStringify(route)]),
+  );
 
   const modifiedRoutes = [...previousRouteById.keys()].filter(
     (id) => nextRouteById.has(id) && previousRouteById.get(id) !== nextRouteById.get(id),
@@ -59,7 +61,9 @@ export const diffWorkspaceBundles = (
   const previousChapterById = new Map(
     previous.project.chapters.map((chapter) => [chapter.id, stableStringify(chapter)]),
   );
-  const nextChapterById = new Map(next.project.chapters.map((chapter) => [chapter.id, stableStringify(chapter)]));
+  const nextChapterById = new Map(
+    next.project.chapters.map((chapter) => [chapter.id, stableStringify(chapter)]),
+  );
 
   const modifiedChapters = [...previousChapterById.keys()].filter(
     (id) => nextChapterById.has(id) && previousChapterById.get(id) !== nextChapterById.get(id),
@@ -67,18 +71,16 @@ export const diffWorkspaceBundles = (
 
   const previousSceneById = new Map(
     previous.project.chapters.flatMap((chapter) =>
-      (chapter.scenePackages || []).map((scenePackage) => [
-        `${chapter.id}:${scenePackage.sceneId}`,
-        scenePackage,
-      ] as const),
+      (chapter.scenePackages || []).map(
+        (scenePackage) => [`${chapter.id}:${scenePackage.sceneId}`, scenePackage] as const,
+      ),
     ),
   );
   const nextSceneById = new Map(
     next.project.chapters.flatMap((chapter) =>
-      (chapter.scenePackages || []).map((scenePackage) => [
-        `${chapter.id}:${scenePackage.sceneId}`,
-        scenePackage,
-      ] as const),
+      (chapter.scenePackages || []).map(
+        (scenePackage) => [`${chapter.id}:${scenePackage.sceneId}`, scenePackage] as const,
+      ),
     ),
   );
 
@@ -92,8 +94,12 @@ export const diffWorkspaceBundles = (
     const after = nextSceneById.get(sceneKey);
     if (!before || !after) return [];
 
-    const beforeChoices = new Map(before.choicePoints.map((choice) => [choice.choiceId, stableStringify(choice)]));
-    const afterChoices = new Map(after.choicePoints.map((choice) => [choice.choiceId, stableStringify(choice)]));
+    const beforeChoices = new Map(
+      before.choicePoints.map((choice) => [choice.choiceId, stableStringify(choice)]),
+    );
+    const afterChoices = new Map(
+      after.choicePoints.map((choice) => [choice.choiceId, stableStringify(choice)]),
+    );
 
     return [...new Set([...beforeChoices.keys(), ...afterChoices.keys()])]
       .filter((choiceId) => beforeChoices.get(choiceId) !== afterChoices.get(choiceId))
