@@ -14,6 +14,9 @@ export type CodexTaskScope = {
   expectedOutputs?: string[];
   focusIssueCodes?: string[];
   rebuildDraftExpected?: boolean;
+  expectedTouchedEntities?: string[];
+  doNotChange?: string[];
+  preferredOutputGranularity?: 'project' | 'chapter' | 'scene';
 };
 
 const buildScopeLine = (scope: CodexTaskScope): string => {
@@ -36,17 +39,47 @@ const detectDefaultTaskType = (
   return 'route design';
 };
 
-const buildFocusIssues = (
+const getFocusedIssues = (
   issues: BranchValidationIssue[],
   scope: CodexTaskScope,
-): string[] => {
+): BranchValidationIssue[] => {
   const requested = scope.focusIssueCodes || [];
   const issuePool = requested.length > 0 ? issues.filter((item) => requested.includes(item.code)) : issues;
+  return issuePool.slice(0, 8);
+};
 
-  return issuePool.slice(0, 8).map((issue) => {
+const buildFocusIssueLines = (issues: BranchValidationIssue[]): string[] => {
+  return issues.map((issue) => {
     const location = [issue.chapterId, issue.sceneId, issue.choiceId].filter(Boolean).join(' / ');
     return `- [${issue.level.toUpperCase()}] ${issue.code}: ${issue.message}${location ? ` (${location})` : ''}`;
   });
+};
+
+const ISSUE_CHECKLIST: Record<string, string> = {
+  UNKNOWN_STATE_REFERENCE: 'StateAxis に存在しないキー参照を追加せず、条件/effects のキーを正規キーに合わせる。',
+  CONDITION_TYPE_MISMATCH: 'Condition の比較値型を StateAxis 型（number/boolean/string）に一致させる。',
+  CONDITION_CONFLICT: '同一 choice/scene 内の条件矛盾を解消し、到達不能分岐を残さない。',
+  SPOILER_LEAKAGE: 'reveal 条件と variant 文脈を見直し、未解禁情報が露出しないようにする。',
+  UNREACHABLE_BRANCH: 'entry/visibility/availability 条件を調整し、少なくとも1経路で到達可能にする。',
+  WEAK_CHOICE: 'choice に condition/effect/routeImpact/unlockImpact のいずれかを与えて意味差を作る。',
+  CONVERGENCE_POLICY_MISMATCH: 'variant と convergencePoint の convergencePolicy を一致させる。',
+  CONVERGENCE_TARGET_MISMATCH: 'choice の convergenceTarget と scene convergencePoint の整合を取る。',
+  MISSING_CONVERGENCE_POINT: '分岐が発生する scene には convergencePoint を定義する。',
+  LOCAL_BRANCH_MISSING_CONVERGENCE_TARGET: 'local branch choice に convergenceTarget を設定する。',
+  LOCAL_BRANCH_MISSING_VARIANT: 'reactionVariantId / immediateReactionVariantId の未解決参照を解消する。',
+  IMPOSSIBLE_UNLOCK_CONDITION: '常に false になる unlockConditions を修正する。',
+  UNREACHABLE_ROUTE: 'enabled route が scene/choice の route 参照から到達可能になるよう接続する。',
+  CROSS_CHAPTER_STATE_DEPENDENCY: 'chapter scope state は参照前に先行章で更新される流れへ修正する。',
+  REFERENCED_NOT_UPDATED_STATE: '参照する state が未更新にならないよう carryover/effects を補う。',
+};
+
+const buildIssueChecklistLines = (issues: BranchValidationIssue[]): string[] => {
+  const uniqueCodes = [...new Set(issues.map((item) => item.code))];
+  if (uniqueCodes.length === 0) {
+    return ['- 現在 issue なし。設計品質改善（弱い選択肢・分岐密度・収束明瞭性）を優先する。'];
+  }
+
+  return uniqueCodes.map((code) => `- ${code}: ${ISSUE_CHECKLIST[code] || '対象 issue の再現条件を保ったまま、最小差分で修正する。'}`);
 };
 
 export const buildCodexTask = (
@@ -75,10 +108,22 @@ export const buildCodexTask = (
     'updated_workspace_bundle.json',
     'codex_change_summary.md',
   ];
-  const focusIssues = buildFocusIssues(issues, scope);
+  const focusedIssues = getFocusedIssues(issues, scope);
+  const focusIssueLines = buildFocusIssueLines(focusedIssues);
+  const issueChecklistLines = buildIssueChecklistLines(focusedIssues);
   const taskType = detectDefaultTaskType(scope, issues);
   const rebuildDraftExpected =
     scope.rebuildDraftExpected ?? (taskType === 'scene package generation' || taskType === 'draft polish');
+  const touchedEntities = scope.expectedTouchedEntities || [
+    '`project.bible.routes` / `project.bible.revealPlans` / `project.bible.stateAxes` / `project.bible.branchPolicies` (as needed)',
+    '`project.chapters[].scenePackages` in allowed scope only',
+    'validator-related `choices` / `variants` / `convergence` links in allowed scope',
+  ];
+  const doNotChange = scope.doNotChange || [
+    'chapter/scene IDs outside scope guard',
+    'global prose rewrite (`chapter.content`) unless explicitly requested',
+    'unrelated routes or state axes with no task/validator impact',
+  ];
 
   return [
     '# codex_task.md',
@@ -113,19 +158,32 @@ export const buildCodexTask = (
     '- Keep validator compatibility and branch convergence consistency.',
     '',
     '## Focus validator issues',
-    ...(focusIssues.length > 0 ? focusIssues : ['- No current validator issues. Focus on quality improvements only.']),
+    ...(focusIssueLines.length > 0
+      ? focusIssueLines
+      : ['- No current validator issues. Focus on quality improvements only.']),
+    '',
+    '## Validator issue-driven checklist',
+    ...issueChecklistLines,
     '',
     '## Expected touched entities',
-    '- `project.bible.routes` / `project.bible.revealPlans` / `project.bible.stateAxes` / `project.bible.branchPolicies` (as needed)',
-    '- `project.chapters[].scenePackages` in allowed scope only',
-    '- Avoid broad rewrites to chapter prose unless explicitly requested',
+    ...touchedEntities.map((item) => `- ${item}`),
+    '',
+    '## Do not change',
+    ...doNotChange.map((item) => `- ${item}`),
+    '',
+    '## Preferred output granularity',
+    `- ${scope.preferredOutputGranularity || scope.scopeType}`,
+    '- Prefer minimal diffs that satisfy validator and scope objective.',
     '',
     '## Expected outputs',
     ...expectedOutputs.map((item) => `- ${item}`),
     '',
-    '## Rebuild expectation',
+    '## Draft rebuild expectation',
     `- Draft rebuild required after import: ${rebuildDraftExpected ? 'yes' : 'no'}`,
     '- Re-run branch validator after importing updated workspace.',
-    '- Explicitly report unresolved validator issues in `codex_change_summary.md`.',
+    '',
+    '## If unresolved, explain why',
+    '- Do not silently drop failing structures or IDs.',
+    '- In `codex_change_summary.md`, list unresolved issues with concrete reason, impact, and next action.',
   ].join('\n');
 };

@@ -1,60 +1,38 @@
 # DuoScript Codex Operation Guide
 
-## Priority Inputs
+## Priority inputs
 
-1. Always read `codex_task.md` first.
+1. Read `codex_task.md` first.
 2. Then read `workspace_bundle.json`.
 3. Use `validator_report.md` and `codex_schema_reference.md` as guardrails.
 
-## Source of Truth
+## Permanent rules (repo-wide)
 
-Treat the following as canonical VN structures:
-
-- `bible.routes`
-- `bible.revealPlans`
-- `bible.stateAxes`
-- `bible.branchPolicies`
-- `chapter.scenePackages`
-
-Treat `chapter.content` as cached/final-display text, not the canonical branch design source.
-
-When editing, prioritize these targets:
-
-- `bible`
-- `chapters`
-- `beats`
-- `scenes`
-
-## Required Validation
-
-Before returning any edits, re-check:
-
-- variant references
-- convergence consistency
-- condition type safety
-- spoiler leakage
-- weak choices and route reachability assumptions
-- run validator checks after applying changes
-
-## Safety
-
+- Canonical structures: `bible.routes`, `bible.revealPlans`, `bible.stateAxes`, `bible.branchPolicies`, `chapter.scenePackages`.
+- `chapter.content` is cache/display text, not branch-design source of truth.
+- Prefer scope-limited edits (`scene`/`chapter`) over project-wide rewrites.
+- Do not edit outside `scope guard` boundaries in `codex_task.md`.
+- Do not silently renumber, normalize, or delete IDs.
 - Avoid destructive changes unless explicitly requested.
-- Do not silently normalize or delete IDs.
-- Prefer chapter/scene-scoped edits over project-wide rewrites.
-- Do not edit outside explicit `scope guard` boundaries in `codex_task.md`.
+- Re-run validator checks after edits.
 
-## Output Rules
+## Required output
 
-When returning edits to DuoScript, output:
+Always return:
 
-- `updated_workspace_bundle.json` (required)
-- `codex_change_summary.md` (required)
+- `updated_workspace_bundle.json`
+- `codex_change_summary.md`
 
 `codex_change_summary.md` must include:
 
 - touched entities (route/chapter/scene/choice/variant IDs)
 - validator issues fixed
-- validator issues still remaining (if any)
+- validator issues still remaining
 - whether draft rebuild is required after import
+- unresolved issues and why they remain
 
-Prefer scope-limited edits (`chapter` / `scene`) when the task brief requests it.
+## Prompt placement policy
+
+- Keep this file short; do not paste long model prompts here.
+- Put task-specific instructions in `codex_task.md`.
+- Put role/process guidance in docs (e.g., `docs/skills/*`).

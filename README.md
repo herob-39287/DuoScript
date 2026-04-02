@@ -33,10 +33,34 @@
    - `codex_schema_reference.md`
 3. Codex は `updated_workspace_bundle.json` と `codex_change_summary.md` を返します。
 4. DuoScript 側で `Import Workspace`（または `Import & Apply`）を実行します。
-5. Import 後は必ず次を実行します。
-   - `validateBranches` で branch validator を再実行
-   - scene package を更新した場合は `Build Draft` / `rebuildDraft` で本文キャッシュを再構築
+5. Import 後に `validateBranches` で branch validator を再実行します。
 6. 残存する validator issue があれば、`codex_change_summary.md` を参照して追加修正を行います。
+7. scene package を更新した場合は `Build Draft` / `rebuildDraft` を実行して本文キャッシュを更新します。
+
+
+### Codex 往復の受け渡しファイル
+
+**DuoScript → Codex（渡す4ファイル）**
+
+- `workspace_bundle.json`
+- `codex_task.md`
+- `validator_report.md`
+- `codex_schema_reference.md`
+
+**Codex → DuoScript（返す2ファイル）**
+
+- `updated_workspace_bundle.json`
+- `codex_change_summary.md`
+
+### `codex_change_summary.md` の確認ポイント
+
+Import 前後で、少なくとも次を確認してください。
+
+- touched entities が task scope（project/chapter/scene）から逸脱していないか
+- fixed issues が `validator_report.md` の対象 issue と対応しているか
+- remaining issues に理由・影響・次アクションが明記されているか
+- draft rebuild 要否が更新内容（scenePackages変更有無）と一致しているか
+- ID の削除/再採番が行われていないか（明示依頼がない限り禁止）
 
 ---
 
