@@ -20,6 +20,26 @@
 
 ---
 
+### Codex 実運用手順（project / chapter / scene）
+
+1. Writer で `Prepare for Codex` を実行し、編集スコープを選択します。
+   - `project`: 全体設計の更新
+   - `chapter`: 章内 scenePackages の更新
+   - `scene`: 単一 scenePackage の更新
+2. 出力された 4 ファイルを Codex に渡します。
+   - `workspace_bundle.json`
+   - `codex_task.md`
+   - `validator_report.md`
+   - `codex_schema_reference.md`
+3. Codex は `updated_workspace_bundle.json` と `codex_change_summary.md` を返します。
+4. DuoScript 側で `Import Workspace`（または `Import & Apply`）を実行します。
+5. Import 後は必ず次を実行します。
+   - `validateBranches` で branch validator を再実行
+   - scene package を更新した場合は `Build Draft` / `rebuildDraft` で本文キャッシュを再構築
+6. 残存する validator issue があれば、`codex_change_summary.md` を参照して追加修正を行います。
+
+---
+
 ## ⚠️ セキュリティに関する重要なお知らせ (API Key Safety)
 
 本アプリケーションは、環境変数等で設定された **Google Gemini API Key** を使用して動作します。

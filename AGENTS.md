@@ -39,12 +39,22 @@ Before returning any edits, re-check:
 ## Safety
 
 - Avoid destructive changes unless explicitly requested.
+- Do not silently normalize or delete IDs.
+- Prefer chapter/scene-scoped edits over project-wide rewrites.
+- Do not edit outside explicit `scope guard` boundaries in `codex_task.md`.
 
 ## Output Rules
 
 When returning edits to DuoScript, output:
 
-- `updated_workspace_bundle.json`
-- `codex_change_summary.md`
+- `updated_workspace_bundle.json` (required)
+- `codex_change_summary.md` (required)
+
+`codex_change_summary.md` must include:
+
+- touched entities (route/chapter/scene/choice/variant IDs)
+- validator issues fixed
+- validator issues still remaining (if any)
+- whether draft rebuild is required after import
 
 Prefer scope-limited edits (`chapter` / `scene`) when the task brief requests it.
