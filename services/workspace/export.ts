@@ -97,7 +97,7 @@ export const buildPrepareForCodexArtifacts = (
 
   return {
     workspaceBundle: serializeWorkspaceBundle(bundle),
-    codexTask: buildCodexTask(project, scope),
+    codexTask: buildCodexTask(bundle, scope, issues),
     validatorReport: buildValidatorReport(issues),
     codexSchemaReference: buildCodexSchemaReference(),
   };
