@@ -50,7 +50,11 @@ const WriterView: React.FC = () => {
       objective: 'Refine VN branching packages with validator-safe updates.',
     });
     const files = [
-      { name: 'workspace_bundle.json', content: artifacts.workspaceBundle, type: 'application/json' },
+      {
+        name: 'workspace_bundle.json',
+        content: artifacts.workspaceBundle,
+        type: 'application/json',
+      },
       { name: 'codex_task.md', content: artifacts.codexTask, type: 'text/markdown' },
       { name: 'validator_report.md', content: artifacts.validatorReport, type: 'text/markdown' },
       {
@@ -237,7 +241,9 @@ const WriterView: React.FC = () => {
                     const reader = new FileReader();
                     reader.onload = () => {
                       try {
-                        actions.importWorkspace(JSON.parse(String(reader.result)), { autoApply: true });
+                        actions.importWorkspace(JSON.parse(String(reader.result)), {
+                          autoApply: true,
+                        });
                       } catch {
                         // noop
                       }
@@ -281,8 +287,8 @@ const WriterView: React.FC = () => {
                 </p>
                 {data.pendingImportDiff && (
                   <p>
-                    import validation: {data.pendingImportValidationIssueCount} issues / draft rebuild{' '}
-                    {data.pendingImportRequiresDraftRebuild ? 'required' : 'not required'}
+                    import validation: {data.pendingImportValidationIssueCount} issues / draft
+                    rebuild {data.pendingImportRequiresDraftRebuild ? 'required' : 'not required'}
                   </p>
                 )}
                 <button
