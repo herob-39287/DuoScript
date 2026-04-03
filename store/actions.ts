@@ -127,10 +127,18 @@ export const updateChapter = (id: string, updates: Partial<ChapterLog>): Chapter
   id,
   updates,
 });
-export const setChapterContent = (id: string, content: string): ChapterAction => ({
-  type: 'SET_CHAPTER_CONTENT',
+export const setChapterDraftText = (id: string, draftText: string): ChapterAction => ({
+  type: 'SET_CHAPTER_DRAFT_TEXT',
   id,
-  content,
+  draftText,
+});
+export const setChapterAuthoringMode = (
+  id: string,
+  mode: ChapterLog['authoringMode'],
+): ChapterAction => ({
+  type: 'SET_CHAPTER_AUTHORING_MODE',
+  id,
+  mode,
 });
 export const addChapter = (chapter: ChapterLog): ChapterAction => ({
   type: 'ADD_CHAPTER',

@@ -462,10 +462,13 @@ export const useWriterAI = ({
       });
 
       const nextContent = stage3.content || textareaRef.current?.value || '';
+      const mode = activeChapter.authoringMode || 'freeform';
       projectDispatch(
         Actions.updateChapter(activeChapter.id, {
           scenePackages: polishedPackages,
-          content: nextContent,
+          ...(mode === 'structured'
+            ? { compiledContent: nextContent }
+            : { draftText: nextContent, compiledContent: nextContent }),
         }),
       );
       if (textareaRef.current) textareaRef.current.value = nextContent;

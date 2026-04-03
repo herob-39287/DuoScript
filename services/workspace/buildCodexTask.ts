@@ -121,7 +121,7 @@ export const buildCodexTask = (
   ];
   const doNotChange = scope.doNotChange || [
     'chapter/scene IDs outside scope guard',
-    'global prose rewrite (`chapter.content`) unless explicitly requested',
+    'global prose rewrite (`chapter.draftText` / `chapter.compiledContent`) unless explicitly requested',
     'unrelated routes or state axes with no task/validator impact',
   ];
 
@@ -153,7 +153,8 @@ export const buildCodexTask = (
     '',
     '## Primary constraints',
     '- Treat `bible.routes`, `bible.revealPlans`, `bible.stateAxes`, `bible.branchPolicies`, `chapter.scenePackages` as canonical.',
-    '- Treat `chapter.content` as cache/display output only.',
+    '- For `structured` chapters: treat `chapter.scenePackages` as canonical and `chapter.compiledContent` as cache/display output.',
+    '- For `freeform` chapters: treat `chapter.draftText` as canonical prose source.',
     '- Keep IDs stable unless explicit create/delete is requested.',
     '- Keep validator compatibility and branch convergence consistency.',
     '',

@@ -7,8 +7,8 @@ export {
 } from './editor';
 export {
   buildScenePackageCanonicalText,
-  buildChapterDraftFromScenePackages,
-  syncChapterContentFromScenePackages,
+  compileChapterContentFromScenePackages,
+  syncChapterCompiledContentFromScenePackages,
   detectChapterContentDrift,
 } from './chapterAssembler';
 export { validateChapterScenePackages } from './ruleValidator';

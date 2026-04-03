@@ -5,6 +5,7 @@ import { useMetadata } from '../../contexts/StoryContext';
 interface EditorCanvasProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onChange: () => void;
+  readOnly?: boolean;
   isVertical: boolean;
   isZenMode: boolean;
   isLoading: boolean;
@@ -14,6 +15,7 @@ interface EditorCanvasProps {
 export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   textareaRef,
   onChange,
+  readOnly = false,
   isVertical,
   isZenMode,
   isLoading,
@@ -94,7 +96,8 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
         <textarea
           ref={textareaRef}
           onInput={onChange}
-          disabled={isLoading || isProcessing}
+          disabled={isLoading || isProcessing || readOnly}
+          readOnly={readOnly}
           style={{
             fontSize: `${settings.fontSize}px`,
             lineHeight: settings.lineHeight,

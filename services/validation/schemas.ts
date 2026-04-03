@@ -259,7 +259,10 @@ export const ChapterLogSchema = z.object({
   volumeId: z.string().optional(),
   title: z.string(),
   summary: z.string(),
-  content: z.string().optional(),
+  authoringMode: z.enum(['structured', 'freeform']).default('freeform'),
+  draftText: z.string().optional(),
+  compiledContent: z.string().optional(),
+  content: z.string().optional(), // legacy / migration only
   scenes: z.array(StorySceneSchema),
   scenePackages: z.array(ScenePackageSchema).optional(),
   beats: z.array(PlotBeatSchema),

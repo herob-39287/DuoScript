@@ -1,6 +1,6 @@
 import { StoryProject } from '../../types';
 import {
-  syncChapterContentFromScenePackages,
+  syncChapterCompiledContentFromScenePackages,
   validateChapterScenePackages,
   validateProjectBranches,
 } from '../../services/scenePackage';
@@ -23,12 +23,33 @@ const toIssue = (issue: { level: 'error' | 'warning'; message: string }): SaveVa
 });
 
 export const prepareProjectForSave = (project: StoryProject): SavePreparationResult => {
-  const syncedChapters = project.chapters.map((chapter) =>
-    syncChapterContentFromScenePackages(chapter),
-  );
+  const syncedChapters = project.chapters.map((chapter) => {
+    const authoringMode = chapter.authoringMode || 'freeform';
+    const legacyContent = chapter.content ?? '';
+
+    if (authoringMode === 'structured') {
+      return syncChapterCompiledContentFromScenePackages({
+        ...chapter,
+        authoringMode,
+        compiledContent: chapter.compiledContent ?? legacyContent,
+      });
+    }
+
+    const draftText = chapter.draftText ?? legacyContent;
+    return {
+      ...chapter,
+      authoringMode,
+      draftText,
+      compiledContent: chapter.compiledContent ?? draftText,
+      wordCount: draftText.length,
+    };
+  });
 
   const didSyncChapterContent = syncedChapters.some(
-    (chapter, idx) => chapter.content !== project.chapters[idx].content,
+    (chapter, idx) =>
+      chapter.compiledContent !== project.chapters[idx].compiledContent ||
+      chapter.draftText !== project.chapters[idx].draftText ||
+      chapter.authoringMode !== (project.chapters[idx].authoringMode || 'freeform'),
   );
 
   const chapterIssues = syncedChapters.flatMap((chapter) =>

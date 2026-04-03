@@ -13,8 +13,8 @@ import { useManuscriptEditor } from './useManuscriptEditor';
 import { useWriterAI } from './useWriterAI';
 import { ScenePackage } from '../types';
 import {
-  buildChapterDraftFromScenePackages,
-  syncChapterContentFromScenePackages,
+  compileChapterContentFromScenePackages,
+  syncChapterCompiledContentFromScenePackages,
   validateChapterScenePackages,
 } from '../services/scenePackage';
 import {
@@ -100,6 +100,9 @@ export const useWriterLogic = () => {
         status: 'Idea' as const,
         wordCount: 0,
         draftVersion: 0,
+        authoringMode: 'freeform' as const,
+        draftText: '',
+        compiledContent: '',
         updatedAt: Date.now(),
         involvedCharacterIds: [],
       };
@@ -142,29 +145,42 @@ export const useWriterLogic = () => {
     syncChapterFromScenePackages: () => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
+      if ((chapter.authoringMode || 'freeform') !== 'structured') return;
 
-      const synced = syncChapterContentFromScenePackages(chapter);
+      const synced = syncChapterCompiledContentFromScenePackages(chapter);
       projectDispatch(Actions.updateChapter(chapter.id, synced));
-      if (editor.textareaRef.current && synced.content !== undefined) {
-        editor.textareaRef.current.value = synced.content;
+      if (editor.textareaRef.current && synced.compiledContent !== undefined) {
+        editor.textareaRef.current.value = synced.compiledContent;
       }
-      editor.setWordCount((synced.content || '').length);
+      editor.setWordCount((synced.compiledContent || '').length);
     },
 
-    buildDraftFromScenePackages: () => {
+    rebuildCompiledContentFromScenePackages: () => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
+      if ((chapter.authoringMode || 'freeform') !== 'structured') return;
 
-      const draft = buildChapterDraftFromScenePackages(chapter);
+      const compiledContent = compileChapterContentFromScenePackages(chapter);
       projectDispatch(
         Actions.updateChapter(chapter.id, {
-          content: draft,
+          compiledContent,
         }),
       );
       if (editor.textareaRef.current) {
-        editor.textareaRef.current.value = draft;
+        editor.textareaRef.current.value = compiledContent;
       }
-      editor.setWordCount(draft.length);
+      editor.setWordCount(compiledContent.length);
+    },
+    convertChapterToFreeform: () => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+      projectDispatch(Actions.setChapterAuthoringMode(chapter.id, 'freeform'));
+      projectDispatch(
+        Actions.setChapterDraftText(
+          chapter.id,
+          chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '',
+        ),
+      );
     },
     exportWorkspace: () => {
       return serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync }));
@@ -205,7 +221,7 @@ export const useWriterLogic = () => {
       return buildPrepareForCodexArtifacts({ meta, bible, chapters, sync }, scope);
     },
     validateBranches: () => validateProjectBranchesV2(chapters, bible),
-    rebuildDraft: () => actions.buildDraftFromScenePackages(),
+    rebuildDraft: () => actions.rebuildCompiledContentFromScenePackages(),
     acceptImportedChanges: () => {
       if (!pendingImport) return;
       projectDispatch(Actions.updateMeta(pendingImport.nextProject.meta));

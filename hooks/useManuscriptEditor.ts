@@ -5,7 +5,8 @@ import {
   useManuscriptDispatch,
   useNotificationDispatch,
 } from '../contexts/StoryContext';
-import { loadChapterContent } from '../services/storageService';
+import { ChapterLog } from '../types';
+import { loadChapterBody } from '../services/storageService';
 import * as Actions from '../store/actions';
 
 interface UseManuscriptEditorProps {
@@ -32,6 +33,12 @@ export const useManuscriptEditor = ({
   const draftVersionRef = useRef(0);
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId);
+  const getEditorText = (chapter: ChapterLog): string => {
+    if ((chapter.authoringMode || 'freeform') === 'structured') {
+      return chapter.compiledContent ?? chapter.content ?? '';
+    }
+    return chapter.draftText ?? chapter.content ?? '';
+  };
 
   // Auto-select first chapter if activeChapterId is invalid
   useEffect(() => {
@@ -55,19 +62,34 @@ export const useManuscriptEditor = ({
       const chapter = chapters.find((c) => c.id === activeChapterId);
       if (!chapter) return;
 
-      if (chapter.content !== undefined && chapter.content !== null) {
-        if (textareaRef.current) textareaRef.current.value = chapter.content;
-        setWordCount(chapter.content.length);
+      const hasInMemoryText =
+        chapter.draftText !== undefined ||
+        chapter.compiledContent !== undefined ||
+        chapter.content !== undefined;
+      const inMemoryText = getEditorText(chapter);
+      if (hasInMemoryText) {
+        if (textareaRef.current) textareaRef.current.value = inMemoryText;
+        setWordCount(inMemoryText.length);
         return;
       }
 
       setIsLoadingContent(true);
       try {
         const rev = meta.headRev || 1;
-        const content = (await loadChapterContent(meta.id, activeChapterId, rev)) || '';
-        projectDispatch({ type: 'SET_CHAPTER_CONTENT', id: activeChapterId, content });
-        if (textareaRef.current) textareaRef.current.value = content;
-        setWordCount(content.length);
+        const body = await loadChapterBody(meta.id, activeChapterId, rev);
+        const mode = chapter.authoringMode || 'freeform';
+        const draftText = body?.draftText ?? chapter.draftText ?? chapter.content ?? '';
+        const compiledContent = body?.compiledContent ?? chapter.compiledContent ?? chapter.content ?? '';
+        projectDispatch(
+          Actions.updateChapter(activeChapterId, {
+            authoringMode: mode,
+            draftText,
+            compiledContent,
+          }),
+        );
+        const text = mode === 'structured' ? compiledContent : draftText;
+        if (textareaRef.current) textareaRef.current.value = text;
+        setWordCount(text.length);
       } catch (e) {
         addLog('error', 'System', '章の本文読み込みに失敗しました。');
       } finally {
@@ -79,7 +101,11 @@ export const useManuscriptEditor = ({
 
   const handleTextChange = useCallback(() => {
     if (!textareaRef.current || !activeChapterId || !meta.id) return;
+    if (!activeChapter) return;
     const currentVal = textareaRef.current.value;
+    if ((activeChapter.authoringMode || 'freeform') === 'structured') {
+      return;
+    }
 
     // 文字数の更新頻度を抑制
     if (!wordCountThrottleRef.current) {
@@ -98,9 +124,14 @@ export const useManuscriptEditor = ({
     syncTimeoutRef.current = window.setTimeout(() => {
       setWordCount(currentVal.length);
       projectDispatch({
+        type: 'SET_CHAPTER_DRAFT_TEXT',
+        id: activeChapterId,
+        draftText: currentVal,
+      });
+      projectDispatch({
         type: 'UPDATE_CHAPTER',
         id: activeChapterId,
-        updates: { content: currentVal, draftVersion: currentVersion },
+        updates: { draftVersion: currentVersion },
       });
     }, 1000);
 
@@ -108,7 +139,7 @@ export const useManuscriptEditor = ({
     if (onContentUpdate) {
       onContentUpdate(currentVal);
     }
-  }, [activeChapterId, projectDispatch, meta.id, meta.headRev, onContentUpdate]);
+  }, [activeChapterId, activeChapter, projectDispatch, meta.id, meta.headRev, onContentUpdate]);
 
   return {
     activeChapter,

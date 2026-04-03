@@ -1,7 +1,7 @@
 import { StoryProject } from '../../types';
 import { normalizeProject } from '../bibleManager';
 import {
-  buildChapterDraftFromScenePackages,
+  compileChapterContentFromScenePackages,
   detectChapterContentDrift,
 } from '../scenePackage/chapterAssembler';
 import { validateProjectBranches } from '../validation/branchValidator';
@@ -41,17 +41,37 @@ export const workspaceBundleToProject = (
 
   const rebuiltChapterIds: string[] = [];
   const rebuiltChapters = next.chapters.map((chapter) => {
+    const mode = chapter.authoringMode || (chapter.scenePackages?.length ? 'structured' : 'freeform');
     const hasScenePackages = Boolean(chapter.scenePackages && chapter.scenePackages.length > 0);
-    if (!hasScenePackages) return chapter;
+    const withLegacyMigrated = {
+      ...chapter,
+      authoringMode: mode,
+      draftText:
+        chapter.draftText ??
+        (mode === 'freeform' ? chapter.content ?? '' : undefined),
+      compiledContent:
+        chapter.compiledContent ??
+        (mode === 'structured' ? chapter.content ?? '' : undefined),
+    };
 
-    const drift = detectChapterContentDrift(chapter);
-    if (!drift.hasDrift) return chapter;
+    if (!hasScenePackages || mode === 'freeform') {
+      const draftText = withLegacyMigrated.draftText ?? '';
+      return {
+        ...withLegacyMigrated,
+        draftText,
+        compiledContent: withLegacyMigrated.compiledContent ?? draftText,
+        wordCount: draftText.length,
+      };
+    }
 
-    const rebuilt = buildChapterDraftFromScenePackages(chapter);
+    const drift = detectChapterContentDrift(withLegacyMigrated);
+    if (!drift.hasDrift) return withLegacyMigrated;
+
+    const rebuilt = compileChapterContentFromScenePackages(withLegacyMigrated);
     rebuiltChapterIds.push(chapter.id);
     return {
-      ...chapter,
-      content: rebuilt,
+      ...withLegacyMigrated,
+      compiledContent: rebuilt,
       wordCount: rebuilt.length,
     };
   });

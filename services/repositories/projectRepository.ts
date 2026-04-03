@@ -22,6 +22,12 @@ export const getHeadRev = async (projectId: string): Promise<number> => {
 
 const SCHEMA_VERSION = 1;
 
+type ChapterTextState = {
+  draftText: string;
+  compiledContent: string;
+  content?: string;
+};
+
 export const saveProjectRevision = async (
   project: StoryProject,
   expectedRev?: number,
@@ -47,20 +53,23 @@ export const saveProjectRevision = async (
 
     const chapterHeaders = await Promise.all(
       project.chapters.map(async (ch: any) => {
-        const { content, ...header } = ch;
+        const { draftText, compiledContent, content, ...header } = ch;
 
-        if (content !== undefined) {
-          // If content is loaded in memory, save it to the new revision
-          await tx
-            .objectStore(STORE_CHAPTER_DATA)
-            .put({ projectId, chapterId: ch.id, rev: nextRev, content });
+        if (draftText !== undefined || compiledContent !== undefined || content !== undefined) {
+          await tx.objectStore(STORE_CHAPTER_DATA).put({
+            projectId,
+            chapterId: ch.id,
+            rev: nextRev,
+            draftText: draftText ?? '',
+            compiledContent: compiledContent ?? '',
+            content: content ?? '',
+          });
         } else if (currentRev > 0) {
-          // Lazy Save: Content not in memory, copy from previous revision
-          const prevContent = await tx
+          const prevBody = await tx
             .objectStore(STORE_CHAPTER_DATA)
             .get([projectId, ch.id, currentRev]);
-          if (prevContent) {
-            await tx.objectStore(STORE_CHAPTER_DATA).put({ ...prevContent, rev: nextRev });
+          if (prevBody) {
+            await tx.objectStore(STORE_CHAPTER_DATA).put({ ...prevBody, rev: nextRev });
           }
         }
 
@@ -139,8 +148,12 @@ export const loadFullSnapshot = async (
   if (!manifest) return null;
 
   const chapters = manifest.chapterHeaders || [];
-  // Explicitly set content to undefined to indicate it needs fetching
-  const lightChapters = chapters.map((c: any) => ({ ...c, content: undefined }));
+  const lightChapters = chapters.map((c: any) => ({
+    ...c,
+    draftText: undefined,
+    compiledContent: undefined,
+    content: undefined,
+  }));
 
   // manifest contains meta, bible, sync. We overwrite chapters with lightChapters.
   // Cast to StoryProject to enforce type.
@@ -158,8 +171,11 @@ export const saveChapterContent = async (
   rev: number,
   content: string,
 ): Promise<void> => {
-  const db = await initDB();
-  await db.put(STORE_CHAPTER_DATA, { projectId, chapterId, rev, content });
+  await saveChapterBody(projectId, chapterId, rev, {
+    draftText: content,
+    compiledContent: content,
+    content,
+  });
 };
 
 export const loadChapterContent = async (
@@ -167,10 +183,39 @@ export const loadChapterContent = async (
   chapterId: string,
   rev: number,
 ): Promise<string | null> => {
+  const body = await loadChapterBody(projectId, chapterId, rev);
+  if (!body) return '';
+  return body.draftText || body.compiledContent || body.content || '';
+};
+
+export const saveChapterBody = async (
+  projectId: string,
+  chapterId: string,
+  rev: number,
+  body: ChapterTextState,
+): Promise<void> => {
+  const db = await initDB();
+  await db.put(STORE_CHAPTER_DATA, { projectId, chapterId, rev, ...body });
+};
+
+export const loadChapterBody = async (
+  projectId: string,
+  chapterId: string,
+  rev: number,
+): Promise<ChapterTextState | null> => {
   const db = await initDB();
   const result = await db.get(STORE_CHAPTER_DATA, [projectId, chapterId, rev]);
-  return result?.content || '';
+  if (!result) return null;
+  return {
+    draftText: result.draftText ?? result.content ?? '',
+    compiledContent: result.compiledContent ?? result.content ?? '',
+    content: result.content ?? '',
+  };
 };
+
+// Backward-compatible aliases (phase-1 migration)
+export const saveChapterTextState = saveChapterBody;
+export const loadChapterTextState = loadChapterBody;
 
 export const getAllProjects = async (): Promise<StoryProject[]> => {
   const db = await initDB();

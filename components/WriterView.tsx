@@ -256,18 +256,26 @@ const WriterView: React.FC = () => {
 
             {!ui.isZenMode && ui.writerMode === 'final_draft' && (
               <div className="mb-3 flex items-center gap-2">
-                <button
-                  onClick={actions.buildDraftFromScenePackages}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 hover:bg-stone-700"
-                >
-                  Build Draft
-                </button>
-                <button
-                  onClick={actions.syncChapterFromScenePackages}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-orange-300 bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20"
-                >
-                  Sync Cache
-                </button>
+                {data.activeChapter?.authoringMode === 'structured' ? (
+                  <>
+                    <button
+                      onClick={actions.rebuildCompiledContentFromScenePackages}
+                      className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 hover:bg-stone-700"
+                    >
+                      Rebuild Compiled Content
+                    </button>
+                    <button
+                      onClick={actions.convertChapterToFreeform}
+                      className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-orange-300 bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20"
+                    >
+                      Convert to Freeform
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-[10px] font-black tracking-widest text-emerald-300">
+                    Freeform mode: editing draftText directly
+                  </div>
+                )}
               </div>
             )}
 
@@ -302,9 +310,15 @@ const WriterView: React.FC = () => {
 
             {ui.writerMode === 'final_draft' && (
               <>
+                {data.activeChapter?.authoringMode === 'structured' && (
+                  <div className="mb-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-100">
+                    この章は structured mode です。本文は scene packages から生成されています。自由編集するには freeform に変換してください。
+                  </div>
+                )}
                 <EditorCanvas
                   textareaRef={refs.textareaRef}
                   onChange={actions.handleTextChange}
+                  readOnly={data.activeChapter?.authoringMode === 'structured'}
                   isVertical={ui.isVertical}
                   isZenMode={ui.isZenMode}
                   isLoading={status.isLoadingContent}

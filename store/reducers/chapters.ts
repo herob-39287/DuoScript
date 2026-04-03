@@ -1,6 +1,6 @@
 import { produce } from 'immer';
 import { ChapterLog, ChapterAction, BibleAction } from '../../types';
-import { syncChapterContentFromScenePackages } from '../../services/scenePackage';
+import { syncChapterCompiledContentFromScenePackages } from '../../services/scenePackage';
 
 export const chaptersReducer = (
   state: ChapterLog[],
@@ -15,27 +15,46 @@ export const chaptersReducer = (
         if (chapter) {
           Object.assign(chapter, action.updates);
           if (action.updates.scenePackages !== undefined) {
-            const synced = syncChapterContentFromScenePackages(chapter as ChapterLog);
-            chapter.content = synced.content;
+            const synced = syncChapterCompiledContentFromScenePackages(chapter as ChapterLog);
+            chapter.compiledContent = synced.compiledContent;
             chapter.wordCount = synced.wordCount;
-          } else if (action.updates.content !== undefined) {
-            chapter.wordCount = action.updates.content.length;
+          } else if (
+            action.updates.draftText !== undefined &&
+            chapter.authoringMode !== 'structured'
+          ) {
+            chapter.wordCount = action.updates.draftText.length;
           }
           chapter.updatedAt = Date.now();
         }
         break;
       }
-      case 'SET_CHAPTER_CONTENT': {
+      case 'SET_CHAPTER_DRAFT_TEXT': {
+        const chapter = draft.find((c) => c.id === action.id);
+        if (chapter && chapter.authoringMode !== 'structured') {
+          chapter.draftText = action.draftText;
+          chapter.wordCount = action.draftText.length;
+          chapter.updatedAt = Date.now();
+        }
+        break;
+      }
+      case 'SET_CHAPTER_AUTHORING_MODE': {
         const chapter = draft.find((c) => c.id === action.id);
         if (chapter) {
-          chapter.content = action.content;
-          chapter.wordCount = action.content.length;
+          chapter.authoringMode = action.mode;
+          if (action.mode === 'freeform') {
+            chapter.draftText = chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '';
+            chapter.wordCount = chapter.draftText.length;
+          } else {
+            const synced = syncChapterCompiledContentFromScenePackages(chapter as ChapterLog);
+            chapter.compiledContent = synced.compiledContent;
+            chapter.wordCount = synced.wordCount;
+          }
           chapter.updatedAt = Date.now();
         }
         break;
       }
       case 'ADD_CHAPTER':
-        draft.push(syncChapterContentFromScenePackages(action.payload));
+        draft.push(syncChapterCompiledContentFromScenePackages(action.payload));
         break;
       case 'REMOVE_CHAPTER': {
         const idx = draft.findIndex((c) => c.id === action.id);

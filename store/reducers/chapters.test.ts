@@ -12,9 +12,10 @@ const createChapter = () =>
     status: 'Idea',
     wordCount: 0,
     draftVersion: 0,
+    authoringMode: 'structured',
     updatedAt: 0,
     involvedCharacterIds: [],
-    content: 'legacy',
+    compiledContent: 'legacy',
     scenePackages: [
       {
         sceneId: 's1',
@@ -34,7 +35,7 @@ const createChapter = () =>
   }) as any;
 
 describe('chaptersReducer scenePackages canonical write strategy', () => {
-  it('syncs content cache when scenePackages are updated', () => {
+  it('syncs compiled cache when scenePackages are updated', () => {
     const initial = [createChapter()];
 
     const next = chaptersReducer(initial, {
@@ -53,7 +54,7 @@ describe('chaptersReducer scenePackages canonical write strategy', () => {
       },
     } as any);
 
-    expect(next[0].content).toContain('new intro');
-    expect(next[0].wordCount).toBe((next[0].content || '').length);
+    expect(next[0].compiledContent).toContain('new intro');
+    expect(next[0].wordCount).toBe((next[0].compiledContent || '').length);
   });
 });

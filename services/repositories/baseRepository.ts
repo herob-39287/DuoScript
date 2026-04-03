@@ -21,7 +21,14 @@ export interface DuoScriptDB extends DBSchema {
   };
   ChapterRevisions: {
     key: [string, string, number]; // [projectId, chapterId, rev]
-    value: { projectId: string; chapterId: string; rev: number; content: string };
+    value: {
+      projectId: string;
+      chapterId: string;
+      rev: number;
+      content?: string;
+      draftText?: string;
+      compiledContent?: string;
+    };
   };
   Portraits: {
     key: string; // id
