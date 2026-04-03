@@ -10,7 +10,7 @@ export const useRAG = () => {
 
   // データの最新状態をRefで保持（useEffectの依存配列による過剰な再実行を防ぐため）
   const projectDataRef = useRef({ meta, bible, chapters, sync });
-  const lastProcessedId = useRef<string | null>(null);
+  const lastProcessedSignature = useRef<string | null>(null);
 
   useEffect(() => {
     projectDataRef.current = { meta, bible, chapters, sync };
@@ -20,18 +20,44 @@ export const useRAG = () => {
     const currentId = meta.id;
     if (!currentId) return;
 
-    // プロジェクトIDが変更された場合（ロード/インポート時）に実行
-    if (currentId !== lastProcessedId.current) {
-      // console.log("[RAG] Project loaded. Indexing...");
+    const chapterSignature = chapters
+      .map((chapter) =>
+        [
+          chapter.id,
+          chapter.updatedAt || 0,
+          chapter.authoringMode || 'freeform',
+          (chapter.draftText ?? '').length,
+          (chapter.compiledContent ?? chapter.content ?? '').length,
+          (chapter.scenePackages || []).length,
+        ].join(':'),
+      )
+      .join('|');
 
-      // 非同期でインデックス更新を実行
-      ragService
-        .maintainIndex(projectDataRef.current as any, (msg) => {
-          /* console.debug(`[RAG] ${msg}`); */
-        })
-        .catch((err) => console.error('[RAG] Indexing failed', err));
+    const signature = `${meta.id}:${meta.updatedAt || 0}:${chapterSignature}`;
 
-      lastProcessedId.current = currentId;
-    }
-  }, [meta.id]); // ID変更のみをトリガーにする
+    if (signature === lastProcessedSignature.current) return;
+
+    const ragProject = {
+      ...projectDataRef.current,
+      chapters: projectDataRef.current.chapters.map((chapter) => {
+        const mode = chapter.authoringMode || 'freeform';
+        const text =
+          mode === 'structured'
+            ? chapter.compiledContent ?? chapter.content ?? ''
+            : chapter.draftText ?? chapter.content ?? '';
+        return {
+          ...chapter,
+          content: text,
+        };
+      }),
+    };
+
+    ragService
+      .maintainIndex(ragProject as any, (msg) => {
+        /* console.debug(`[RAG] ${msg}`); */
+      })
+      .catch((err) => console.error('[RAG] Indexing failed', err));
+
+    lastProcessedSignature.current = signature;
+  }, [meta.id, meta.updatedAt, chapters]);
 };

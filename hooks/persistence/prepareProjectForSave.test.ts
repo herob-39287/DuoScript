@@ -63,6 +63,7 @@ const createProject = () =>
         status: 'Idea',
         wordCount: 0,
         draftVersion: 0,
+        authoringMode: 'structured',
         updatedAt: 0,
         involvedCharacterIds: [],
         content: 'old',
@@ -88,11 +89,11 @@ const createProject = () =>
   }) as any;
 
 describe('prepareProjectForSave', () => {
-  it('syncs chapter cache content and returns saveable project', () => {
+  it('syncs chapter compiled cache and returns saveable project', () => {
     const prepared = prepareProjectForSave(createProject());
 
     expect(prepared.didSyncChapterContent).toBe(true);
-    expect(prepared.projectToSave.chapters[0].content).toContain('## s1 (s1)');
+    expect(prepared.projectToSave.chapters[0].compiledContent).toContain('## s1 (s1)');
     expect(prepared.blockingIssues).toHaveLength(0);
   });
 

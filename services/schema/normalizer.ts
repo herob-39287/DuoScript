@@ -348,9 +348,14 @@ export const normalizeProject = (data: any): StoryProject => {
             id: c.id || crypto.randomUUID(),
             title: safeString(c.title),
             summary: safeString(c.summary),
+            authoringMode: c.authoringMode || 'freeform',
+            draftText: c.draftText ?? c.content ?? undefined,
+            compiledContent: c.compiledContent ?? c.content ?? undefined,
             content: c.content || undefined, // Keep undefined if not present to trigger lazy load
             wordCount:
-              typeof c.wordCount === 'number' ? c.wordCount : safeString(c.content).length || 0,
+              typeof c.wordCount === 'number'
+                ? c.wordCount
+                : safeString(c.draftText ?? c.compiledContent ?? c.content).length || 0,
             draftVersion: c.draftVersion || 0,
             scenes: safeArray(c.scenes),
             scenePackages,
@@ -383,7 +388,9 @@ export const normalizeProject = (data: any): StoryProject => {
             id: crypto.randomUUID(),
             title: '序章',
             summary: '',
-            // content undefined means empty start or needs fetch. For new project, it is empty.
+            authoringMode: 'freeform',
+            draftText: '',
+            compiledContent: '',
             content: '',
             scenes: [],
             strategy: {

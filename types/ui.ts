@@ -118,7 +118,12 @@ export type BibleAction =
 export type ChapterAction =
   | { type: 'LOAD_CHAPTERS'; payload: ChapterLog[] }
   | { type: 'UPDATE_CHAPTER'; id: string; updates: Partial<ChapterLog> }
-  | { type: 'SET_CHAPTER_CONTENT'; id: string; content: string }
+  | { type: 'SET_CHAPTER_DRAFT_TEXT'; id: string; draftText: string }
+  | {
+      type: 'SET_CHAPTER_AUTHORING_MODE';
+      id: string;
+      mode: ChapterLog['authoringMode'];
+    }
   | { type: 'ADD_CHAPTER'; payload: ChapterLog }
   | { type: 'REMOVE_CHAPTER'; id: string };
 

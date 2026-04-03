@@ -33,20 +33,36 @@ export const buildScenePackageCanonicalText = (scenePackage: ScenePackage): stri
     .trim();
 };
 
-export const buildChapterDraftFromScenePackages = (chapter: ChapterLog): string => {
+const getLegacyChapterContent = (chapter: ChapterLog): string => {
+  if (chapter.compiledContent !== undefined) return chapter.compiledContent || '';
+  if (chapter.content !== undefined) return chapter.content || '';
+  return chapter.draftText || '';
+};
+
+export const compileChapterContentFromScenePackages = (chapter: ChapterLog): string => {
   const scenePackages = chapter.scenePackages || [];
   if (scenePackages.length === 0) {
-    return chapter.content || '';
+    return getLegacyChapterContent(chapter);
   }
 
   return scenePackages.map(buildScenePackageCanonicalText).join('\n\n---\n\n');
 };
 
-export const syncChapterContentFromScenePackages = (chapter: ChapterLog): ChapterLog => {
-  const nextContent = buildChapterDraftFromScenePackages(chapter);
+export const syncChapterCompiledContentFromScenePackages = (chapter: ChapterLog): ChapterLog => {
+  if (chapter.authoringMode === 'freeform') {
+    const draftText = chapter.draftText ?? chapter.content ?? '';
+    return {
+      ...chapter,
+      draftText,
+      compiledContent: chapter.compiledContent ?? draftText,
+      wordCount: draftText.length,
+    };
+  }
+
+  const nextContent = compileChapterContentFromScenePackages(chapter);
   return {
     ...chapter,
-    content: nextContent,
+    compiledContent: nextContent,
     wordCount: nextContent.length,
   };
 };
@@ -57,8 +73,8 @@ export const detectChapterContentDrift = (
   hasDrift: boolean;
   canonicalContent: string;
 } => {
-  const canonicalContent = buildChapterDraftFromScenePackages(chapter);
-  const current = chapter.content || '';
+  const canonicalContent = compileChapterContentFromScenePackages(chapter);
+  const current = chapter.compiledContent ?? chapter.content ?? '';
   return {
     hasDrift: canonicalContent !== current,
     canonicalContent,

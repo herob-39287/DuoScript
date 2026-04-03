@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildChapterDraftFromScenePackages,
+  compileChapterContentFromScenePackages,
   detectChapterContentDrift,
-  syncChapterContentFromScenePackages,
+  syncChapterCompiledContentFromScenePackages,
 } from './chapterAssembler';
 
 const createChapter = () =>
@@ -18,6 +18,7 @@ const createChapter = () =>
     draftVersion: 0,
     involvedCharacterIds: [],
     updatedAt: 0,
+    authoringMode: 'structured',
     content: 'legacy content',
     scenePackages: [
       {
@@ -46,18 +47,18 @@ const createChapter = () =>
 describe('chapter assembler (P4)', () => {
   it('builds draft from scenePackages first', () => {
     const chapter = createChapter();
-    const draft = buildChapterDraftFromScenePackages(chapter);
+    const draft = compileChapterContentFromScenePackages(chapter);
 
     expect(draft).toContain('## 導入 (s1)');
     expect(draft).toContain('目的: 目的');
   });
 
-  it('syncs chapter.content as cache from canonical scenePackages', () => {
+  it('syncs chapter.compiledContent as cache from canonical scenePackages', () => {
     const chapter = createChapter();
-    const synced = syncChapterContentFromScenePackages(chapter);
+    const synced = syncChapterCompiledContentFromScenePackages(chapter);
 
-    expect(synced.content).toContain('鍵を見つける。');
-    expect(synced.wordCount).toBe((synced.content || '').length);
+    expect(synced.compiledContent).toContain('鍵を見つける。');
+    expect(synced.wordCount).toBe((synced.compiledContent || '').length);
   });
 
   it('detects drift between content and canonical scenePackage draft', () => {
