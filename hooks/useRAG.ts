@@ -33,7 +33,20 @@ export const useRAG = () => {
       )
       .join('|');
 
-    const signature = `${meta.id}:${meta.updatedAt || 0}:${chapterSignature}`;
+    const bibleSignature = [
+      bible.routes?.length ?? 0,
+      bible.revealPlans?.length ?? 0,
+      bible.stateAxes?.length ?? 0,
+      bible.branchPolicies?.length ?? 0,
+      bible.characters?.length ?? 0,
+    ].join(':');
+    const syncSignature = [
+      sync.pendingChanges?.length ?? 0,
+      sync.quarantine?.length ?? 0,
+      sync.history?.length ?? 0,
+      sync.chatHistory?.length ?? 0,
+    ].join(':');
+    const signature = `${meta.id}:${meta.updatedAt || 0}:${bibleSignature}:${syncSignature}:${chapterSignature}`;
 
     if (signature === lastProcessedSignature.current) return;
 
@@ -59,5 +72,5 @@ export const useRAG = () => {
       .catch((err) => console.error('[RAG] Indexing failed', err));
 
     lastProcessedSignature.current = signature;
-  }, [meta.id, meta.updatedAt, chapters]);
+  }, [meta.id, meta.updatedAt, chapters, bible, sync]);
 };

@@ -60,7 +60,7 @@ const ConvergenceStageSchema = z.object({
       convergencePoint: ConvergencePointSchema.optional(),
     }),
   ),
-  content: z.string().optional(),
+  compiledContent: z.string().optional(),
 });
 
 export class WriterAgent extends BaseAgent {
@@ -282,7 +282,7 @@ export class WriterAgent extends BaseAgent {
     logCallback: LogCallback,
   ): Promise<z.infer<typeof ConvergenceStageSchema>> {
     const lang = project.meta.language || 'ja';
-    const prompt = `章「${chapter.title}」について、convergencePointと最終整文contentを生成してください。\n入力: ${JSON.stringify(scenePackages)}\n\nJSONのみ返してください。`;
+    const prompt = `章「${chapter.title}」について、convergencePointと最終整文compiledContentを生成してください。\n入力: ${JSON.stringify(scenePackages)}\n\nJSONのみ返してください。`;
 
     return this.client.request({
       model: AI_MODELS.REASONING,
@@ -299,7 +299,7 @@ export class WriterAgent extends BaseAgent {
       mapper: (res) =>
         parseWithSchema(res.text, ConvergenceStageSchema, 'WriterStage3', {
           scenePackages: [],
-          content: '',
+          compiledContent: '',
         }),
     });
   }

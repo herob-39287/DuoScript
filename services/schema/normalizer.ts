@@ -391,7 +391,6 @@ export const normalizeProject = (data: any): StoryProject => {
             authoringMode: 'freeform',
             draftText: '',
             compiledContent: '',
-            content: '',
             scenes: [],
             strategy: {
               milestones: [],

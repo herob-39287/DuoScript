@@ -40,6 +40,14 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
   const [fullDraftContent, setFullDraftContent] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const getChapterBodyText = (chapter: any): string => {
+    const mode = chapter.authoringMode || 'freeform';
+    if (mode === 'structured') {
+      return chapter.compiledContent ?? chapter.content ?? '';
+    }
+    return chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '';
+  };
+
   useEffect(() => {
     const prepareExport = async () => {
       setIsPreparing(true);
@@ -85,7 +93,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
           setExportData(fullProject);
           const draft = (fullProject.chapters || [])
             .map((ch: any) => {
-              return `### ${ch.title}\n\n${ch.content || ''}\n\n***\n`;
+              return `### ${ch.title}\n\n${getChapterBodyText(ch)}\n\n***\n`;
             })
             .join('\n');
           setFullDraftContent(draft);
@@ -154,7 +162,7 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
       exportData.chapters.forEach((ch, index) => {
         const num = String(index + 1).padStart(2, '0');
         const safeChTitle = ch.title.replace(/[\\/:*?"<>|]/g, '_');
-        const mdContent = `# ${ch.title}\n\n${ch.summary ? `> ${ch.summary}\n\n` : ''}${ch.content || ''}`;
+        const mdContent = `# ${ch.title}\n\n${ch.summary ? `> ${ch.summary}\n\n` : ''}${getChapterBodyText(ch)}`;
         manuscriptFolder?.file(`${num}_${safeChTitle}.md`, mdContent);
       });
 
