@@ -461,7 +461,7 @@ export const useWriterAI = ({
           : scenePackage;
       });
 
-      const nextContent = stage3.content || textareaRef.current?.value || '';
+      const nextContent = stage3.compiledContent || textareaRef.current?.value || '';
       const mode = activeChapter.authoringMode || 'freeform';
       projectDispatch(
         Actions.updateChapter(activeChapter.id, {

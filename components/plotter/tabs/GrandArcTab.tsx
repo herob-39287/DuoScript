@@ -84,7 +84,6 @@ export const GrandArcTab: React.FC = () => {
         authoringMode: 'freeform',
         draftText: '',
         compiledContent: '',
-        content: '',
         scenes: [],
         beats: [],
         strategy: {

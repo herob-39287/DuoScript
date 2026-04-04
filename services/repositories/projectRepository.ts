@@ -22,7 +22,7 @@ export const getHeadRev = async (projectId: string): Promise<number> => {
 
 const SCHEMA_VERSION = 1;
 
-type ChapterTextState = {
+export type ChapterBodyState = {
   draftText: string;
   compiledContent: string;
   content?: string;
@@ -56,13 +56,18 @@ export const saveProjectRevision = async (
         const { draftText, compiledContent, content, ...header } = ch;
 
         if (draftText !== undefined || compiledContent !== undefined || content !== undefined) {
+          const chapterBody: ChapterBodyState = {
+            draftText: draftText ?? '',
+            compiledContent: compiledContent ?? '',
+          };
+          if (content !== undefined) {
+            chapterBody.content = content;
+          }
           await tx.objectStore(STORE_CHAPTER_DATA).put({
             projectId,
             chapterId: ch.id,
             rev: nextRev,
-            draftText: draftText ?? '',
-            compiledContent: compiledContent ?? '',
-            content: content ?? '',
+            ...chapterBody,
           });
         } else if (currentRev > 0) {
           const prevBody = await tx
@@ -165,6 +170,7 @@ export const loadLatestProject = async (projectId: string): Promise<StoryProject
   return loadFullSnapshot(projectId, headRev);
 };
 
+// Legacy compatibility wrapper. Prefer saveChapterBody.
 export const saveChapterContent = async (
   projectId: string,
   chapterId: string,
@@ -178,6 +184,7 @@ export const saveChapterContent = async (
   });
 };
 
+// Legacy compatibility wrapper. Prefer loadChapterBody.
 export const loadChapterContent = async (
   projectId: string,
   chapterId: string,
@@ -192,7 +199,7 @@ export const saveChapterBody = async (
   projectId: string,
   chapterId: string,
   rev: number,
-  body: ChapterTextState,
+  body: ChapterBodyState,
 ): Promise<void> => {
   const db = await initDB();
   await db.put(STORE_CHAPTER_DATA, { projectId, chapterId, rev, ...body });
@@ -202,7 +209,7 @@ export const loadChapterBody = async (
   projectId: string,
   chapterId: string,
   rev: number,
-): Promise<ChapterTextState | null> => {
+): Promise<ChapterBodyState | null> => {
   const db = await initDB();
   const result = await db.get(STORE_CHAPTER_DATA, [projectId, chapterId, rev]);
   if (!result) return null;
