@@ -19,12 +19,13 @@ import { useWelcomeLogic } from '../hooks/useWelcomeLogic';
 
 interface Props {
   onStart: (projectData: StoryProject) => void;
+  onStartWithView?: (projectData: StoryProject, view: 'dashboard' | 'writer') => void;
   onOpenHelp: () => void;
   showAlert: (title: string, message: string) => void;
   showConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
 
-const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert }) => {
+const WelcomeScreen: React.FC<Props> = ({ onStart, onStartWithView, onOpenHelp, showAlert }) => {
   const {
     lang,
     projects,
@@ -41,7 +42,8 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert }) => {
     handleLaunchManual,
     handleLaunchAuto,
     handleFileUpload,
-  } = useWelcomeLogic({ onStart, showAlert });
+    handleLaunchCodex,
+  } = useWelcomeLogic({ onStart, onStartWithView, showAlert });
 
   const hasApiKey = !!process.env.API_KEY;
 
@@ -256,6 +258,26 @@ const WelcomeScreen: React.FC<Props> = ({ onStart, onOpenHelp, showAlert }) => {
                 ) : (
                   t('welcome.muse_btn', lang)
                 )}
+              </Button>
+            </Card>
+            <Card variant="glass-bright" padding="lg" className="flex flex-col gap-6 shadow-2xl">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="p-2 md:p-3 bg-sky-400/20 rounded-2xl text-sky-300">
+                  <Sparkles size={18} className="md:w-6 md:h-6" />
+                </div>
+                <h3 className={Styles.text.title}>Create with Codex</h3>
+              </div>
+              <div className="flex-1 space-y-4">
+                <p className="text-[11px] md:text-sm text-stone-500 font-serif italic leading-relaxed">
+                  Minimal starter project → Writer → project genesis 用 Prepare for Codex.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={handleLaunchCodex}
+                className="w-full !bg-sky-100 hover:!bg-white !text-stone-900 uppercase tracking-widest text-[10px] md:text-xs py-4 md:py-5"
+              >
+                Create with Codex
               </Button>
             </Card>
           </div>

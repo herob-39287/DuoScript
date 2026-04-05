@@ -15,6 +15,8 @@ import { Book, Zap } from 'lucide-react';
 import { MobileDrawers } from './writer/MobileDrawers';
 import { ScenePackageModePanel } from './writer/ScenePackageModePanel';
 import { BranchIssuesPanel } from './writer/BranchIssuesPanel';
+import { CodexProposalList } from './codex/CodexProposalList';
+import { CodexQuestionsPanel } from './codex/CodexQuestionsPanel';
 
 const WriterView: React.FC = () => {
   const { state, refs, actions } = useWriterLogic();
@@ -22,6 +24,17 @@ const WriterView: React.FC = () => {
   const importInputRef = useRef<HTMLInputElement>(null);
   const importAndApplyInputRef = useRef<HTMLInputElement>(null);
   const [prepareScope, setPrepareScope] = useState<'project' | 'chapter' | 'scene'>('project');
+  const [prepareTaskType, setPrepareTaskType] = useState<
+    | 'route design'
+    | 'scene package generation'
+    | 'branch repair'
+    | 'draft polish'
+    | 'project genesis'
+    | 'interactive refinement'
+  >('interactive refinement');
+  const [prepareResponseMode, setPrepareResponseMode] = useState<'questions' | 'ops' | 'bundle'>(
+    'ops',
+  );
   const [prepareSceneId, setPrepareSceneId] = useState('');
 
   useEffect(() => {
@@ -48,6 +61,8 @@ const WriterView: React.FC = () => {
       chapterId: prepareScope !== 'project' ? data.activeChapterId : undefined,
       sceneId: prepareScope === 'scene' ? prepareSceneId : undefined,
       objective: 'Refine VN branching packages with validator-safe updates.',
+      taskType: prepareTaskType,
+      responseMode: prepareResponseMode,
     });
     const files = [
       {
@@ -170,6 +185,29 @@ const WriterView: React.FC = () => {
                   <option value="chapter">Scope: Active Chapter</option>
                   <option value="scene">Scope: Active Scene</option>
                 </select>
+                <select
+                  value={prepareTaskType}
+                  onChange={(event) => setPrepareTaskType(event.target.value as typeof prepareTaskType)}
+                  className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 border border-white/10"
+                >
+                  <option value="interactive refinement">Task: interactive refinement</option>
+                  <option value="project genesis">Task: project genesis</option>
+                  <option value="route design">Task: route design</option>
+                  <option value="scene package generation">Task: scene package generation</option>
+                  <option value="branch repair">Task: branch repair</option>
+                  <option value="draft polish">Task: draft polish</option>
+                </select>
+                <select
+                  value={prepareResponseMode}
+                  onChange={(event) =>
+                    setPrepareResponseMode(event.target.value as 'questions' | 'ops' | 'bundle')
+                  }
+                  className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 border border-white/10"
+                >
+                  <option value="questions">Return: Questions</option>
+                  <option value="ops">Return: Ops</option>
+                  <option value="bundle">Return: Bundle</option>
+                </select>
                 {prepareScope === 'scene' && (
                   <select
                     value={prepareSceneId}
@@ -214,7 +252,7 @@ const WriterView: React.FC = () => {
                 <input
                   ref={importInputRef}
                   type="file"
-                  accept=".json,application/json"
+                  accept=".json,.md,.markdown,application/json,text/markdown,text/plain"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -222,7 +260,9 @@ const WriterView: React.FC = () => {
                     const reader = new FileReader();
                     reader.onload = () => {
                       try {
-                        actions.importWorkspace(JSON.parse(String(reader.result)));
+                        const text = String(reader.result || '');
+                        const isJson = file.name.endsWith('.json') || text.trim().startsWith('{');
+                        actions.importWorkspace(isJson ? JSON.parse(text) : {}, { fallbackText: text });
                       } catch {
                         // noop
                       }
@@ -233,7 +273,7 @@ const WriterView: React.FC = () => {
                 <input
                   ref={importAndApplyInputRef}
                   type="file"
-                  accept=".json,application/json"
+                  accept=".json,.md,.markdown,application/json,text/markdown,text/plain"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -241,8 +281,11 @@ const WriterView: React.FC = () => {
                     const reader = new FileReader();
                     reader.onload = () => {
                       try {
-                        actions.importWorkspace(JSON.parse(String(reader.result)), {
+                        const text = String(reader.result || '');
+                        const isJson = file.name.endsWith('.json') || text.trim().startsWith('{');
+                        actions.importWorkspace(isJson ? JSON.parse(text) : {}, {
                           autoApply: true,
+                          fallbackText: isJson ? undefined : text,
                         });
                       } catch {
                         // noop
@@ -287,6 +330,10 @@ const WriterView: React.FC = () => {
 
             {!ui.isZenMode && ui.writerMode === 'validation' && (
               <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-stone-200 space-y-1">
+                <p>
+                  Import artifact type:{' '}
+                  {data.pendingImportMode ? data.pendingImportMode.toUpperCase() : 'N/A'}
+                </p>
                 <p>Route + Chapter + Scene + Validator 差分プレビュー</p>
                 <p>
                   {data.pendingImportDiff
@@ -306,6 +353,22 @@ const WriterView: React.FC = () => {
                   Re-run Validator
                 </button>
               </div>
+            )}
+            {!ui.isZenMode && (
+              <>
+                <CodexQuestionsPanel
+                  questions={data.codexQuestions}
+                  onClear={actions.clearCodexQuestions}
+                />
+                <CodexProposalList
+                  proposals={data.codexOps}
+                  unresolved={data.codexOpsUnresolved}
+                  onApplyAll={actions.applyAllCodexOps}
+                  onRejectAll={actions.rejectAllCodexOps}
+                  onApplyOne={actions.applyCodexOp}
+                  onRejectOne={actions.rejectCodexOp}
+                />
+              </>
             )}
 
             {ui.writerMode === 'final_draft' && (

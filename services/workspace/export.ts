@@ -39,6 +39,45 @@ export const buildWorkspaceBundle = (project: StoryProject): WorkspaceBundle => 
   };
 };
 
+export const buildStarterWorkspaceBundle = (project: StoryProject): WorkspaceBundle => {
+  const fallbackChapter = {
+    id: 'chapter-1',
+    title: 'Chapter 1',
+    summary: '',
+    scenes: [],
+    beats: [],
+    strategy: {
+      milestones: [],
+      forbiddenResolutions: [],
+      characterArcProgress: '',
+      pacing: '',
+    },
+    status: 'Idea' as const,
+    wordCount: 0,
+    content: '',
+    draftVersion: 0,
+    authoringMode: 'structured' as const,
+    draftText: '',
+    compiledContent: '',
+    updatedAt: Date.now(),
+    involvedCharacterIds: [],
+    scenePackages: [],
+  };
+
+  return buildWorkspaceBundle({
+    ...project,
+    bible: {
+      ...project.bible,
+      setting: project.bible.setting || 'Project genesis starter setting.',
+      routes: [],
+      revealPlans: [],
+      stateAxes: [],
+      branchPolicies: [],
+    },
+    chapters: project.chapters.length > 0 ? project.chapters : [fallbackChapter],
+  });
+};
+
 export const buildChapterWorkspaceBundle = (
   project: StoryProject,
   chapterId: string,
@@ -87,6 +126,9 @@ export const buildPrepareForCodexArtifacts = (
   codexSchemaReference: string;
 } => {
   const bundle =
+    scope.taskType === 'project genesis'
+      ? buildStarterWorkspaceBundle(project)
+      :
     scope.scopeType === 'scene' && scope.chapterId && scope.sceneId
       ? buildSceneWorkspaceBundle(project, scope.chapterId, scope.sceneId)
       : scope.scopeType === 'chapter' && scope.chapterId

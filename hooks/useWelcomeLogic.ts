@@ -5,14 +5,15 @@ import { getAllProjects, saveProjectRevision } from '../services/storageService'
 import { generateRandomProject } from '../services/geminiService';
 import { useMetadataDispatch, useNotificationDispatch } from '../contexts/StoryContext';
 import * as Actions from '../store/actions';
-import { workspaceBundleToProject } from '../services/workspace/import';
+import { detectCodexArtifact, workspaceBundleToProject } from '../services/workspace/import';
 
 interface UseWelcomeLogicProps {
   onStart: (projectData: StoryProject) => void;
+  onStartWithView?: (projectData: StoryProject, view: 'dashboard' | 'writer') => void;
   showAlert: (title: string, message: string) => void;
 }
 
-export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) => {
+export const useWelcomeLogic = ({ onStart, onStartWithView, showAlert }: UseWelcomeLogicProps) => {
   // State
   const [lang, setLang] = useState<AppLanguage>('ja');
   const [projects, setProjects] = useState<StoryProject[]>([]);
@@ -161,6 +162,37 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
     }
   }, [autoTheme, lang, metaDispatch, addLog, onStart, showAlert]);
 
+  const handleLaunchCodex = useCallback(async () => {
+    const initialProject: StoryProject = normalizeProject({
+      title: title || (lang === 'ja' ? 'Codex設計プロジェクト' : 'Codex Design Project'),
+      bible: {
+        setting:
+          idea ||
+          (lang === 'ja'
+            ? '世界観の初期要件。Codexに質問・差分提案を返してもらう。'
+            : 'Initial world assumptions. Ask Codex for questions and ops proposals.'),
+        routes: [],
+        revealPlans: [],
+        stateAxes: [],
+        branchPolicies: [],
+      },
+      chapters: [{ title: lang === 'ja' ? '第1章（草案）' : 'Chapter 1 (Draft)', summary: '' }],
+      meta: { language: lang },
+    });
+    initialProject.meta.preferences.uiLanguage = lang;
+
+    try {
+      const rev = await saveProjectRevision(initialProject);
+      initialProject.meta.headRev = rev;
+      localStorage.setItem('duoscript_active_id', initialProject.meta.id);
+      if (onStartWithView) onStartWithView(initialProject, 'writer');
+      else onStart(initialProject);
+    } catch (e) {
+      console.error('Failed to save Codex starter project', e);
+      showAlert('Error', 'Failed to initialize Codex starter project.');
+    }
+  }, [title, idea, lang, onStart, onStartWithView, showAlert]);
+
   const importProjectFile = useCallback(
     async (rawJson: any, mode: 'backup' | 'codex') => {
       if (
@@ -173,9 +205,17 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
         return;
       }
 
-      if (mode === 'codex' && rawJson.kind !== 'duoscript.workspace') {
-        showAlert('Load Failed', 'This file is not a Codex workspace bundle.');
-        return;
+      if (mode === 'codex') {
+        const detected = detectCodexArtifact(rawJson);
+        if (detected.type !== 'bundle') {
+          showAlert(
+            'Codex Artifact',
+            detected.type === 'questions'
+              ? 'This artifact contains questions. Open a project and import it from Writer.'
+              : 'This artifact contains ops. Open a project and import it from Writer.',
+          );
+          return;
+        }
       }
 
       const p =
@@ -234,6 +274,7 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
     handleLangSwitch,
     handleLaunchManual,
     handleLaunchAuto,
+    handleLaunchCodex,
     handleFileUpload,
   };
 };

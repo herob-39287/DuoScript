@@ -58,4 +58,7 @@
 
 - DuoScript は「材料作成・戻り確認・検証」のワークベンチ。
 - Codex は route / scenePackages / choice/reaction/convergence / validator修正を担当。
-- 返却成果物は `updated_workspace_bundle.json` と `codex_change_summary.md` を固定。
+- 返却成果物は mode 別に使い分ける。
+  - Questions: `codex_questions.md`
+  - Ops: `codex_ops.json` + `codex_change_summary.md`
+  - Bundle: `updated_workspace_bundle.json` + `codex_change_summary.md`

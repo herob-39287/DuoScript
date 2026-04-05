@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   useManuscript,
   useBible,
@@ -11,7 +11,7 @@ import * as Actions from '../store/actions';
 import { useWriterUI } from './useWriterUI';
 import { useManuscriptEditor } from './useManuscriptEditor';
 import { useWriterAI } from './useWriterAI';
-import { ScenePackage } from '../types';
+import { ScenePackage, StoryProject } from '../types';
 import {
   compileChapterContentFromScenePackages,
   syncChapterCompiledContentFromScenePackages,
@@ -22,10 +22,32 @@ import {
   buildWorkspaceBundle,
   serializeWorkspaceBundle,
 } from '../services/workspace/export';
-import { workspaceBundleToProject } from '../services/workspace/import';
+import { detectCodexArtifact, workspaceBundleToProject } from '../services/workspace/import';
 import { diffWorkspaceBundles, WorkspaceDiff } from '../services/workspace/diff';
 import { validateProjectBranches as validateProjectBranchesV2 } from '../services/validation/branchValidator';
 import { CodexTaskScope } from '../services/workspace/buildCodexTask';
+import { shadowApplyCodexOps } from '../services/workspace/patchEngine';
+import { CodexOpsArtifact } from '../services/workspace/patchTypes';
+
+type PendingBundleImport = {
+  mode: 'bundle';
+  nextProject: StoryProject;
+  diff: WorkspaceDiff;
+  validationIssueCount: number;
+  requiresDraftRebuild: boolean;
+};
+
+type PendingOpsImport = {
+  mode: 'ops';
+  opsArtifact: CodexOpsArtifact;
+  selectedOpIds: string[];
+  nextProject: StoryProject;
+  diff: WorkspaceDiff;
+  validationIssueCount: number;
+  requiresDraftRebuild: boolean;
+  opResults: { opId: string; status: string; message: string }[];
+  unresolved: string[];
+};
 
 export const useWriterLogic = () => {
   const chapters = useManuscript();
@@ -34,31 +56,20 @@ export const useWriterLogic = () => {
   const globalUI = useUI();
   const meta = useMetadata();
   const sync = useNeuralSync();
-  const [pendingImport, setPendingImport] = useState<{
-    nextProject: {
-      meta: typeof meta;
-      bible: typeof bible;
-      chapters: typeof chapters;
-      sync: typeof sync;
-    };
-    diff: WorkspaceDiff;
-    validationIssueCount: number;
-    requiresDraftRebuild: boolean;
-  } | null>(null);
 
-  // 1. UI Logic
+  const [pendingImport, setPendingImport] = useState<PendingBundleImport | PendingOpsImport | null>(
+    null,
+  );
+  const [codexQuestions, setCodexQuestions] = useState<string[]>([]);
+
   const ui = useWriterUI();
-
-  // 2. Editor Logic
   const editor = useManuscriptEditor({
     initialChapterId: chapters[0]?.id || '',
     onContentUpdate: (content) => {
-      // 3. Trigger AI Context Analysis
       writerAI.analyzeContext(content);
     },
   });
 
-  // 4. AI Logic
   const writerAI = useWriterAI({
     activeChapterId: editor.activeChapterId,
     textareaRef: editor.textareaRef,
@@ -66,14 +77,39 @@ export const useWriterLogic = () => {
     draftVersionRef: editor.draftVersionRef,
   });
 
-  // --- Handlers ---
   const branchIssues = validateProjectBranchesV2(chapters, bible);
   const activeChapterIssues = editor.activeChapter
     ? validateChapterScenePackages(editor.activeChapter, bible)
     : [];
 
+  const applyProjectSnapshot = (project: StoryProject) => {
+    projectDispatch(Actions.updateMeta(project.meta));
+    projectDispatch(Actions.loadBible(project.bible));
+    projectDispatch(Actions.loadChapters(project.chapters));
+    projectDispatch(Actions.loadSync(project.sync));
+  };
+
+  const recomputeOpsPreview = (opsArtifact: CodexOpsArtifact, selectedOpIds: string[]) => {
+    const currentProject = { meta, bible, chapters, sync };
+    const preview = shadowApplyCodexOps(currentProject, opsArtifact, selectedOpIds);
+    const nextProject = {
+      ...currentProject,
+      ...preview.project,
+    };
+    setPendingImport({
+      mode: 'ops',
+      opsArtifact,
+      selectedOpIds,
+      nextProject,
+      diff: preview.diff,
+      validationIssueCount: preview.validatorIssues.length,
+      requiresDraftRebuild: preview.requiresDraftRebuild,
+      opResults: preview.opResults,
+      unresolved: preview.unresolved,
+    });
+  };
+
   const actions = {
-    // Navigation & UI
     toggleVertical: ui.toggleVertical,
     toggleZen: ui.toggleZen,
     toggleSettings: ui.toggleSettings,
@@ -81,8 +117,6 @@ export const useWriterLogic = () => {
     setMobileTab: ui.setMobileTab,
     setWriterMode: ui.setWriterMode,
     navigateBack: ui.navigateBack,
-
-    // Chapter Management
     selectChapter: editor.setActiveChapterId,
     addChapter: () => {
       const newChapter = {
@@ -108,11 +142,7 @@ export const useWriterLogic = () => {
       };
       projectDispatch(Actions.addChapter(newChapter));
     },
-
-    // Editor Interaction
     handleTextChange: editor.handleTextChange,
-
-    // AI Actions
     generatePackage: writerAI.generatePackage,
     suggest: writerAI.suggestNext,
     applySuggestion: writerAI.applySuggestion,
@@ -123,30 +153,20 @@ export const useWriterLogic = () => {
     closeSuggestions: () => writerAI.setSuggestions([]),
     closeWhisper: () => writerAI.setWhisper(null),
 
-    updateScenePackage: (
-      sceneId: string,
-      updater: (scenePackage: ScenePackage) => ScenePackage,
-    ) => {
+    updateScenePackage: (sceneId: string, updater: (scenePackage: ScenePackage) => ScenePackage) => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
-
       const existing = chapter.scenePackages || [];
       const nextScenePackages = existing.map((scenePackage) =>
         scenePackage.sceneId === sceneId ? updater(scenePackage as ScenePackage) : scenePackage,
       );
-
-      projectDispatch(
-        Actions.updateChapter(chapter.id, {
-          scenePackages: nextScenePackages,
-        }),
-      );
+      projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: nextScenePackages }));
     },
 
     syncChapterFromScenePackages: () => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
       if ((chapter.authoringMode || 'freeform') !== 'structured') return;
-
       const synced = syncChapterCompiledContentFromScenePackages(chapter);
       projectDispatch(Actions.updateChapter(chapter.id, synced));
       if (editor.textareaRef.current && synced.compiledContent !== undefined) {
@@ -159,18 +179,12 @@ export const useWriterLogic = () => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
       if ((chapter.authoringMode || 'freeform') !== 'structured') return;
-
       const compiledContent = compileChapterContentFromScenePackages(chapter);
-      projectDispatch(
-        Actions.updateChapter(chapter.id, {
-          compiledContent,
-        }),
-      );
-      if (editor.textareaRef.current) {
-        editor.textareaRef.current.value = compiledContent;
-      }
+      projectDispatch(Actions.updateChapter(chapter.id, { compiledContent }));
+      if (editor.textareaRef.current) editor.textareaRef.current.value = compiledContent;
       editor.setWordCount(compiledContent.length);
     },
+
     convertChapterToFreeform: () => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
@@ -182,15 +196,44 @@ export const useWriterLogic = () => {
         ),
       );
     },
-    exportWorkspace: () => {
-      return serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync }));
-    },
-    importWorkspace: (raw: unknown, options?: { autoApply?: boolean }) => {
-      const currentBundle = buildWorkspaceBundle({ meta, bible, chapters, sync });
-      const imported = workspaceBundleToProject({ meta, bible, chapters, sync }, raw);
+
+    exportWorkspace: () => serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync })),
+
+    importWorkspace: (raw: unknown, options?: { autoApply?: boolean; fallbackText?: string }) => {
+      const currentProject = { meta, bible, chapters, sync };
+      const detected = detectCodexArtifact(raw, options?.fallbackText);
+
+      if (detected.type === 'questions') {
+        setCodexQuestions(detected.questions.questions);
+        setPendingImport(null);
+        return { applied: false, mode: 'questions' as const };
+      }
+
+      if (detected.type === 'ops') {
+        const selectedOpIds = detected.ops.operations.map((op) => op.opId);
+        recomputeOpsPreview(detected.ops, selectedOpIds);
+
+        if (options?.autoApply) {
+          const preview = shadowApplyCodexOps(currentProject, detected.ops, selectedOpIds);
+          applyProjectSnapshot({ ...currentProject, ...preview.project });
+          setPendingImport(null);
+          return {
+            applied: true,
+            mode: 'ops' as const,
+            validationIssueCount: preview.validatorIssues.length,
+            requiresDraftRebuild: preview.requiresDraftRebuild,
+          };
+        }
+
+        return { applied: false, mode: 'ops' as const };
+      }
+
+      const currentBundle = buildWorkspaceBundle(currentProject);
+      const imported = workspaceBundleToProject(currentProject, detected.bundle);
       const importedBundle = buildWorkspaceBundle(imported.project);
       const requiresDraftRebuild = imported.rebuiltChapterIds.length > 0;
-      const nextPendingImport = {
+      const nextPendingImport: PendingBundleImport = {
+        mode: 'bundle',
         nextProject: imported.project,
         diff: diffWorkspaceBundles(currentBundle, importedBundle),
         validationIssueCount: imported.validationIssueCount,
@@ -198,13 +241,11 @@ export const useWriterLogic = () => {
       };
 
       if (options?.autoApply) {
-        projectDispatch(Actions.updateMeta(nextPendingImport.nextProject.meta));
-        projectDispatch(Actions.loadBible(nextPendingImport.nextProject.bible));
-        projectDispatch(Actions.loadChapters(nextPendingImport.nextProject.chapters));
-        projectDispatch(Actions.loadSync(nextPendingImport.nextProject.sync));
+        applyProjectSnapshot(nextPendingImport.nextProject);
         setPendingImport(null);
         return {
           applied: true,
+          mode: 'bundle' as const,
           validationIssueCount: imported.validationIssueCount,
           requiresDraftRebuild,
         };
@@ -213,25 +254,50 @@ export const useWriterLogic = () => {
       setPendingImport(nextPendingImport);
       return {
         applied: false,
+        mode: 'bundle' as const,
         validationIssueCount: imported.validationIssueCount,
         requiresDraftRebuild,
       };
     },
-    prepareForCodex: (scope: CodexTaskScope) => {
-      return buildPrepareForCodexArtifacts({ meta, bible, chapters, sync }, scope);
-    },
+
+    prepareForCodex: (scope: CodexTaskScope) => buildPrepareForCodexArtifacts({ meta, bible, chapters, sync }, scope),
     validateBranches: () => validateProjectBranchesV2(chapters, bible),
     rebuildDraft: () => actions.rebuildCompiledContentFromScenePackages(),
+
     acceptImportedChanges: () => {
       if (!pendingImport) return;
-      projectDispatch(Actions.updateMeta(pendingImport.nextProject.meta));
-      projectDispatch(Actions.loadBible(pendingImport.nextProject.bible));
-      projectDispatch(Actions.loadChapters(pendingImport.nextProject.chapters));
-      projectDispatch(Actions.loadSync(pendingImport.nextProject.sync));
+      applyProjectSnapshot(pendingImport.nextProject);
       setPendingImport(null);
     },
     rejectImportedChanges: () => setPendingImport(null),
+
+    applyAllCodexOps: () => {
+      if (!pendingImport || pendingImport.mode !== 'ops') return;
+      recomputeOpsPreview(pendingImport.opsArtifact, pendingImport.opsArtifact.operations.map((op) => op.opId));
+    },
+    rejectAllCodexOps: () => {
+      if (!pendingImport || pendingImport.mode !== 'ops') return;
+      recomputeOpsPreview(pendingImport.opsArtifact, []);
+    },
+    applyCodexOp: (opId: string) => {
+      if (!pendingImport || pendingImport.mode !== 'ops') return;
+      if (pendingImport.selectedOpIds.includes(opId)) return;
+      recomputeOpsPreview(pendingImport.opsArtifact, [...pendingImport.selectedOpIds, opId]);
+    },
+    rejectCodexOp: (opId: string) => {
+      if (!pendingImport || pendingImport.mode !== 'ops') return;
+      recomputeOpsPreview(
+        pendingImport.opsArtifact,
+        pendingImport.selectedOpIds.filter((id) => id !== opId),
+      );
+    },
+    clearCodexQuestions: () => setCodexQuestions([]),
   };
+
+  const selectedOpIds =
+    pendingImport && pendingImport.mode === 'ops' ? pendingImport.selectedOpIds : [];
+
+  const selectedOpSet = useMemo(() => new Set(selectedOpIds), [selectedOpIds]);
 
   return {
     state: {
@@ -259,6 +325,17 @@ export const useWriterLogic = () => {
         pendingImportValidationIssueCount: pendingImport?.validationIssueCount || 0,
         pendingImportRequiresDraftRebuild: pendingImport?.requiresDraftRebuild || false,
         hasPendingImport: Boolean(pendingImport),
+        pendingImportMode: pendingImport?.mode || null,
+        codexQuestions,
+        codexOps:
+          pendingImport && pendingImport.mode === 'ops'
+            ? pendingImport.opsArtifact.operations.map((op) => ({
+                op,
+                selected: selectedOpSet.has(op.opId),
+                result: pendingImport.opResults.find((result) => result.opId === op.opId),
+              }))
+            : [],
+        codexOpsUnresolved: pendingImport && pendingImport.mode === 'ops' ? pendingImport.unresolved : [],
       },
       status: {
         isProcessing: writerAI.isProcessing,

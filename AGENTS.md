@@ -18,10 +18,11 @@
 
 ## Required output
 
-Always return:
+Always return artifacts according to response mode:
 
-- `updated_workspace_bundle.json`
-- `codex_change_summary.md`
+- questions: `codex_questions.md`
+- ops: `codex_ops.json` + `codex_change_summary.md`
+- bundle: `updated_workspace_bundle.json` + `codex_change_summary.md`
 
 `codex_change_summary.md` must include:
 
