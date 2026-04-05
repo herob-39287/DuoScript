@@ -51,7 +51,10 @@ const resolveOperationPaths = (op: CodexPatchOperation): string[] => {
       `chapters.${op.chapterId}.scenePackages.${op.scenePackage.sceneId}`,
     ];
   if (op.type === 'deleteScenePackage')
-    return [`chapters.${op.chapterId}.scenePackages`, `chapters.${op.chapterId}.scenePackages.${op.sceneId}`];
+    return [
+      `chapters.${op.chapterId}.scenePackages`,
+      `chapters.${op.chapterId}.scenePackages.${op.sceneId}`,
+    ];
   return [];
 };
 
@@ -110,17 +113,39 @@ const applyOperation = (
 
   if (op.type === 'upsertStateAxis') {
     return {
-      project: { ...project, bible: { ...project.bible, stateAxes: upsertBy(project.bible.stateAxes || [], op.axis, (item) => item.stateKey) } },
+      project: {
+        ...project,
+        bible: {
+          ...project.bible,
+          stateAxes: upsertBy(project.bible.stateAxes || [], op.axis, (item) => item.stateKey),
+        },
+      },
       touchedStructuredChapter: false,
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `StateAxis ${op.axis.stateKey} upserted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `StateAxis ${op.axis.stateKey} upserted.`,
+      },
     };
   }
 
   if (op.type === 'upsertRoute') {
     return {
-      project: { ...project, bible: { ...project.bible, routes: upsertBy(project.bible.routes || [], op.route, (item) => item.routeId) } },
+      project: {
+        ...project,
+        bible: {
+          ...project.bible,
+          routes: upsertBy(project.bible.routes || [], op.route, (item) => item.routeId),
+        },
+      },
       touchedStructuredChapter: false,
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `Route ${op.route.routeId} upserted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `Route ${op.route.routeId} upserted.`,
+      },
     };
   }
 
@@ -130,11 +155,20 @@ const applyOperation = (
         ...project,
         bible: {
           ...project.bible,
-          revealPlans: upsertBy(project.bible.revealPlans || [], op.revealPlan, (item) => item.revealId),
+          revealPlans: upsertBy(
+            project.bible.revealPlans || [],
+            op.revealPlan,
+            (item) => item.revealId,
+          ),
         },
       },
       touchedStructuredChapter: false,
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `RevealPlan ${op.revealPlan.revealId} upserted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `RevealPlan ${op.revealPlan.revealId} upserted.`,
+      },
     };
   }
 
@@ -144,11 +178,20 @@ const applyOperation = (
         ...project,
         bible: {
           ...project.bible,
-          branchPolicies: upsertBy(project.bible.branchPolicies || [], op.policy, (item) => item.policyId),
+          branchPolicies: upsertBy(
+            project.bible.branchPolicies || [],
+            op.policy,
+            (item) => item.policyId,
+          ),
         },
       },
       touchedStructuredChapter: false,
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `BranchPolicy ${op.policy.policyId} upserted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `BranchPolicy ${op.policy.policyId} upserted.`,
+      },
     };
   }
 
@@ -161,7 +204,8 @@ const applyOperation = (
           opId: op.opId,
           type: op.type,
           status: 'blocked',
-          message: 'upsertChapter is not allowed during scene-scoped refinement. Use scenePackage ops.',
+          message:
+            'upsertChapter is not allowed during scene-scoped refinement. Use scenePackage ops.',
         },
       };
     }
@@ -169,14 +213,24 @@ const applyOperation = (
       return {
         project,
         touchedStructuredChapter: false,
-        result: { opId: op.opId, type: op.type, status: 'blocked', message: `Chapter ${op.chapter.id} is outside scope guard.` },
+        result: {
+          opId: op.opId,
+          type: op.type,
+          status: 'blocked',
+          message: `Chapter ${op.chapter.id} is outside scope guard.`,
+        },
       };
     }
 
     return {
       project: { ...project, chapters: upsertBy(project.chapters, op.chapter, (item) => item.id) },
       touchedStructuredChapter: (op.chapter.authoringMode || 'freeform') === 'structured',
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `Chapter ${op.chapter.id} upserted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `Chapter ${op.chapter.id} upserted.`,
+      },
     };
   }
 
@@ -185,27 +239,46 @@ const applyOperation = (
       return {
         project,
         touchedStructuredChapter: false,
-        result: { opId: op.opId, type: op.type, status: 'blocked', message: `Chapter ${op.chapterId} is outside scope guard.` },
+        result: {
+          opId: op.opId,
+          type: op.type,
+          status: 'blocked',
+          message: `Chapter ${op.chapterId} is outside scope guard.`,
+        },
       };
     }
     if (!isSceneEditable(op.scenePackage.sceneId, scope?.editableSceneIds)) {
       return {
         project,
         touchedStructuredChapter: false,
-        result: { opId: op.opId, type: op.type, status: 'blocked', message: `Scene ${op.scenePackage.sceneId} is outside scope guard.` },
+        result: {
+          opId: op.opId,
+          type: op.type,
+          status: 'blocked',
+          message: `Scene ${op.scenePackage.sceneId} is outside scope guard.`,
+        },
       };
     }
 
     const nextChapters = project.chapters.map((chapter) => {
       if (chapter.id !== op.chapterId) return chapter;
-      const nextScenePackages = upsertBy(chapter.scenePackages || [], op.scenePackage, (item) => item.sceneId);
+      const nextScenePackages = upsertBy(
+        chapter.scenePackages || [],
+        op.scenePackage,
+        (item) => item.sceneId,
+      );
       return { ...chapter, scenePackages: nextScenePackages };
     });
 
     return {
       project: { ...project, chapters: nextChapters },
       touchedStructuredChapter: true,
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `ScenePackage ${op.scenePackage.sceneId} upserted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `ScenePackage ${op.scenePackage.sceneId} upserted.`,
+      },
     };
   }
 
@@ -214,14 +287,24 @@ const applyOperation = (
       return {
         project,
         touchedStructuredChapter: false,
-        result: { opId: op.opId, type: op.type, status: 'blocked', message: `Chapter ${op.chapterId} is outside scope guard.` },
+        result: {
+          opId: op.opId,
+          type: op.type,
+          status: 'blocked',
+          message: `Chapter ${op.chapterId} is outside scope guard.`,
+        },
       };
     }
     if (!isSceneEditable(op.sceneId, scope?.editableSceneIds)) {
       return {
         project,
         touchedStructuredChapter: false,
-        result: { opId: op.opId, type: op.type, status: 'blocked', message: `Scene ${op.sceneId} is outside scope guard.` },
+        result: {
+          opId: op.opId,
+          type: op.type,
+          status: 'blocked',
+          message: `Scene ${op.sceneId} is outside scope guard.`,
+        },
       };
     }
 
@@ -236,7 +319,12 @@ const applyOperation = (
     return {
       project: { ...project, chapters: nextChapters },
       touchedStructuredChapter: true,
-      result: { opId: op.opId, type: op.type, status: 'applied', message: `ScenePackage ${op.sceneId} deleted.` },
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'applied',
+        message: `ScenePackage ${op.sceneId} deleted.`,
+      },
     };
   }
 
@@ -244,7 +332,12 @@ const applyOperation = (
   return {
     project,
     touchedStructuredChapter: false,
-    result: { opId: unsupported.opId, type: unsupported.type, status: 'rejected', message: 'Unsupported op.' },
+    result: {
+      opId: unsupported.opId,
+      type: unsupported.type,
+      status: 'rejected',
+      message: 'Unsupported op.',
+    },
   };
 };
 
@@ -261,7 +354,12 @@ export const shadowApplyCodexOps = (
 
   artifact.operations.forEach((op) => {
     if (allow && !allow.has(op.opId)) {
-      opResults.push({ opId: op.opId, type: op.type, status: 'rejected', message: 'Skipped by selection.' });
+      opResults.push({
+        opId: op.opId,
+        type: op.type,
+        status: 'rejected',
+        message: 'Skipped by selection.',
+      });
       return;
     }
 
@@ -294,7 +392,10 @@ export const shadowApplyCodexOps = (
   }
 
   const validatorIssues = validateProjectBranches(nextProject.chapters, nextProject.bible);
-  const diff = diffWorkspaceBundles(buildWorkspaceBundle(currentProject), buildWorkspaceBundle(nextProject));
+  const diff = diffWorkspaceBundles(
+    buildWorkspaceBundle(currentProject),
+    buildWorkspaceBundle(nextProject),
+  );
 
   return {
     project: nextProject,

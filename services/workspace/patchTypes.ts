@@ -1,5 +1,13 @@
 import { BranchValidationIssue } from '../validation/branchValidator';
-import { StoryProject, ChapterLog, ScenePackage, Route, RevealPlan, StateAxis, BranchPolicy } from '../../types';
+import {
+  StoryProject,
+  ChapterLog,
+  ScenePackage,
+  Route,
+  RevealPlan,
+  StateAxis,
+  BranchPolicy,
+} from '../../types';
 import { WorkspaceDiff } from './diff';
 
 export type CodexResponseMode = 'questions' | 'ops' | 'bundle';

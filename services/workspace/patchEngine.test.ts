@@ -26,7 +26,12 @@ const buildProject = () =>
         summary: '',
         scenes: [],
         beats: [],
-        strategy: { milestones: [], forbiddenResolutions: [], characterArcProgress: '', pacing: '' },
+        strategy: {
+          milestones: [],
+          forbiddenResolutions: [],
+          characterArcProgress: '',
+          pacing: '',
+        },
         status: 'Idea',
         wordCount: 0,
         content: '',

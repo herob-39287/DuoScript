@@ -148,13 +148,12 @@ export const buildPrepareForCodexArtifacts = (
       ? { ...scope, taskType: 'interactive refinement' }
       : scope;
 
-  const bundle =
-    shouldUseStarterBundle
-      ? buildStarterWorkspaceBundle(project)
-      : effectiveScope.scopeType === 'scene' && effectiveScope.chapterId && effectiveScope.sceneId
-        ? buildSceneWorkspaceBundle(project, effectiveScope.chapterId, effectiveScope.sceneId)
-        : effectiveScope.scopeType === 'chapter' && effectiveScope.chapterId
-          ? buildChapterWorkspaceBundle(project, effectiveScope.chapterId)
+  const bundle = shouldUseStarterBundle
+    ? buildStarterWorkspaceBundle(project)
+    : effectiveScope.scopeType === 'scene' && effectiveScope.chapterId && effectiveScope.sceneId
+      ? buildSceneWorkspaceBundle(project, effectiveScope.chapterId, effectiveScope.sceneId)
+      : effectiveScope.scopeType === 'chapter' && effectiveScope.chapterId
+        ? buildChapterWorkspaceBundle(project, effectiveScope.chapterId)
         : buildWorkspaceBundle(project);
 
   const issues = validateProjectBranches(bundle.project.chapters, bundle.project.bible);
