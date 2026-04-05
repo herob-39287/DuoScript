@@ -59,6 +59,10 @@ const AppShell: React.FC<AppShellProps> = ({ onLoadProject }) => {
             onLoadProject(normalizeProject(p));
             uiDispatch(Actions.setView(ViewMode.DASHBOARD));
           }}
+          onStartWithView={(p, view) => {
+            onLoadProject(normalizeProject(p));
+            uiDispatch(Actions.setView(view === 'writer' ? ViewMode.WRITER : ViewMode.DASHBOARD));
+          }}
           onOpenHelp={() => uiDispatch(Actions.setHelpModal(true))}
           showAlert={(t, m) =>
             uiDispatch(Actions.openDialog({ isOpen: true, type: 'alert', title: t, message: m }))

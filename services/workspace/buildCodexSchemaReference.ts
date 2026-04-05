@@ -44,5 +44,15 @@ export const buildCodexSchemaReference = (): string => {
     '- Preserve type consistency between condition expressions and `StateAxis` definitions.',
     '- Prefer scope-limited edits (scene/chapter) instead of project-wide prose rewrites.',
     '- Report unresolved validator issues explicitly instead of silently dropping branch structures.',
+    '',
+    '## Codex ops command reference',
+    '- `setProjectField`',
+    '- `upsertStateAxis`',
+    '- `upsertRoute`',
+    '- `upsertRevealPlan`',
+    '- `upsertBranchPolicy`',
+    '- `upsertChapter`',
+    '- `upsertScenePackage`',
+    '- `deleteScenePackage`',
   ].join('\n');
 };

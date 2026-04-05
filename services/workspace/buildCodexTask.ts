@@ -1,12 +1,14 @@
 import { BranchValidationIssue } from '../validation/branchValidator';
 import { WorkspaceBundle } from './types';
+import { CodexResponseMode, CodexTaskType } from './patchTypes';
 
 export type CodexTaskScope = {
   scopeType: 'project' | 'chapter' | 'scene';
   chapterId?: string;
   sceneId?: string;
   objective?: string;
-  taskType?: 'route design' | 'scene package generation' | 'branch repair' | 'draft polish';
+  taskType?: CodexTaskType;
+  responseMode?: CodexResponseMode;
   expectedBranchLevel?: 'route' | 'chapter' | 'scene' | 'mixed';
   editableChapterIds?: string[];
   editableSceneIds?: string[];
@@ -17,6 +19,8 @@ export type CodexTaskScope = {
   expectedTouchedEntities?: string[];
   doNotChange?: string[];
   preferredOutputGranularity?: 'project' | 'chapter' | 'scene';
+  unresolved?: string[];
+  recentChangeSummary?: string[];
 };
 
 const buildScopeLine = (scope: CodexTaskScope): string => {
@@ -38,6 +42,12 @@ const detectDefaultTaskType = (
   if (scope.scopeType === 'scene' || scope.scopeType === 'chapter')
     return 'scene package generation';
   return 'route design';
+};
+
+const detectDefaultResponseMode = (scope: CodexTaskScope): CodexResponseMode => {
+  if (scope.responseMode) return scope.responseMode;
+  if (scope.taskType === 'project genesis') return 'questions';
+  return scope.scopeType === 'project' ? 'bundle' : 'ops';
 };
 
 const getFocusedIssues = (
@@ -118,13 +128,17 @@ export const buildCodexTask = (
         ? (chapter?.scenePackages || []).map((item) => item.sceneId)
         : []);
   const expectedOutputs = scope.expectedOutputs || [
-    'updated_workspace_bundle.json',
-    'codex_change_summary.md',
+    ...(detectDefaultResponseMode(scope) === 'questions'
+      ? ['codex_questions.md']
+      : detectDefaultResponseMode(scope) === 'ops'
+        ? ['codex_ops.json', 'codex_change_summary.md']
+        : ['updated_workspace_bundle.json', 'codex_change_summary.md']),
   ];
   const focusedIssues = getFocusedIssues(issues, scope);
   const focusIssueLines = buildFocusIssueLines(focusedIssues);
   const issueChecklistLines = buildIssueChecklistLines(focusedIssues);
   const taskType = detectDefaultTaskType(scope, issues);
+  const responseMode = detectDefaultResponseMode(scope);
   const rebuildDraftExpected =
     scope.rebuildDraftExpected ??
     (taskType === 'scene package generation' || taskType === 'draft polish');
@@ -150,6 +164,7 @@ export const buildCodexTask = (
     '',
     '## Task type',
     `- ${taskType}`,
+    `- Response mode: ${responseMode}`,
     `- Expected branch level: ${scope.expectedBranchLevel || scope.scopeType}`,
     '',
     '## Target scope',
@@ -164,6 +179,7 @@ export const buildCodexTask = (
     ...(scope.protectedPaths?.length
       ? scope.protectedPaths.map((item) => `- Protected path: ${item}`)
       : ['- Protected path: chapters/scenes outside the provided scope']),
+    '- Prefer minimal diffs in scope when response mode is `ops`.',
     '',
     '## Primary constraints',
     '- Treat `bible.routes`, `bible.revealPlans`, `bible.stateAxes`, `bible.branchPolicies`, `chapter.scenePackages` as canonical.',
@@ -192,6 +208,17 @@ export const buildCodexTask = (
     '',
     '## Expected outputs',
     ...expectedOutputs.map((item) => `- ${item}`),
+    '',
+    '## Session context',
+    `- taskType: ${taskType}`,
+    `- responseMode: ${responseMode}`,
+    ...(scope.recentChangeSummary?.length
+      ? ['- recent changes:', ...scope.recentChangeSummary.map((item) => `  - ${item}`)]
+      : ['- recent changes: (none provided)']),
+    ...(scope.unresolved?.length
+      ? ['- unresolved:', ...scope.unresolved.map((item) => `  - ${item}`)]
+      : ['- unresolved: (none)']),
+    `- editable scope: chapters=${editableChapterIds.length}, scenes=${editableSceneIds.length}`,
     '',
     '## Draft rebuild expectation',
     `- Draft rebuild required after import: ${rebuildDraftExpected ? 'yes' : 'no'}`,
