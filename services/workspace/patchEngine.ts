@@ -1,4 +1,5 @@
 import { StoryProject } from '../../types';
+import { syncChapterCompiledContentFromScenePackages } from '../scenePackage/chapterAssembler';
 import { validateProjectBranches } from '../validation/branchValidator';
 import { diffWorkspaceBundles } from './diff';
 import { buildWorkspaceBundle } from './export';
@@ -28,12 +29,71 @@ const isSceneEditable = (sceneId: string, editableSceneIds?: string[]) => {
   return editableSceneIds.includes(sceneId);
 };
 
+const normalizeGuardPath = (path: string): string => {
+  const normalized = path.trim().replace(/\//g, '.').replace(/\.+/g, '.');
+  return normalized.replace(/^project\./, '').replace(/^\./, '');
+};
+
+const resolveOperationPaths = (op: CodexPatchOperation): string[] => {
+  if (op.type === 'setProjectField') return [op.path];
+  if (op.type === 'upsertStateAxis')
+    return ['bible.stateAxes', `bible.stateAxes.${op.axis.stateKey}`];
+  if (op.type === 'upsertRoute') return ['bible.routes', `bible.routes.${op.route.routeId}`];
+  if (op.type === 'upsertRevealPlan')
+    return ['bible.revealPlans', `bible.revealPlans.${op.revealPlan.revealId}`];
+  if (op.type === 'upsertBranchPolicy')
+    return ['bible.branchPolicies', `bible.branchPolicies.${op.policy.policyId}`];
+  if (op.type === 'upsertChapter')
+    return [`chapters.${op.chapter.id}`, `chapters.${op.chapter.id}.scenePackages`];
+  if (op.type === 'upsertScenePackage')
+    return [
+      `chapters.${op.chapterId}.scenePackages`,
+      `chapters.${op.chapterId}.scenePackages.${op.scenePackage.sceneId}`,
+    ];
+  if (op.type === 'deleteScenePackage')
+    return [`chapters.${op.chapterId}.scenePackages`, `chapters.${op.chapterId}.scenePackages.${op.sceneId}`];
+  return [];
+};
+
+const getProtectedPathViolation = (
+  op: CodexPatchOperation,
+  protectedPaths?: string[],
+): string | null => {
+  if (!protectedPaths || protectedPaths.length === 0) return null;
+
+  const opPaths = resolveOperationPaths(op).map(normalizeGuardPath).filter(Boolean);
+  for (const protectedPath of protectedPaths.map(normalizeGuardPath).filter(Boolean)) {
+    const conflict = opPaths.some(
+      (targetPath) =>
+        targetPath === protectedPath ||
+        targetPath.startsWith(`${protectedPath}.`) ||
+        protectedPath.startsWith(`${targetPath}.`),
+    );
+    if (conflict) return protectedPath;
+  }
+
+  return null;
+};
+
 const applyOperation = (
   project: StoryProject,
   op: CodexPatchOperation,
   artifact: CodexOpsArtifact,
 ): { project: StoryProject; result: OpApplyResult; touchedStructuredChapter: boolean } => {
   const scope = artifact.scopeGuard;
+  const protectedPath = getProtectedPathViolation(op, scope?.protectedPaths);
+  if (protectedPath) {
+    return {
+      project,
+      touchedStructuredChapter: false,
+      result: {
+        opId: op.opId,
+        type: op.type,
+        status: 'blocked',
+        message: `Operation targets protected path: ${protectedPath}.`,
+      },
+    };
+  }
 
   if (op.type === 'setProjectField') {
     const next: StoryProject = structuredClone(project);
@@ -93,6 +153,18 @@ const applyOperation = (
   }
 
   if (op.type === 'upsertChapter') {
+    if (scope?.editableSceneIds && scope.editableSceneIds.length > 0) {
+      return {
+        project,
+        touchedStructuredChapter: false,
+        result: {
+          opId: op.opId,
+          type: op.type,
+          status: 'blocked',
+          message: 'upsertChapter is not allowed during scene-scoped refinement. Use scenePackage ops.',
+        },
+      };
+    }
     if (!isChapterEditable(op.chapter.id, scope?.editableChapterIds)) {
       return {
         project,
@@ -185,6 +257,7 @@ export const shadowApplyCodexOps = (
   let nextProject: StoryProject = structuredClone(currentProject);
   const opResults: OpApplyResult[] = [];
   let requiresDraftRebuild = false;
+  const touchedStructuredChapterIds = new Set<string>();
 
   artifact.operations.forEach((op) => {
     if (allow && !allow.has(op.opId)) {
@@ -195,8 +268,30 @@ export const shadowApplyCodexOps = (
     const applied = applyOperation(nextProject, op, artifact);
     nextProject = applied.project;
     requiresDraftRebuild = requiresDraftRebuild || applied.touchedStructuredChapter;
+    if (applied.result.status === 'applied' && op.type === 'upsertChapter') {
+      if ((op.chapter.authoringMode || 'freeform') === 'structured') {
+        touchedStructuredChapterIds.add(op.chapter.id);
+      }
+    }
+    if (applied.result.status === 'applied' && op.type === 'upsertScenePackage') {
+      touchedStructuredChapterIds.add(op.chapterId);
+    }
+    if (applied.result.status === 'applied' && op.type === 'deleteScenePackage') {
+      touchedStructuredChapterIds.add(op.chapterId);
+    }
     opResults.push(applied.result);
   });
+
+  if (touchedStructuredChapterIds.size > 0) {
+    nextProject = {
+      ...nextProject,
+      chapters: nextProject.chapters.map((chapter) => {
+        if (!touchedStructuredChapterIds.has(chapter.id)) return chapter;
+        if ((chapter.authoringMode || 'freeform') !== 'structured') return chapter;
+        return syncChapterCompiledContentFromScenePackages(chapter);
+      }),
+    };
+  }
 
   const validatorIssues = validateProjectBranches(nextProject.chapters, nextProject.bible);
   const diff = diffWorkspaceBundles(buildWorkspaceBundle(currentProject), buildWorkspaceBundle(nextProject));

@@ -21,11 +21,15 @@ export const parseWorkspaceBundle = (raw: unknown) => {
 };
 
 const parseQuestionsMarkdown = (rawText: string): string[] => {
-  return rawText
+  const lines = rawText
     .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('- ') || /^\d+\./.test(line))
-    .map((line) => line.replace(/^-\s*/, '').replace(/^\d+\.\s*/, '').trim())
+    .map((line) => line.trim());
+  const hasHeader = lines.some((line) => /^#{1,6}\s*codex_questions\b/i.test(line));
+  if (!hasHeader) return [];
+
+  return lines
+    .filter((line) => /^(-|\*|\d+\.)?\s*Q:\s*\S+/i.test(line))
+    .map((line) => line.replace(/^(-|\*|\d+\.)?\s*Q:\s*/i, '').trim())
     .filter(Boolean);
 };
 
