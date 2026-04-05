@@ -79,7 +79,8 @@ export const useManuscriptEditor = ({
         const body = await loadChapterBody(meta.id, activeChapterId, rev);
         const mode = chapter.authoringMode || 'freeform';
         const draftText = body?.draftText ?? chapter.draftText ?? chapter.content ?? '';
-        const compiledContent = body?.compiledContent ?? chapter.compiledContent ?? chapter.content ?? '';
+        const compiledContent =
+          body?.compiledContent ?? chapter.compiledContent ?? chapter.content ?? '';
         projectDispatch(
           Actions.updateChapter(activeChapterId, {
             authoringMode: mode,

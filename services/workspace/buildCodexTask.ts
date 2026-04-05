@@ -35,7 +35,8 @@ const detectDefaultTaskType = (
 ): NonNullable<CodexTaskScope['taskType']> => {
   if (scope.taskType) return scope.taskType;
   if (issues.length > 0) return 'branch repair';
-  if (scope.scopeType === 'scene' || scope.scopeType === 'chapter') return 'scene package generation';
+  if (scope.scopeType === 'scene' || scope.scopeType === 'chapter')
+    return 'scene package generation';
   return 'route design';
 };
 
@@ -44,7 +45,8 @@ const getFocusedIssues = (
   scope: CodexTaskScope,
 ): BranchValidationIssue[] => {
   const requested = scope.focusIssueCodes || [];
-  const issuePool = requested.length > 0 ? issues.filter((item) => requested.includes(item.code)) : issues;
+  const issuePool =
+    requested.length > 0 ? issues.filter((item) => requested.includes(item.code)) : issues;
   return issuePool.slice(0, 8);
 };
 
@@ -56,20 +58,27 @@ const buildFocusIssueLines = (issues: BranchValidationIssue[]): string[] => {
 };
 
 const ISSUE_CHECKLIST: Record<string, string> = {
-  UNKNOWN_STATE_REFERENCE: 'StateAxis に存在しないキー参照を追加せず、条件/effects のキーを正規キーに合わせる。',
-  CONDITION_TYPE_MISMATCH: 'Condition の比較値型を StateAxis 型（number/boolean/string）に一致させる。',
+  UNKNOWN_STATE_REFERENCE:
+    'StateAxis に存在しないキー参照を追加せず、条件/effects のキーを正規キーに合わせる。',
+  CONDITION_TYPE_MISMATCH:
+    'Condition の比較値型を StateAxis 型（number/boolean/string）に一致させる。',
   CONDITION_CONFLICT: '同一 choice/scene 内の条件矛盾を解消し、到達不能分岐を残さない。',
   SPOILER_LEAKAGE: 'reveal 条件と variant 文脈を見直し、未解禁情報が露出しないようにする。',
-  UNREACHABLE_BRANCH: 'entry/visibility/availability 条件を調整し、少なくとも1経路で到達可能にする。',
-  WEAK_CHOICE: 'choice に condition/effect/routeImpact/unlockImpact のいずれかを与えて意味差を作る。',
+  UNREACHABLE_BRANCH:
+    'entry/visibility/availability 条件を調整し、少なくとも1経路で到達可能にする。',
+  WEAK_CHOICE:
+    'choice に condition/effect/routeImpact/unlockImpact のいずれかを与えて意味差を作る。',
   CONVERGENCE_POLICY_MISMATCH: 'variant と convergencePoint の convergencePolicy を一致させる。',
-  CONVERGENCE_TARGET_MISMATCH: 'choice の convergenceTarget と scene convergencePoint の整合を取る。',
+  CONVERGENCE_TARGET_MISMATCH:
+    'choice の convergenceTarget と scene convergencePoint の整合を取る。',
   MISSING_CONVERGENCE_POINT: '分岐が発生する scene には convergencePoint を定義する。',
   LOCAL_BRANCH_MISSING_CONVERGENCE_TARGET: 'local branch choice に convergenceTarget を設定する。',
-  LOCAL_BRANCH_MISSING_VARIANT: 'reactionVariantId / immediateReactionVariantId の未解決参照を解消する。',
+  LOCAL_BRANCH_MISSING_VARIANT:
+    'reactionVariantId / immediateReactionVariantId の未解決参照を解消する。',
   IMPOSSIBLE_UNLOCK_CONDITION: '常に false になる unlockConditions を修正する。',
   UNREACHABLE_ROUTE: 'enabled route が scene/choice の route 参照から到達可能になるよう接続する。',
-  CROSS_CHAPTER_STATE_DEPENDENCY: 'chapter scope state は参照前に先行章で更新される流れへ修正する。',
+  CROSS_CHAPTER_STATE_DEPENDENCY:
+    'chapter scope state は参照前に先行章で更新される流れへ修正する。',
   REFERENCED_NOT_UPDATED_STATE: '参照する state が未更新にならないよう carryover/effects を補う。',
 };
 
@@ -79,7 +88,10 @@ const buildIssueChecklistLines = (issues: BranchValidationIssue[]): string[] => 
     return ['- 現在 issue なし。設計品質改善（弱い選択肢・分岐密度・収束明瞭性）を優先する。'];
   }
 
-  return uniqueCodes.map((code) => `- ${code}: ${ISSUE_CHECKLIST[code] || '対象 issue の再現条件を保ったまま、最小差分で修正する。'}`);
+  return uniqueCodes.map(
+    (code) =>
+      `- ${code}: ${ISSUE_CHECKLIST[code] || '対象 issue の再現条件を保ったまま、最小差分で修正する。'}`,
+  );
 };
 
 export const buildCodexTask = (
@@ -96,7 +108,8 @@ export const buildCodexTask = (
       ? chapter?.scenePackages?.find((item) => item.sceneId === scope.sceneId)
       : undefined;
 
-  const editableChapterIds = scope.editableChapterIds || bundle.project.chapters.map((item) => item.id);
+  const editableChapterIds =
+    scope.editableChapterIds || bundle.project.chapters.map((item) => item.id);
   const editableSceneIds =
     scope.editableSceneIds ||
     (scope.scopeType === 'scene' && scope.sceneId
@@ -113,7 +126,8 @@ export const buildCodexTask = (
   const issueChecklistLines = buildIssueChecklistLines(focusedIssues);
   const taskType = detectDefaultTaskType(scope, issues);
   const rebuildDraftExpected =
-    scope.rebuildDraftExpected ?? (taskType === 'scene package generation' || taskType === 'draft polish');
+    scope.rebuildDraftExpected ??
+    (taskType === 'scene package generation' || taskType === 'draft polish');
   const touchedEntities = scope.expectedTouchedEntities || [
     '`project.bible.routes` / `project.bible.revealPlans` / `project.bible.stateAxes` / `project.bible.branchPolicies` (as needed)',
     '`project.chapters[].scenePackages` in allowed scope only',

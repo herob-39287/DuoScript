@@ -41,17 +41,15 @@ export const workspaceBundleToProject = (
 
   const rebuiltChapterIds: string[] = [];
   const rebuiltChapters = next.chapters.map((chapter) => {
-    const mode = chapter.authoringMode || (chapter.scenePackages?.length ? 'structured' : 'freeform');
+    const mode =
+      chapter.authoringMode || (chapter.scenePackages?.length ? 'structured' : 'freeform');
     const hasScenePackages = Boolean(chapter.scenePackages && chapter.scenePackages.length > 0);
     const withLegacyMigrated = {
       ...chapter,
       authoringMode: mode,
-      draftText:
-        chapter.draftText ??
-        (mode === 'freeform' ? chapter.content ?? '' : undefined),
+      draftText: chapter.draftText ?? (mode === 'freeform' ? (chapter.content ?? '') : undefined),
       compiledContent:
-        chapter.compiledContent ??
-        (mode === 'structured' ? chapter.content ?? '' : undefined),
+        chapter.compiledContent ?? (mode === 'structured' ? (chapter.content ?? '') : undefined),
     };
 
     if (!hasScenePackages || mode === 'freeform') {

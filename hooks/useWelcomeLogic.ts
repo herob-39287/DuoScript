@@ -163,7 +163,12 @@ export const useWelcomeLogic = ({ onStart, showAlert }: UseWelcomeLogicProps) =>
 
   const importProjectFile = useCallback(
     async (rawJson: any, mode: 'backup' | 'codex') => {
-      if (!(rawJson && (rawJson.title || rawJson.bible || rawJson.chapters || rawJson.meta || rawJson.kind))) {
+      if (
+        !(
+          rawJson &&
+          (rawJson.title || rawJson.bible || rawJson.chapters || rawJson.meta || rawJson.kind)
+        )
+      ) {
         showAlert('Load Failed', 'Invalid Project File');
         return;
       }
