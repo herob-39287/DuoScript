@@ -116,6 +116,23 @@ export const serializeWorkspaceBundle = (bundle: WorkspaceBundle): string => {
   return JSON.stringify(bundle, null, 2);
 };
 
+const isStarterProject = (project: StoryProject): boolean => {
+  const hasRouteDesign =
+    (project.bible.routes?.length || 0) > 0 ||
+    (project.bible.revealPlans?.length || 0) > 0 ||
+    (project.bible.stateAxes?.length || 0) > 0 ||
+    (project.bible.branchPolicies?.length || 0) > 0;
+  if (hasRouteDesign) return false;
+
+  return !project.chapters.some((chapter) => {
+    if ((chapter.scenePackages?.length || 0) > 0) return true;
+    if ((chapter.draftText || '').trim().length > 0) return true;
+    if ((chapter.compiledContent || '').trim().length > 0) return true;
+    if ((chapter.content || '').trim().length > 0) return true;
+    return false;
+  });
+};
+
 export const buildPrepareForCodexArtifacts = (
   project: StoryProject,
   scope: CodexTaskScope,
@@ -125,21 +142,26 @@ export const buildPrepareForCodexArtifacts = (
   validatorReport: string;
   codexSchemaReference: string;
 } => {
+  const shouldUseStarterBundle = scope.taskType === 'project genesis' && isStarterProject(project);
+  const effectiveScope: CodexTaskScope =
+    scope.taskType === 'project genesis' && !shouldUseStarterBundle
+      ? { ...scope, taskType: 'interactive refinement' }
+      : scope;
+
   const bundle =
-    scope.taskType === 'project genesis'
+    shouldUseStarterBundle
       ? buildStarterWorkspaceBundle(project)
-      :
-    scope.scopeType === 'scene' && scope.chapterId && scope.sceneId
-      ? buildSceneWorkspaceBundle(project, scope.chapterId, scope.sceneId)
-      : scope.scopeType === 'chapter' && scope.chapterId
-        ? buildChapterWorkspaceBundle(project, scope.chapterId)
+      : effectiveScope.scopeType === 'scene' && effectiveScope.chapterId && effectiveScope.sceneId
+        ? buildSceneWorkspaceBundle(project, effectiveScope.chapterId, effectiveScope.sceneId)
+        : effectiveScope.scopeType === 'chapter' && effectiveScope.chapterId
+          ? buildChapterWorkspaceBundle(project, effectiveScope.chapterId)
         : buildWorkspaceBundle(project);
 
   const issues = validateProjectBranches(bundle.project.chapters, bundle.project.bible);
 
   return {
     workspaceBundle: serializeWorkspaceBundle(bundle),
-    codexTask: buildCodexTask(bundle, scope, issues),
+    codexTask: buildCodexTask(bundle, effectiveScope, issues),
     validatorReport: buildValidatorReport(issues),
     codexSchemaReference: buildCodexSchemaReference(),
   };

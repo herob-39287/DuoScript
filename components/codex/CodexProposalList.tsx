@@ -26,6 +26,18 @@ export const CodexProposalList: React.FC<Props> = ({
 }) => {
   if (proposals.length === 0) return null;
 
+  const buildTargetIdentifiers = (op: CodexPatchOperation): string[] => {
+    if (op.type === 'upsertStateAxis') return [`stateKey:${op.axis.stateKey}`];
+    if (op.type === 'upsertRoute') return [`routeId:${op.route.routeId}`];
+    if (op.type === 'upsertRevealPlan') return [`revealId:${op.revealPlan.revealId}`];
+    if (op.type === 'upsertBranchPolicy') return [`policyId:${op.policy.policyId}`];
+    if (op.type === 'upsertChapter') return [`chapterId:${op.chapter.id}`];
+    if (op.type === 'upsertScenePackage')
+      return [`chapterId:${op.chapterId}`, `sceneId:${op.scenePackage.sceneId}`];
+    if (op.type === 'deleteScenePackage') return [`chapterId:${op.chapterId}`, `sceneId:${op.sceneId}`];
+    return [];
+  };
+
   return (
     <div className="mb-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-100 space-y-3">
       <div className="font-black tracking-widest text-[10px]">Codex Ops</div>
@@ -39,6 +51,11 @@ export const CodexProposalList: React.FC<Props> = ({
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-mono text-[10px]">{op.type} ({op.opId})</div>
+                {buildTargetIdentifiers(op).length > 0 && (
+                  <div className="font-mono text-[10px] text-emerald-300/90">
+                    {buildTargetIdentifiers(op).join(' / ')}
+                  </div>
+                )}
                 {op.reason && <div className="text-stone-300">{op.reason}</div>}
                 {result && <div className="text-[10px] text-stone-400">{result.status}: {result.message}</div>}
               </div>
