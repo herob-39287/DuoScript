@@ -312,7 +312,8 @@ const WriterView: React.FC = () => {
               <>
                 {data.activeChapter?.authoringMode === 'structured' && (
                   <div className="mb-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-100">
-                    この章は structured mode です。本文は scene packages から生成されています。自由編集するには freeform に変換してください。
+                    この章は structured mode です。本文は scene packages
+                    から生成されています。自由編集するには freeform に変換してください。
                   </div>
                 )}
                 <EditorCanvas

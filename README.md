@@ -37,7 +37,6 @@
 6. 残存する validator issue があれば、`codex_change_summary.md` を参照して追加修正を行います。
 7. scene package を更新した場合は `Build Draft` / `rebuildDraft` を実行して本文キャッシュを更新します。
 
-
 ### Codex 往復の受け渡しファイル
 
 **DuoScript → Codex（渡す4ファイル）**

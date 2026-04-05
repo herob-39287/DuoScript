@@ -42,7 +42,8 @@ export const chaptersReducer = (
         if (chapter) {
           chapter.authoringMode = action.mode;
           if (action.mode === 'freeform') {
-            chapter.draftText = chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '';
+            chapter.draftText =
+              chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '';
             chapter.wordCount = chapter.draftText.length;
           } else {
             const synced = syncChapterCompiledContentFromScenePackages(chapter as ChapterLog);

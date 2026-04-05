@@ -56,8 +56,8 @@ export const useRAG = () => {
         const mode = chapter.authoringMode || 'freeform';
         const text =
           mode === 'structured'
-            ? chapter.compiledContent ?? chapter.content ?? ''
-            : chapter.draftText ?? chapter.content ?? '';
+            ? (chapter.compiledContent ?? chapter.content ?? '')
+            : (chapter.draftText ?? chapter.content ?? '');
         return {
           ...chapter,
           content: text,
