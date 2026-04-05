@@ -3,7 +3,10 @@ import { detectCodexArtifact } from './import';
 
 describe('codex markdown question detection', () => {
   it('accepts markdown only when codex_questions header and Q: markers are present', () => {
-    const artifact = detectCodexArtifact({}, '# codex_questions\n- Q: What route should branch first?');
+    const artifact = detectCodexArtifact(
+      {},
+      '# codex_questions\n- Q: What route should branch first?',
+    );
     expect(artifact.type).toBe('questions');
     if (artifact.type === 'questions') {
       expect(artifact.questions.questions).toEqual(['What route should branch first?']);

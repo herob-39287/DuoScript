@@ -21,9 +21,7 @@ export const parseWorkspaceBundle = (raw: unknown) => {
 };
 
 const parseQuestionsMarkdown = (rawText: string): string[] => {
-  const lines = rawText
-    .split('\n')
-    .map((line) => line.trim());
+  const lines = rawText.split('\n').map((line) => line.trim());
   const hasHeader = lines.some((line) => /^#{1,6}\s*codex_questions\b/i.test(line));
   if (!hasHeader) return [];
 

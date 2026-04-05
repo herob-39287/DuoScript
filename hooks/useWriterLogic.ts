@@ -153,7 +153,10 @@ export const useWriterLogic = () => {
     closeSuggestions: () => writerAI.setSuggestions([]),
     closeWhisper: () => writerAI.setWhisper(null),
 
-    updateScenePackage: (sceneId: string, updater: (scenePackage: ScenePackage) => ScenePackage) => {
+    updateScenePackage: (
+      sceneId: string,
+      updater: (scenePackage: ScenePackage) => ScenePackage,
+    ) => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
       const existing = chapter.scenePackages || [];
@@ -197,7 +200,8 @@ export const useWriterLogic = () => {
       );
     },
 
-    exportWorkspace: () => serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync })),
+    exportWorkspace: () =>
+      serializeWorkspaceBundle(buildWorkspaceBundle({ meta, bible, chapters, sync })),
 
     importWorkspace: (raw: unknown, options?: { autoApply?: boolean; fallbackText?: string }) => {
       const currentProject = { meta, bible, chapters, sync };
@@ -260,7 +264,8 @@ export const useWriterLogic = () => {
       };
     },
 
-    prepareForCodex: (scope: CodexTaskScope) => buildPrepareForCodexArtifacts({ meta, bible, chapters, sync }, scope),
+    prepareForCodex: (scope: CodexTaskScope) =>
+      buildPrepareForCodexArtifacts({ meta, bible, chapters, sync }, scope),
     validateBranches: () => validateProjectBranchesV2(chapters, bible),
     rebuildDraft: () => actions.rebuildCompiledContentFromScenePackages(),
 
@@ -273,7 +278,10 @@ export const useWriterLogic = () => {
 
     applyAllCodexOps: () => {
       if (!pendingImport || pendingImport.mode !== 'ops') return;
-      recomputeOpsPreview(pendingImport.opsArtifact, pendingImport.opsArtifact.operations.map((op) => op.opId));
+      recomputeOpsPreview(
+        pendingImport.opsArtifact,
+        pendingImport.opsArtifact.operations.map((op) => op.opId),
+      );
     },
     rejectAllCodexOps: () => {
       if (!pendingImport || pendingImport.mode !== 'ops') return;
@@ -335,7 +343,8 @@ export const useWriterLogic = () => {
                 result: pendingImport.opResults.find((result) => result.opId === op.opId),
               }))
             : [],
-        codexOpsUnresolved: pendingImport && pendingImport.mode === 'ops' ? pendingImport.unresolved : [],
+        codexOpsUnresolved:
+          pendingImport && pendingImport.mode === 'ops' ? pendingImport.unresolved : [],
       },
       status: {
         isProcessing: writerAI.isProcessing,

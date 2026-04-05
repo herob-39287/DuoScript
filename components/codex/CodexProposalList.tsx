@@ -34,7 +34,8 @@ export const CodexProposalList: React.FC<Props> = ({
     if (op.type === 'upsertChapter') return [`chapterId:${op.chapter.id}`];
     if (op.type === 'upsertScenePackage')
       return [`chapterId:${op.chapterId}`, `sceneId:${op.scenePackage.sceneId}`];
-    if (op.type === 'deleteScenePackage') return [`chapterId:${op.chapterId}`, `sceneId:${op.sceneId}`];
+    if (op.type === 'deleteScenePackage')
+      return [`chapterId:${op.chapterId}`, `sceneId:${op.sceneId}`];
     return [];
   };
 
@@ -42,26 +43,54 @@ export const CodexProposalList: React.FC<Props> = ({
     <div className="mb-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-100 space-y-3">
       <div className="font-black tracking-widest text-[10px]">Codex Ops</div>
       <div className="flex gap-2">
-        <button onClick={onApplyAll} className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-emerald-100 bg-emerald-600/30">全件適用</button>
-        <button onClick={onRejectAll} className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-rose-100 bg-rose-600/30">一括却下</button>
+        <button
+          onClick={onApplyAll}
+          className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-emerald-100 bg-emerald-600/30"
+        >
+          全件適用
+        </button>
+        <button
+          onClick={onRejectAll}
+          className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-rose-100 bg-rose-600/30"
+        >
+          一括却下
+        </button>
       </div>
       <ul className="space-y-2">
         {proposals.map(({ op, selected, result }) => (
           <li key={op.opId} className="rounded-xl border border-white/10 p-2 bg-stone-900/30">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="font-mono text-[10px]">{op.type} ({op.opId})</div>
+                <div className="font-mono text-[10px]">
+                  {op.type} ({op.opId})
+                </div>
                 {buildTargetIdentifiers(op).length > 0 && (
                   <div className="font-mono text-[10px] text-emerald-300/90">
                     {buildTargetIdentifiers(op).join(' / ')}
                   </div>
                 )}
                 {op.reason && <div className="text-stone-300">{op.reason}</div>}
-                {result && <div className="text-[10px] text-stone-400">{result.status}: {result.message}</div>}
+                {result && (
+                  <div className="text-[10px] text-stone-400">
+                    {result.status}: {result.message}
+                  </div>
+                )}
               </div>
               <div className="flex gap-1">
-                <button onClick={() => onApplyOne(op.opId)} className="px-2 py-1 text-[10px] rounded bg-emerald-500/30" disabled={selected}>適用</button>
-                <button onClick={() => onRejectOne(op.opId)} className="px-2 py-1 text-[10px] rounded bg-rose-500/30" disabled={!selected}>却下</button>
+                <button
+                  onClick={() => onApplyOne(op.opId)}
+                  className="px-2 py-1 text-[10px] rounded bg-emerald-500/30"
+                  disabled={selected}
+                >
+                  適用
+                </button>
+                <button
+                  onClick={() => onRejectOne(op.opId)}
+                  className="px-2 py-1 text-[10px] rounded bg-rose-500/30"
+                  disabled={!selected}
+                >
+                  却下
+                </button>
               </div>
             </div>
           </li>

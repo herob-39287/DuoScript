@@ -187,7 +187,9 @@ const WriterView: React.FC = () => {
                 </select>
                 <select
                   value={prepareTaskType}
-                  onChange={(event) => setPrepareTaskType(event.target.value as typeof prepareTaskType)}
+                  onChange={(event) =>
+                    setPrepareTaskType(event.target.value as typeof prepareTaskType)
+                  }
                   className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 border border-white/10"
                 >
                   <option value="interactive refinement">Task: interactive refinement</option>
@@ -262,7 +264,9 @@ const WriterView: React.FC = () => {
                       try {
                         const text = String(reader.result || '');
                         const isJson = file.name.endsWith('.json') || text.trim().startsWith('{');
-                        actions.importWorkspace(isJson ? JSON.parse(text) : {}, { fallbackText: text });
+                        actions.importWorkspace(isJson ? JSON.parse(text) : {}, {
+                          fallbackText: text,
+                        });
                       } catch {
                         // noop
                       }
