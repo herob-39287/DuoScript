@@ -17,6 +17,7 @@ import { ScenePackageModePanel } from './writer/ScenePackageModePanel';
 import { BranchIssuesPanel } from './writer/BranchIssuesPanel';
 import { CodexProposalList } from './codex/CodexProposalList';
 import { CodexQuestionsPanel } from './codex/CodexQuestionsPanel';
+import { isStarterProject } from '../services/workspace/projectGenesis';
 
 const WriterView: React.FC = () => {
   const { state, refs, actions } = useWriterLogic();
@@ -36,11 +37,18 @@ const WriterView: React.FC = () => {
     'ops',
   );
   const [prepareSceneId, setPrepareSceneId] = useState('');
+  const canRunProjectGenesis = isStarterProject(data.project);
 
   useEffect(() => {
     const firstSceneId = data.activeChapter?.scenePackages?.[0]?.sceneId || '';
     setPrepareSceneId(firstSceneId);
   }, [data.activeChapterId, data.activeChapter?.scenePackages]);
+
+  useEffect(() => {
+    if (!canRunProjectGenesis && prepareTaskType === 'project genesis') {
+      setPrepareTaskType('interactive refinement');
+    }
+  }, [canRunProjectGenesis, prepareTaskType]);
 
   const downloadWorkspace = () => {
     const serialized = actions.exportWorkspace();
@@ -56,6 +64,14 @@ const WriterView: React.FC = () => {
   };
 
   const downloadPrepareForCodex = () => {
+    if (prepareTaskType === 'project genesis' && !canRunProjectGenesis) {
+      window.alert(
+        'Project genesis is starter-only. Use interactive refinement for projects with existing routes, state axes, branch policies, reveal plans, or authored chapter state.',
+      );
+      setPrepareTaskType('interactive refinement');
+      return;
+    }
+
     const artifacts = actions.prepareForCodex({
       scopeType: prepareScope,
       chapterId: prepareScope !== 'project' ? data.activeChapterId : undefined,
@@ -193,12 +209,19 @@ const WriterView: React.FC = () => {
                   className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 border border-white/10"
                 >
                   <option value="interactive refinement">Task: interactive refinement</option>
-                  <option value="project genesis">Task: project genesis</option>
+                  {canRunProjectGenesis && (
+                    <option value="project genesis">Task: project genesis</option>
+                  )}
                   <option value="route design">Task: route design</option>
                   <option value="scene package generation">Task: scene package generation</option>
                   <option value="branch repair">Task: branch repair</option>
                   <option value="draft polish">Task: draft polish</option>
                 </select>
+                {!canRunProjectGenesis && (
+                  <span className="text-[10px] font-black tracking-widest text-amber-300/90">
+                    Project genesis is available only for starter projects.
+                  </span>
+                )}
                 <select
                   value={prepareResponseMode}
                   onChange={(event) =>

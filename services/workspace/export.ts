@@ -3,6 +3,7 @@ import { validateProjectBranches } from '../validation/branchValidator';
 import { buildCodexSchemaReference } from './buildCodexSchemaReference';
 import { buildCodexTask, CodexTaskScope } from './buildCodexTask';
 import { buildValidatorReport } from './buildValidatorReport';
+import { isStarterProject } from './projectGenesis';
 import { WorkspaceBundle, WORKSPACE_BUNDLE_VERSION } from './types';
 
 export const buildWorkspaceBundle = (project: StoryProject): WorkspaceBundle => {
@@ -114,23 +115,6 @@ export const buildSceneWorkspaceBundle = (
 
 export const serializeWorkspaceBundle = (bundle: WorkspaceBundle): string => {
   return JSON.stringify(bundle, null, 2);
-};
-
-const isStarterProject = (project: StoryProject): boolean => {
-  const hasRouteDesign =
-    (project.bible.routes?.length || 0) > 0 ||
-    (project.bible.revealPlans?.length || 0) > 0 ||
-    (project.bible.stateAxes?.length || 0) > 0 ||
-    (project.bible.branchPolicies?.length || 0) > 0;
-  if (hasRouteDesign) return false;
-
-  return !project.chapters.some((chapter) => {
-    if ((chapter.scenePackages?.length || 0) > 0) return true;
-    if ((chapter.draftText || '').trim().length > 0) return true;
-    if ((chapter.compiledContent || '').trim().length > 0) return true;
-    if ((chapter.content || '').trim().length > 0) return true;
-    return false;
-  });
 };
 
 export const buildPrepareForCodexArtifacts = (
