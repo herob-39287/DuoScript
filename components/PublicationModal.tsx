@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMetadata, useBible, useManuscript, useNeuralSync } from '../contexts/StoryContext';
 import {
   X,
@@ -20,6 +20,7 @@ import {
 import { StoryProject } from '../types';
 import JSZip from 'jszip';
 import { buildWorkspaceBundle, serializeWorkspaceBundle } from '../services/workspace/export';
+import { validateProjectBranches } from '../services/validation/branchValidator';
 
 interface Props {
   onClose: () => void;
@@ -39,6 +40,10 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
   const [exportData, setExportData] = useState<StoryProject | null>(null);
   const [fullDraftContent, setFullDraftContent] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const blockingIssues = useMemo(
+    () => validateProjectBranches(chapters, bible).filter((issue) => issue.level === 'error'),
+    [chapters, bible],
+  );
 
   const getChapterBodyText = (chapter: any): string => {
     const mode = chapter.authoringMode || 'freeform';
@@ -120,6 +125,10 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
 
   const handleDownloadFullBackup = async () => {
     if (!exportData) return;
+    if (blockingIssues.length > 0) {
+      setErrorMsg(`分岐検証エラー ${blockingIssues.length} 件のため、公開向けエクスポートは実行できません。`);
+      return;
+    }
 
     try {
       const jsonStr = JSON.stringify(exportData, null, 2);
@@ -148,6 +157,10 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
 
   const handleDownloadMarkdownZip = async () => {
     if (!exportData) return;
+    if (blockingIssues.length > 0) {
+      setErrorMsg(`分岐検証エラー ${blockingIssues.length} 件のため、公開向けエクスポートは実行できません。`);
+      return;
+    }
     setIsPreparing(true);
 
     try {
@@ -249,6 +262,10 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
 
   const handleDownloadWorkspace = async () => {
     if (!exportData) return;
+    if (blockingIssues.length > 0) {
+      setErrorMsg(`分岐検証エラー ${blockingIssues.length} 件のため、公開向けエクスポートは実行できません。`);
+      return;
+    }
     try {
       const bundle = buildWorkspaceBundle(exportData);
       const jsonStr = serializeWorkspaceBundle(bundle);
@@ -370,25 +387,33 @@ const PublicationModal: React.FC<Props> = ({ onClose }) => {
                   <p className="text-[10px] text-rose-300 font-serif leading-relaxed">{errorMsg}</p>
                 </div>
               )}
+              {blockingIssues.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex gap-2 items-start">
+                  <AlertCircle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-[10px] text-amber-200 font-serif leading-relaxed">
+                    現在、分岐検証の blocking error が {blockingIssues.length} 件あります。作業中の保存は可能ですが、公開/出力系はブロックされます。
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-2">
                 <button
                   onClick={handleDownloadMarkdownZip}
-                  disabled={!exportData || isPreparing}
+                  disabled={!exportData || isPreparing || blockingIssues.length > 0}
                   className="w-full py-4 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40"
                 >
                   <FolderArchive size={14} /> Markdown一括書出し (.zip)
                 </button>
                 <button
                   onClick={handleDownloadWorkspace}
-                  disabled={!exportData || isPreparing}
+                  disabled={!exportData || isPreparing || blockingIssues.length > 0}
                   className="w-full py-4 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40"
                 >
                   <FileJson size={14} /> Export for Codex (workspace_bundle.json)
                 </button>
                 <button
                   onClick={handleDownloadFullBackup}
-                  disabled={!exportData || isPreparing}
+                  disabled={!exportData || isPreparing || blockingIssues.length > 0}
                   className="w-full py-4 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-40"
                 >
                   <FileJson size={14} /> 完全なバックアップ (.json)

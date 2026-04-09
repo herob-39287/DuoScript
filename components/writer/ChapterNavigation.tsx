@@ -6,7 +6,7 @@ interface ChapterNavigationProps {
   chapters: ChapterLog[];
   activeChapterId: string;
   onSelectChapter: (id: string) => void;
-  onAddChapter: () => void;
+  onAddChapter: (mode: 'freeform' | 'structured') => void;
   className?: string;
   onClose?: () => void;
 }
@@ -32,11 +32,18 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
         </span>
         <div className="flex items-center gap-2">
           <button
-            onClick={onAddChapter}
+            onClick={() => onAddChapter('freeform')}
             className="p-1.5 hover:bg-stone-800 rounded-lg text-stone-600 hover:text-orange-400 transition-colors"
-            title="新しい章を追加"
+            title="新しい freeform 章を追加"
           >
             <Plus size={16} />
+          </button>
+          <button
+            onClick={() => onAddChapter('structured')}
+            className="px-2 py-1 text-[10px] rounded-lg border border-sky-500/30 text-sky-300 hover:bg-sky-500/10 transition-colors"
+            title="新しい structured 章を追加"
+          >
+            +S
           </button>
           {onClose && (
             <button
