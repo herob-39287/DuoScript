@@ -129,8 +129,15 @@ export const buildPrepareForCodexArtifacts = (
   const shouldUseStarterBundle = scope.taskType === 'project genesis' && isStarterProject(project);
   const effectiveScope: CodexTaskScope =
     scope.taskType === 'project genesis' && !shouldUseStarterBundle
-      ? { ...scope, taskType: 'interactive refinement' }
-      : scope;
+      ? {
+          ...scope,
+          requestedTaskType: scope.taskType,
+          taskType: 'interactive refinement',
+        }
+      : {
+          ...scope,
+          requestedTaskType: scope.taskType,
+        };
 
   const bundle = shouldUseStarterBundle
     ? buildStarterWorkspaceBundle(project)

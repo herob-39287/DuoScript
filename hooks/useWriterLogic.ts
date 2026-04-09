@@ -320,6 +320,7 @@ export const useWriterLogic = () => {
         isContextActive: globalUI.isContextActive,
       },
       data: {
+        project: { meta, bible, chapters, sync },
         chapters,
         activeChapter: editor.activeChapter,
         activeChapterId: editor.activeChapterId,

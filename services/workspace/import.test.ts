@@ -21,4 +21,13 @@ describe('codex markdown question detection', () => {
       ),
     ).toThrow('Unsupported Codex artifact format.');
   });
+
+  it('does not accept codex_questions markdown when Q: lines are missing', () => {
+    expect(() =>
+      detectCodexArtifact(
+        {},
+        '# codex_questions\n- Updated chapter pacing\n- Validator issues reduced from 6 to 2',
+      ),
+    ).toThrow('Unsupported Codex artifact format.');
+  });
 });

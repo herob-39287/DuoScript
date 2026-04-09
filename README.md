@@ -51,6 +51,21 @@
 - `updated_workspace_bundle.json`
 - `codex_change_summary.md`
 
+### `codex_questions.md`（Markdown質問artifact）判定仕様
+
+運用上、`codex_change_summary.md` などの通常Markdownと混同しないため、質問Markdownは次の条件を**両方満たす場合のみ**質問artifactとして取り込みます。
+
+- `# codex_questions` ヘッダ（`##` などの見出しレベル違いも可）が本文中に存在すること
+- `Q:` プレフィックス付き行のみを質問として抽出すること（箇条書き付き `- Q:` / `1. Q:` も可）
+
+例:
+
+```markdown
+# codex_questions
+- Q: どの route を最優先で分岐させますか？
+1. Q: chapter-2 の scene-3 は現状維持でよいですか？
+```
+
 ---
 
 ## ⚠️ セキュリティに関する重要なお知らせ (API Key Safety)

@@ -38,6 +38,11 @@ const WriterView: React.FC = () => {
   );
   const [prepareSceneId, setPrepareSceneId] = useState('');
   const canRunProjectGenesis = isStarterProject(data.project);
+  const effectivePrepareTaskType =
+    prepareTaskType === 'project genesis' && !canRunProjectGenesis
+      ? 'interactive refinement'
+      : prepareTaskType;
+  const hasTaskTypeDowngrade = effectivePrepareTaskType !== prepareTaskType;
 
   useEffect(() => {
     const firstSceneId = data.activeChapter?.scenePackages?.[0]?.sceneId || '';
@@ -64,12 +69,11 @@ const WriterView: React.FC = () => {
   };
 
   const downloadPrepareForCodex = () => {
-    if (prepareTaskType === 'project genesis' && !canRunProjectGenesis) {
+    if (hasTaskTypeDowngrade) {
       window.alert(
         'Project genesis is starter-only. Use interactive refinement for projects with existing routes, state axes, branch policies, reveal plans, or authored chapter state.',
       );
-      setPrepareTaskType('interactive refinement');
-      return;
+      setPrepareTaskType(effectivePrepareTaskType);
     }
 
     const artifacts = actions.prepareForCodex({
@@ -77,7 +81,7 @@ const WriterView: React.FC = () => {
       chapterId: prepareScope !== 'project' ? data.activeChapterId : undefined,
       sceneId: prepareScope === 'scene' ? prepareSceneId : undefined,
       objective: 'Refine VN branching packages with validator-safe updates.',
-      taskType: prepareTaskType,
+      taskType: effectivePrepareTaskType,
       responseMode: prepareResponseMode,
     });
     const files = [
@@ -209,15 +213,20 @@ const WriterView: React.FC = () => {
                   className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 border border-white/10"
                 >
                   <option value="interactive refinement">Task: interactive refinement</option>
-                  {canRunProjectGenesis && (
-                    <option value="project genesis">Task: project genesis</option>
-                  )}
+                  <option value="project genesis" disabled={!canRunProjectGenesis}>
+                    Task: project genesis {canRunProjectGenesis ? '' : '(starter only)'}
+                  </option>
                   <option value="route design">Task: route design</option>
                   <option value="scene package generation">Task: scene package generation</option>
                   <option value="branch repair">Task: branch repair</option>
                   <option value="draft polish">Task: draft polish</option>
                 </select>
-                {!canRunProjectGenesis && (
+                {hasTaskTypeDowngrade && (
+                  <span className="text-[10px] font-black tracking-widest text-amber-300/90">
+                    Requested task: project genesis → Effective task: interactive refinement
+                  </span>
+                )}
+                {!canRunProjectGenesis && !hasTaskTypeDowngrade && (
                   <span className="text-[10px] font-black tracking-widest text-amber-300/90">
                     Project genesis is available only for starter projects.
                   </span>

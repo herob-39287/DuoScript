@@ -67,7 +67,7 @@ const createBaseProject = (): StoryProject =>
       },
     ],
     sync: { chatHistory: [], memory: '', pendingOps: [], quarantine: [], history: [] },
-  }) as StoryProject;
+  }) as unknown as StoryProject;
 
 describe('buildPrepareForCodexArtifacts', () => {
   it('keeps project genesis for starter projects', () => {
@@ -79,7 +79,8 @@ describe('buildPrepareForCodexArtifacts', () => {
     const bundle = JSON.parse(artifacts.workspaceBundle);
 
     expect(bundle.project.vnDesign.routes).toHaveLength(0);
-    expect(artifacts.codexTask).toContain('- project genesis');
+    expect(artifacts.codexTask).toContain('Requested task type: project genesis');
+    expect(artifacts.codexTask).toContain('Effective task type: project genesis');
     expect(artifacts.codexTask).toContain('taskType: project genesis');
   });
 
@@ -95,6 +96,11 @@ describe('buildPrepareForCodexArtifacts', () => {
     const bundle = JSON.parse(artifacts.workspaceBundle);
 
     expect(bundle.project.vnDesign.routes).toHaveLength(1);
+    expect(artifacts.codexTask).toContain('Requested task type: project genesis');
+    expect(artifacts.codexTask).toContain('Effective task type: interactive refinement');
+    expect(artifacts.codexTask).toContain(
+      'Requested task type was downgraded to interactive refinement due to project state.',
+    );
     expect(artifacts.codexTask).not.toContain('taskType: project genesis');
     expect(artifacts.codexTask).toContain('taskType: interactive refinement');
   });
