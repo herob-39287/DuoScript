@@ -82,6 +82,36 @@ export const useWriterLogic = () => {
     ? validateChapterScenePackages(editor.activeChapter, bible)
     : [];
 
+  const createInitialScenePackage = (chapterId: string, index: number): ScenePackage => {
+    const sceneId = `scene-${index}`;
+    return {
+      sceneId,
+      title: `Scene ${index}`,
+      chapterId,
+      involvedCharacterIds: [],
+      purpose: '',
+      mandatoryInfo: [],
+      exitEffects: [],
+      sharedSpine: {
+        intro: '',
+        conflict: '',
+        deepen: '',
+        preChoiceBeat: '',
+        close: '',
+      },
+      choicePoints: [],
+      reactionVariants: [],
+      convergencePoint: {
+        convergenceId: `conv-${sceneId}`,
+        sceneId,
+        targetBlockId: `end-${sceneId}`,
+        convergencePolicy: 'normalize_scene_state',
+      },
+      carryoverStateChanges: [],
+      status: 'Idea',
+    };
+  };
+
   const applyProjectSnapshot = (project: StoryProject) => {
     projectDispatch(Actions.updateMeta(project.meta));
     projectDispatch(Actions.loadBible(project.bible));
@@ -118,9 +148,11 @@ export const useWriterLogic = () => {
     setWriterMode: ui.setWriterMode,
     navigateBack: ui.navigateBack,
     selectChapter: editor.setActiveChapterId,
-    addChapter: () => {
+    addChapter: (mode: 'freeform' | 'structured' = 'freeform') => {
+      const chapterId = crypto.randomUUID();
+      const scenePackages = mode === 'structured' ? [createInitialScenePackage(chapterId, 1)] : [];
       const newChapter = {
-        id: crypto.randomUUID(),
+        id: chapterId,
         title: `第${chapters.length + 1}章`,
         summary: '',
         scenes: [],
@@ -134,11 +166,12 @@ export const useWriterLogic = () => {
         status: 'Idea' as const,
         wordCount: 0,
         draftVersion: 0,
-        authoringMode: 'freeform' as const,
+        authoringMode: mode,
         draftText: '',
         compiledContent: '',
         updatedAt: Date.now(),
         involvedCharacterIds: [],
+        scenePackages,
       };
       projectDispatch(Actions.addChapter(newChapter));
     },
@@ -164,6 +197,41 @@ export const useWriterLogic = () => {
         scenePackage.sceneId === sceneId ? updater(scenePackage as ScenePackage) : scenePackage,
       );
       projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: nextScenePackages }));
+    },
+    addScenePackage: () => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+      const existing = chapter.scenePackages || [];
+      const nextScenePackage = createInitialScenePackage(chapter.id, existing.length + 1);
+      projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: [...existing, nextScenePackage] }));
+    },
+    removeScenePackage: (sceneId: string) => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+      const existing = chapter.scenePackages || [];
+      projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: existing.filter((scenePackage) => scenePackage.sceneId !== sceneId) }));
+    },
+    moveScenePackage: (sceneId: string, direction: 'up' | 'down') => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+      const existing = chapter.scenePackages || [];
+      const index = existing.findIndex((scenePackage) => scenePackage.sceneId === sceneId);
+      if (index < 0) return;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= existing.length) return;
+      const next = [...existing];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+      projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: next }));
+    },
+    setChapterAuthoringMode: (mode: 'freeform' | 'structured') => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+      const nextScenePackages =
+        mode === 'structured' && (!chapter.scenePackages || chapter.scenePackages.length === 0)
+          ? [createInitialScenePackage(chapter.id, 1)]
+          : chapter.scenePackages;
+      projectDispatch(Actions.updateChapter(chapter.id, { authoringMode: mode, scenePackages: nextScenePackages }));
     },
 
     syncChapterFromScenePackages: () => {

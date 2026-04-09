@@ -103,12 +103,10 @@ export const usePersistence = (
               },
             });
           }
-
-          uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
-          return;
         }
-
-        lastValidationDigestRef.current = '';
+        if (prep.blockingIssues.length === 0) {
+          lastValidationDigestRef.current = '';
+        }
 
         // Use the ref value instead of the potentially stale state value
         const expectedRev = currentHeadRevRef.current;
@@ -176,12 +174,6 @@ export const usePersistence = (
           const prep = prepareProjectForSave(project);
           if (prep.didSyncChapterContent) {
             projectDispatch({ type: 'LOAD_CHAPTERS', payload: prep.projectToSave.chapters });
-          }
-
-          if (prep.blockingIssues.length > 0) {
-            uiDispatch({ type: 'SET_SAVE_STATUS', payload: 'idle' });
-            uiDispatch({ type: 'SET_FORCE_SAVE_REQUESTED', payload: false });
-            return;
           }
 
           // 1. Fetch latest head revision from DB (Truth source)

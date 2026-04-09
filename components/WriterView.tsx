@@ -38,6 +38,7 @@ const WriterView: React.FC = () => {
   );
   const [prepareSceneId, setPrepareSceneId] = useState('');
   const canRunProjectGenesis = isStarterProject(data.project);
+  const blockingBranchIssues = data.branchIssues.filter((issue) => issue.level === 'error');
   const effectivePrepareTaskType =
     prepareTaskType === 'project genesis' && !canRunProjectGenesis
       ? 'interactive refinement'
@@ -56,6 +57,12 @@ const WriterView: React.FC = () => {
   }, [canRunProjectGenesis, prepareTaskType]);
 
   const downloadWorkspace = () => {
+    if (blockingBranchIssues.length > 0) {
+      window.alert(
+        `Export blocked: ${blockingBranchIssues.length} blocking validator issue(s). Resolve errors before export/publish.`,
+      );
+      return;
+    }
     const serialized = actions.exportWorkspace();
     const blob = new Blob([serialized], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -69,6 +76,12 @@ const WriterView: React.FC = () => {
   };
 
   const downloadPrepareForCodex = () => {
+    if (blockingBranchIssues.length > 0) {
+      window.alert(
+        `Codex export blocked: ${blockingBranchIssues.length} blocking validator issue(s). Resolve errors before bundle generation.`,
+      );
+      return;
+    }
     if (hasTaskTypeDowngrade) {
       window.alert(
         'Project genesis is starter-only. Use interactive refinement for projects with existing routes, state axes, branch policies, reveal plans, or authored chapter state.',
@@ -141,7 +154,7 @@ const WriterView: React.FC = () => {
             chapters={data.chapters}
             activeChapterId={data.activeChapterId}
             onSelectChapter={actions.selectChapter}
-            onAddChapter={actions.addChapter}
+            onAddChapter={(mode) => actions.addChapter(mode)}
           />
         )}
 
@@ -362,6 +375,9 @@ const WriterView: React.FC = () => {
               mode={ui.writerMode}
               chapter={data.activeChapter}
               onUpdateScenePackage={actions.updateScenePackage}
+              onAddScenePackage={actions.addScenePackage}
+              onRemoveScenePackage={actions.removeScenePackage}
+              onMoveScenePackage={actions.moveScenePackage}
             />
 
             {!ui.isZenMode && ui.writerMode === 'validation' && (

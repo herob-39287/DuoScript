@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { StoryProject } from '../../types';
 import { buildPrepareForCodexArtifacts } from './export';
 
-const createBaseProject = (): StoryProject =>
-  ({
+const createBaseProject = (): StoryProject => ({
     meta: {
       id: 'project-1',
       title: 'Project 1',
@@ -12,27 +11,27 @@ const createBaseProject = (): StoryProject =>
       language: 'ja',
       createdAt: 0,
       updatedAt: 0,
+      schemaVersion: 1,
       headRev: 1,
       preferences: {
-        appLanguage: 'ja',
+        uiLanguage: 'ja',
         transmissionScope: 'FULL',
         safetyPreset: 'STRICT',
         aiPersona: 'STANDARD',
-        autoSave: true,
-        useCloudSync: false,
-        defaultGenerativeModel: 'gemini-2.5-pro',
-        defaultImageModel: 'imagen-3.0-generate-002',
+        allowSearch: true,
+        whisperSensitivity: 50,
+        disabledLinterRules: [],
         editorSettings: {
           fontSize: 16,
           lineHeight: 1.7,
-          letterSpacing: 0.04,
-          preferredFont: 'sans',
-          writingWidth: 42,
-          vertical: false,
+          fontFamily: 'sans',
+          paperFilter: 'none',
+          verticalMode: false,
         },
       },
       tokenUsage: [],
-      safetyViolations: [],
+      violationCount: 0,
+      violationHistory: [],
     },
     bible: {
       setting: 'Setting',
@@ -40,7 +39,7 @@ const createBaseProject = (): StoryProject =>
       revealPlans: [],
       stateAxes: [],
       branchPolicies: [],
-    },
+    } as any,
     chapters: [
       {
         id: 'chapter-1',
@@ -66,8 +65,8 @@ const createBaseProject = (): StoryProject =>
         scenePackages: [],
       },
     ],
-    sync: { chatHistory: [], memory: '', pendingOps: [], quarantine: [], history: [] },
-  }) as unknown as StoryProject;
+    sync: { chatHistory: [], conversationMemory: '', pendingChanges: [], quarantine: [], history: [] },
+});
 
 describe('buildPrepareForCodexArtifacts', () => {
   it('keeps project genesis for starter projects', () => {
