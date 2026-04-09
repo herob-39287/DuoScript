@@ -3,6 +3,7 @@
 ## Goal
 
 初期世界観が未整備でも、Codexとの往復を開始できる最小構成を作る。
+※ `project genesis` は starter project 専用。既存 project では `interactive refinement` を使う。
 
 ## Inputs
 

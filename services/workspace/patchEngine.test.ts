@@ -90,7 +90,7 @@ describe('patchEngine hardening', () => {
       taskType: 'interactive refinement',
       responseMode: 'ops',
       scopeGuard: {
-        protectedPaths: ['bible/routes'],
+        protectedPaths: ['bible/routes', 'bible/stateAxes', 'chapters/ch-1/scenePackages/s-1'],
       },
       operations: [
         {
@@ -104,12 +104,44 @@ describe('patchEngine hardening', () => {
             enabledState: true,
           },
         },
+        {
+          type: 'upsertStateAxis',
+          opId: 'op-1b',
+          axis: {
+            stateKey: 'trust.hero',
+            scope: 'chapter',
+            type: 'number',
+            defaultValue: 0,
+            usagePurpose: 'scope guard test',
+          },
+        },
+        {
+          type: 'upsertScenePackage',
+          opId: 'op-1c',
+          chapterId: 'ch-1',
+          scenePackage: {
+            ...buildProject().chapters[0].scenePackages[0]!,
+            sharedSpine: {
+              intro: 'should stay blocked',
+              conflict: '',
+              deepen: '',
+              preChoiceBeat: '',
+              close: '',
+            },
+          },
+        },
       ],
     };
 
     const result = shadowApplyCodexOps(buildProject(), artifact);
     expect(result.opResults[0].status).toBe('blocked');
+    expect(result.opResults[1].status).toBe('blocked');
+    expect(result.opResults[2].status).toBe('blocked');
     expect(result.project.bible.routes).toHaveLength(0);
+    expect(result.project.bible.stateAxes).toHaveLength(0);
+    expect(result.project.chapters[0]!.scenePackages?.[0]?.sharedSpine.intro).toBe(
+      'fresh canonical text',
+    );
   });
 
   it('blocks upsertChapter in scene-scoped refinement', () => {
@@ -150,7 +182,7 @@ describe('patchEngine hardening', () => {
           opId: 'op-3',
           chapterId: 'ch-1',
           scenePackage: {
-            ...buildProject().chapters[0].scenePackages[0],
+            ...buildProject().chapters[0].scenePackages[0]!,
             sharedSpine: {
               intro: 'rebuilt text from ops',
               conflict: '',
@@ -166,5 +198,50 @@ describe('patchEngine hardening', () => {
     const result = shadowApplyCodexOps(buildProject(), artifact);
     expect(result.requiresDraftRebuild).toBe(true);
     expect(result.project.chapters[0].compiledContent).toContain('rebuilt text from ops');
+  });
+
+  it('allows scoped upsertScenePackage but blocks out-of-scope deleteScenePackage', () => {
+    const artifact: CodexOpsArtifact = {
+      kind: 'duoscript.codex.ops',
+      version: 1,
+      generatedAt: Date.now(),
+      taskType: 'interactive refinement',
+      responseMode: 'ops',
+      scopeGuard: {
+        editableChapterIds: ['ch-1'],
+        editableSceneIds: ['s-1'],
+      },
+      operations: [
+        {
+          type: 'upsertScenePackage',
+          opId: 'op-4',
+          chapterId: 'ch-1',
+          scenePackage: {
+            ...buildProject().chapters[0].scenePackages[0],
+            sharedSpine: {
+              intro: 'allowed in scope',
+              conflict: '',
+              deepen: '',
+              preChoiceBeat: '',
+              close: '',
+            },
+          },
+        },
+        {
+          type: 'deleteScenePackage',
+          opId: 'op-5',
+          chapterId: 'ch-1',
+          sceneId: 's-2',
+        },
+      ],
+    };
+
+    const result = shadowApplyCodexOps(buildProject(), artifact);
+    expect(result.opResults[0].status).toBe('applied');
+    expect(result.opResults[1].status).toBe('blocked');
+    expect(result.project.chapters[0]!.scenePackages).toHaveLength(1);
+    expect(result.project.chapters[0]!.scenePackages?.[0]?.sharedSpine.intro).toBe(
+      'allowed in scope',
+    );
   });
 });

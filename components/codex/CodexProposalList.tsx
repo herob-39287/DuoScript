@@ -42,18 +42,21 @@ export const CodexProposalList: React.FC<Props> = ({
   return (
     <div className="mb-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-100 space-y-3">
       <div className="font-black tracking-widest text-[10px]">Codex Ops</div>
+      <div className="text-[10px] text-emerald-100/80">
+        ここでの操作は提案の選択状態のみを変更します。実反映は「Accept Import」で確定します。
+      </div>
       <div className="flex gap-2">
         <button
           onClick={onApplyAll}
           className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-emerald-100 bg-emerald-600/30"
         >
-          全件適用
+          全件選択
         </button>
         <button
           onClick={onRejectAll}
           className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-rose-100 bg-rose-600/30"
         >
-          一括却下
+          全件除外
         </button>
       </div>
       <ul className="space-y-2">
@@ -82,14 +85,14 @@ export const CodexProposalList: React.FC<Props> = ({
                   className="px-2 py-1 text-[10px] rounded bg-emerald-500/30"
                   disabled={selected}
                 >
-                  適用
+                  選択
                 </button>
                 <button
                   onClick={() => onRejectOne(op.opId)}
                   className="px-2 py-1 text-[10px] rounded bg-rose-500/30"
                   disabled={!selected}
                 >
-                  却下
+                  除外
                 </button>
               </div>
             </div>

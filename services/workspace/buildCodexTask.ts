@@ -21,6 +21,7 @@ export type CodexTaskScope = {
   preferredOutputGranularity?: 'project' | 'chapter' | 'scene';
   unresolved?: string[];
   recentChangeSummary?: string[];
+  requestedTaskType?: CodexTaskType;
 };
 
 const buildScopeLine = (scope: CodexTaskScope): string => {
@@ -138,6 +139,7 @@ export const buildCodexTask = (
   const focusIssueLines = buildFocusIssueLines(focusedIssues);
   const issueChecklistLines = buildIssueChecklistLines(focusedIssues);
   const taskType = detectDefaultTaskType(scope, issues);
+  const requestedTaskType = scope.requestedTaskType || taskType;
   const responseMode = detectDefaultResponseMode(scope);
   const rebuildDraftExpected =
     scope.rebuildDraftExpected ??
@@ -163,7 +165,11 @@ export const buildCodexTask = (
       'Improve VN route/scene branching quality while preserving canonical structure and validator compatibility.',
     '',
     '## Task type',
-    `- ${taskType}`,
+    `- Requested task type: ${requestedTaskType}`,
+    `- Effective task type: ${taskType}`,
+    ...(requestedTaskType !== taskType
+      ? [`- Note: Requested task type was downgraded to ${taskType} due to project state.`]
+      : []),
     `- Response mode: ${responseMode}`,
     `- Expected branch level: ${scope.expectedBranchLevel || scope.scopeType}`,
     '',
@@ -210,6 +216,7 @@ export const buildCodexTask = (
     ...expectedOutputs.map((item) => `- ${item}`),
     '',
     '## Session context',
+    `- requestedTaskType: ${requestedTaskType}`,
     `- taskType: ${taskType}`,
     `- responseMode: ${responseMode}`,
     ...(scope.recentChangeSummary?.length
