@@ -351,6 +351,19 @@ export const normalizeProject = (data: any): StoryProject => {
             authoringMode: c.authoringMode || 'freeform',
             draftText: c.draftText ?? c.content ?? undefined,
             compiledContent: c.compiledContent ?? c.content ?? undefined,
+            freeformSource:
+              c.freeformSource && typeof c.freeformSource === 'object'
+                ? {
+                    structuredOrigin: Boolean(c.freeformSource.structuredOrigin),
+                    convertedAt:
+                      typeof c.freeformSource.convertedAt === 'number'
+                        ? c.freeformSource.convertedAt
+                        : now,
+                    sourceScenePackageSnapshot: safeArray(
+                      c.freeformSource.sourceScenePackageSnapshot,
+                    ),
+                  }
+                : undefined,
             content: c.content || undefined, // Keep undefined if not present to trigger lazy load
             wordCount:
               typeof c.wordCount === 'number'

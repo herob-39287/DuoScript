@@ -211,6 +211,39 @@ export const useWriterLogic = () => {
       const existing = chapter.scenePackages || [];
       projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: existing.filter((scenePackage) => scenePackage.sceneId !== sceneId) }));
     },
+    duplicateScenePackage: (sceneId: string) => {
+      const chapter = editor.activeChapter;
+      if (!chapter) return;
+      const existing = chapter.scenePackages || [];
+      const index = existing.findIndex((scenePackage) => scenePackage.sceneId === sceneId);
+      if (index < 0) return;
+      const source = existing[index];
+      const duplicateIndex = existing.length + 1;
+      const duplicatedSceneId = `${source.sceneId}-copy-${duplicateIndex}`;
+      const duplicated: ScenePackage = {
+        ...source,
+        sceneId: duplicatedSceneId,
+        title: `${source.title || source.sceneId} (copy)`,
+        convergencePoint: source.convergencePoint
+          ? {
+              ...source.convergencePoint,
+              sceneId: duplicatedSceneId,
+              convergenceId: `${source.convergencePoint.convergenceId}-copy-${duplicateIndex}`,
+            }
+          : source.convergencePoint,
+        choicePoints: source.choicePoints.map((choice, choiceIndex) => ({
+          ...choice,
+          choiceId: `${choice.choiceId}-copy-${choiceIndex + 1}`,
+        })),
+        reactionVariants: source.reactionVariants.map((variant, variantIndex) => ({
+          ...variant,
+          variantId: `${variant.variantId}-copy-${variantIndex + 1}`,
+        })),
+      };
+      const next = [...existing];
+      next.splice(index + 1, 0, duplicated);
+      projectDispatch(Actions.updateChapter(chapter.id, { scenePackages: next }));
+    },
     moveScenePackage: (sceneId: string, direction: 'up' | 'down') => {
       const chapter = editor.activeChapter;
       if (!chapter) return;
@@ -261,10 +294,14 @@ export const useWriterLogic = () => {
       if (!chapter) return;
       projectDispatch(Actions.setChapterAuthoringMode(chapter.id, 'freeform'));
       projectDispatch(
-        Actions.setChapterDraftText(
-          chapter.id,
-          chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '',
-        ),
+        Actions.updateChapter(chapter.id, {
+          draftText: chapter.draftText ?? chapter.compiledContent ?? chapter.content ?? '',
+          freeformSource: {
+            structuredOrigin: true,
+            convertedAt: Date.now(),
+            sourceScenePackageSnapshot: chapter.scenePackages || [],
+          },
+        }),
       );
     },
 

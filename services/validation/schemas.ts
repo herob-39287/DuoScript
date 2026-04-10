@@ -262,6 +262,13 @@ export const ChapterLogSchema = z.object({
   authoringMode: z.enum(['structured', 'freeform']).default('freeform'),
   draftText: z.string().optional(),
   compiledContent: z.string().optional(),
+  freeformSource: z
+    .object({
+      structuredOrigin: z.boolean(),
+      convertedAt: z.number(),
+      sourceScenePackageSnapshot: z.array(ScenePackageSchema),
+    })
+    .optional(),
   content: z.string().optional(), // legacy / migration only
   scenes: z.array(StorySceneSchema),
   scenePackages: z.array(ScenePackageSchema).optional(),
