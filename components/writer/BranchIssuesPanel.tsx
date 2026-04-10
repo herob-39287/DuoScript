@@ -10,18 +10,21 @@ export const BranchIssuesPanel: React.FC<BranchIssuesPanelProps> = ({ issues, ch
   const [levelFilter, setLevelFilter] = useState<'all' | 'error' | 'warning'>('all');
   const [query, setQuery] = useState('');
 
-  const merged = [
-    ...issues.map((issue) => ({
-      level: issue.level,
-      message: issue.message,
-      scope: [issue.chapterId, issue.sceneId, issue.choiceId].filter(Boolean).join(' / '),
-    })),
-    ...chapterIssues.map((issue) => ({
-      level: issue.level,
-      message: issue.message,
-      scope: issue.sceneId || 'chapter',
-    })),
-  ];
+  const merged = useMemo(
+    () => [
+      ...issues.map((issue) => ({
+        level: issue.level,
+        message: issue.message,
+        scope: [issue.chapterId, issue.sceneId, issue.choiceId].filter(Boolean).join(' / '),
+      })),
+      ...chapterIssues.map((issue) => ({
+        level: issue.level,
+        message: issue.message,
+        scope: issue.sceneId || 'chapter',
+      })),
+    ],
+    [issues, chapterIssues],
+  );
 
   const filtered = useMemo(
     () =>
@@ -83,6 +86,9 @@ export const BranchIssuesPanel: React.FC<BranchIssuesPanelProps> = ({ issues, ch
                 <p
                   className={`text-xs ${issue.level === 'error' ? 'text-rose-300' : 'text-amber-300'}`}
                 >
+                  <span className="mr-2 inline-flex rounded-md border border-white/20 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                    {issue.level}
+                  </span>
                   {issue.message}
                 </p>
               </div>

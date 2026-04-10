@@ -18,6 +18,7 @@ interface ScenePackageModePanelProps {
   onAddScenePackage: () => void;
   onRemoveScenePackage: (sceneId: string) => void;
   onMoveScenePackage: (sceneId: string, direction: 'up' | 'down') => void;
+  onDuplicateScenePackage: (sceneId: string) => void;
 }
 
 const textInputClass =
@@ -58,8 +59,9 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
   onAddScenePackage,
   onRemoveScenePackage,
   onMoveScenePackage,
+  onDuplicateScenePackage,
 }) => {
-  const scenePackages = chapter?.scenePackages || [];
+  const scenePackages = useMemo(() => chapter?.scenePackages ?? [], [chapter?.scenePackages]);
   const [activeSceneId, setActiveSceneId] = useState(scenePackages[0]?.sceneId || '');
 
   useEffect(() => {
@@ -161,9 +163,14 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
             ↓
           </button>
           <button
+            onClick={() => onDuplicateScenePackage(activeScene.sceneId)}
+            className="px-2 py-1 text-[10px] rounded-lg border border-sky-500/30 text-sky-300 hover:bg-sky-500/10"
+          >
+            複製
+          </button>
+          <button
             onClick={() => onRemoveScenePackage(activeScene.sceneId)}
             className="px-2 py-1 text-[10px] rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/10"
-            disabled={scenePackages.length <= 1}
           >
             <Trash2 size={12} className="inline mr-1" /> 削除
           </button>
@@ -304,19 +311,19 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
             {activeScene.choicePoints.map((choice, index) => (
               <div key={choice.choiceId || index} className="rounded-lg border border-white/10 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                 <input value={choice.choiceId} placeholder="choiceId" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, choiceId: e.target.value } : item)) }))} />
-                <input value={choice.text} placeholder="text" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, text: e.target.value } : item)) }))} />
+                <input value={choice.text} placeholder="選択肢文言" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, text: e.target.value } : item)) }))} />
                 <select value={choice.branchLevel} className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, branchLevel: e.target.value as ChoicePoint['branchLevel'] } : item)) }))}>
                   {['performative', 'emotional', 'local_branch', 'structural'].map((level) => (
                     <option key={level} value={level}>{level}</option>
                   ))}
                 </select>
-                <input value={choice.intentTag} placeholder="intentTag" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, intentTag: e.target.value } : item)) }))} />
-                <input value={choice.convergenceTarget} placeholder="convergenceTarget" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, convergenceTarget: e.target.value } : item)) }))} />
+                <input value={choice.intentTag} placeholder="表示ラベル / intent" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, intentTag: e.target.value } : item)) }))} />
+                <input value={choice.convergenceTarget} placeholder="遷移先 / branch key" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, convergenceTarget: e.target.value } : item)) }))} />
                 <input value={choice.immediateReactionVariantId || ''} placeholder="choiceRef (variantId)" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, immediateReactionVariantId: e.target.value || undefined } : item)) }))} />
                 <textarea value={(choice.immediateEffects || []).join('\n')} placeholder="immediateEffects (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, immediateEffects: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
                 <textarea value={(choice.delayedEffects || []).join('\n')} placeholder="delayedEffects (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, delayedEffects: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
-                <input value={choice.visibilityCondition || ''} placeholder="visibilityCondition" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, visibilityCondition: e.target.value || undefined } : item)) }))} />
-                <input value={choice.availabilityCondition || ''} placeholder="availabilityCondition" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, availabilityCondition: e.target.value || undefined } : item)) }))} />
+                <input value={choice.visibilityCondition || ''} placeholder="表示条件" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, visibilityCondition: e.target.value || undefined } : item)) }))} />
+                <input value={choice.availabilityCondition || ''} placeholder="選択可能条件" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.map((item, itemIdx) => (itemIdx === index ? { ...item, availabilityCondition: e.target.value || undefined } : item)) }))} />
                 <button className="text-xs text-rose-300 text-left" onClick={() => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, choicePoints: scenePackage.choicePoints.filter((_, itemIdx) => itemIdx !== index) }))}>削除</button>
               </div>
             ))}
@@ -339,12 +346,12 @@ export const ScenePackageModePanel: React.FC<ScenePackageModePanelProps> = ({
             </div>
             {activeScene.reactionVariants.map((variant, index) => (
               <div key={variant.variantId || index} className="rounded-lg border border-white/10 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                <input value={variant.variantId} placeholder="variantId" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, variantId: e.target.value } : item)) }))} />
-                <input value={variant.trigger} placeholder="trigger" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, trigger: e.target.value } : item)) }))} />
+                <input value={variant.variantId} placeholder="variant key" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, variantId: e.target.value } : item)) }))} />
+                <input value={variant.trigger} placeholder="condition / trigger" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, trigger: e.target.value } : item)) }))} />
                 <input value={variant.toneShift} placeholder="toneShift" className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, toneShift: e.target.value } : item)) }))} />
                 <textarea value={(variant.affectedStates || []).join('\n')} placeholder="affectedStates (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, affectedStates: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
-                <textarea value={(variant.revealedInfo || []).join('\n')} placeholder="revealedInfo (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, revealedInfo: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
-                <textarea value={variant.responseBlocks.join('\n')} placeholder="responseBlocks (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, responseBlocks: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
+                <textarea value={(variant.revealedInfo || []).join('\n')} placeholder="reveal / effect (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, revealedInfo: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
+                <textarea value={variant.responseBlocks.join('\n')} placeholder="response block (newline)" className={`${textInputClass} min-h-20`} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, responseBlocks: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) } : item)) }))} />
                 <select value={variant.convergencePolicy} className={textInputClass} onChange={(e) => onUpdateScenePackage(activeScene.sceneId, (scenePackage) => ({ ...scenePackage, reactionVariants: scenePackage.reactionVariants.map((item, itemIdx) => (itemIdx === index ? { ...item, convergencePolicy: e.target.value as ReactionVariant['convergencePolicy'] } : item)) }))}>
                   {convergencePolicies.map((policy) => (
                     <option key={policy} value={policy}>{policy}</option>

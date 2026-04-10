@@ -354,7 +354,7 @@ const WriterView: React.FC = () => {
                       onClick={actions.rebuildCompiledContentFromScenePackages}
                       className="px-3 py-2 rounded-xl text-[10px] font-black tracking-widest text-stone-200 bg-stone-800 hover:bg-stone-700"
                     >
-                      Rebuild Compiled Content
+                      Rebuild Structured Preview
                     </button>
                     <button
                       onClick={actions.convertChapterToFreeform}
@@ -378,6 +378,7 @@ const WriterView: React.FC = () => {
               onAddScenePackage={actions.addScenePackage}
               onRemoveScenePackage={actions.removeScenePackage}
               onMoveScenePackage={actions.moveScenePackage}
+              onDuplicateScenePackage={actions.duplicateScenePackage}
             />
 
             {!ui.isZenMode && ui.writerMode === 'validation' && (
@@ -427,10 +428,19 @@ const WriterView: React.FC = () => {
               <>
                 {data.activeChapter?.authoringMode === 'structured' && (
                   <div className="mb-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-100">
-                    この章は structured mode です。本文は scene packages
-                    から生成されています。自由編集するには freeform に変換してください。
+                    この章は structured mode です。表示中のテキストは最終本文ではなく、scene
+                    packages から生成された preview（compiledContent）です。自由編集するには
+                    freeform に変換してください。
                   </div>
                 )}
+                {data.activeChapter?.authoringMode === 'freeform' &&
+                  data.activeChapter?.freeformSource?.structuredOrigin && (
+                    <div className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                      この章は structured 由来の freeform 章です（変換日時:{' '}
+                      {new Date(data.activeChapter.freeformSource.convertedAt).toLocaleString()}
+                      ）。
+                    </div>
+                  )}
                 <EditorCanvas
                   textareaRef={refs.textareaRef}
                   onChange={actions.handleTextChange}
